@@ -40,6 +40,7 @@ object SaveManager {
             put("kills", player.kills); put("survived", player.timeSurvived.toDouble())
             put("rows", player.inventory.rows); put("selected", player.inventory.selected)
             put("battery", player.battery.toDouble()); put("flashOn", player.flashlightOn)
+            put("shakeCharge", player.shakeCharge.toDouble())
             put("skills", JSONArray(player.skills.toList()))
             val inv = JSONArray()
             for (i in player.inventory.slots.indices) {
@@ -86,6 +87,7 @@ object SaveManager {
             player.inventory.rows = p.getInt("rows"); player.inventory.selected = p.getInt("selected")
             player.battery = p.optDouble("battery", 0.0).toFloat()
             player.flashlightOn = p.optBoolean("flashOn", false)
+            player.shakeCharge = p.optDouble("shakeCharge", 0.0).toFloat()
             val sk = p.getJSONArray("skills")
             for (i in 0 until sk.length()) player.skills.add(sk.getString(i))
             val inv = p.getJSONArray("inv")

@@ -260,6 +260,35 @@ def sfx():
     d = int(SR * 0.4); tt = np.arange(d) / SR
     save("skill_unlock.wav", (np.sin(2*np.pi*196*tt) + 0.5*np.sin(2*np.pi*392*tt)) * env_ar(d, 200, int(d*0.7)), 0.5)
 
+def shakelight():
+    """Dynamo torch: a ratcheting magnet sliding in a coil, plus coil whine."""
+    # crank/shake: repeated rasping strokes with a rising-falling whirr
+    dur = 0.85
+    d = int(SR * dur)
+    tt = np.arange(d) / SR
+    x = np.zeros(d)
+    for k, at in enumerate((0.0, 0.30, 0.58)):
+        a = int(at * SR)
+        n = int(SR * 0.24)
+        if a + n > d:
+            n = d - a
+        lt = np.arange(n) / SR
+        # magnet sliding: band-limited noise swept by the stroke speed
+        speed = np.sin(np.pi * lt / (n / SR)) ** 0.7
+        rasp = bandpass_fft(noise(n / SR), 400, 2600)[:n] * speed
+        # coil whine rises with stroke speed
+        f = 320 + 520 * speed
+        whine = np.sin(2 * np.pi * np.cumsum(f) / SR) * 0.22 * speed
+        seg = (rasp * 0.8 + whine) * env_ar(n, 200, int(n * 0.45))
+        x[a:a + n] += seg * (0.95 - k * 0.12)
+    save("shake_crank.wav", lowpass_fft(x, 5200), 0.62)
+
+    # the little click of the switch on a plastic torch
+    d = int(SR * 0.09)
+    click = bandpass_fft(noise(0.09), 1400, 5200)[:d] * env_ar(d, 6, int(d * 0.75))
+    save("light_click.wav", click, 0.45)
+
+
 # ---------------------------------------------------------------- launcher icon (raw PNG writer)
 
 def write_png(path, rgba):
@@ -310,6 +339,6 @@ def icons():
 
 if __name__ == "__main__":
     amb_wind(); amb_city(); amb_night(); amb_interior()
-    zombies(); sfx(); icons()
+    zombies(); sfx(); shakelight(); icons()
     total = sum(os.path.getsize(os.path.join(SND, f)) for f in os.listdir(SND))
     print(f"total sound payload: {total/1024/1024:.1f} MiB")

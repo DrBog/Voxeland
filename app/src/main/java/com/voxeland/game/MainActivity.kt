@@ -2,6 +2,10 @@ package com.voxeland.game
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.opengl.GLSurfaceView
 import android.os.Bundle
 import android.view.Gravity
@@ -10,6 +14,7 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import com.voxeland.game.audio.SoundManager
 import com.voxeland.game.core.Environment
+import com.voxeland.game.core.LightSpec
 import com.voxeland.game.entity.Player
 import com.voxeland.game.core.World
 import com.voxeland.game.gl.GameRenderer
@@ -32,12 +37,36 @@ class MainActivity : Activity(), GameEngine.Listener, GameHud.Callbacks {
     @Volatile private var toastMsg: String? = null
     private var toastUntil = 0L
 
+    // shaking the handset winds the dynamo torch — the reason it is called one
+    private var sensors: SensorManager? = null
+    private var accelerometer: Sensor? = null
+    private var lastShakeNs = 0L
+    private val shakeListener = object : SensorEventListener {
+        override fun onAccuracyChanged(s: Sensor?, a: Int) {}
+        override fun onSensorChanged(e: SensorEvent) {
+            val eng = engine ?: return
+            if (eng.paused || eng.dead) return
+            val now = System.nanoTime()
+            val dt = if (lastShakeNs == 0L) 0f else ((now - lastShakeNs) / 1e9f).coerceAtMost(0.1f)
+            lastShakeNs = now
+            if (dt <= 0f) return
+            val mag = kotlin.math.sqrt(
+                e.values[0] * e.values[0] + e.values[1] * e.values[1] + e.values[2] * e.values[2])
+            // gravity is always present, so only motion beyond it counts
+            val jolt = kotlin.math.abs(mag - SensorManager.GRAVITY_EARTH)
+            if (jolt > LightSpec.SHAKE_THRESHOLD)
+                eng.windUp((jolt - LightSpec.SHAKE_THRESHOLD) * LightSpec.SHAKE_GAIN * dt)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         root = FrameLayout(this)
         setContentView(root)
         sound = SoundManager(this)
+        sensors = getSystemService(SENSOR_SERVICE) as? SensorManager
+        accelerometer = sensors?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         showMenu()
     }
 
@@ -120,11 +149,16 @@ class MainActivity : Activity(), GameEngine.Listener, GameHud.Callbacks {
         glView?.onPause()
         saveNow()
         sound?.pauseAmbient()
+        sensors?.unregisterListener(shakeListener)
+        lastShakeNs = 0L
     }
 
     override fun onResume() {
         super.onResume()
         glView?.onResume()
+        accelerometer?.let {
+            sensors?.registerListener(shakeListener, it, SensorManager.SENSOR_DELAY_GAME)
+        }
         if (engine != null && overlay == null) {
             engine?.paused = false
             sound?.startAmbient()

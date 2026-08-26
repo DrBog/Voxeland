@@ -36,6 +36,7 @@ class SoundManager(private val ctx: Context) {
             "player_hurt1", "player_hurt2", "player_die", "heartbeat",
             "eat", "drink", "bandage", "craft", "pickup", "container_open",
             "ui_click", "ui_open", "level_up", "skill_unlock",
+            "shake_crank", "light_click",
         )
         for (name in sfx) {
             try {

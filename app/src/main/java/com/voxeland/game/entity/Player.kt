@@ -37,7 +37,8 @@ class Player(var character: Character) {
 
     // light
     var flashlightOn = false
-    var battery = 0f              // charge in the equipped light, 0..100
+    var battery = 0f              // charge in the battery flashlight, 0..100
+    var shakeCharge = 0f          // charge wound into the shake torch, 0..100
 
     var timeSurvived = 0f
     var kills = 0
@@ -56,7 +57,9 @@ class Player(var character: Character) {
 
     fun has(skill: String) = skill in skills
 
-    fun hasFlashlight(): Boolean = inventory.count(Items.FLASHLIGHT) > 0
+    fun hasElectricLight(): Boolean = inventory.count(Items.FLASHLIGHT) > 0
+    fun hasShakeLight(): Boolean = inventory.count(Items.SHAKE_LIGHT) > 0
+    fun hasAnyLight(): Boolean = hasElectricLight() || hasShakeLight()
 
     fun heldItem(): ItemDef = inventory.held()?.item ?: Items.FISTS
 

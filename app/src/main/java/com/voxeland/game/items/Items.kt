@@ -65,6 +65,7 @@ object Items {
     val HAMMER = reg(ItemDef("hammer", "Claw Hammer", ItemKind.TOOL, stack = 1, damage = 13f, swingSpeed = 1.2f, mineSpeed = 1.8f, desc = "Builds barricades faster."))
 
     // light — the difference between looting a dark room and leaving it
+    val SHAKE_LIGHT = reg(ItemDef("shakelight", "Shake Torch", ItemKind.SPECIAL, stack = 1, desc = "Wind-up dynamo. Weak and short-lived, but it never truly dies."))
     val FLASHLIGHT = reg(ItemDef("flashlight", "Flashlight", ItemKind.SPECIAL, stack = 1, desc = "A narrow cone of certainty. Eats batteries."))
     val BATTERY = reg(ItemDef("battery", "Batteries", ItemKind.MATERIAL, stack = 8, desc = "Still holds a charge. Probably."))
 

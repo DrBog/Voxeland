@@ -4,6 +4,8 @@ import com.voxeland.game.audio.SoundManager
 import com.voxeland.game.core.Blocks
 import com.voxeland.game.core.Environment
 import com.voxeland.game.core.EyeAdaptation
+import com.voxeland.game.core.LightKind
+import com.voxeland.game.core.LightSpec
 import com.voxeland.game.core.SplitMix
 import com.voxeland.game.core.World
 import com.voxeland.game.entity.Player
@@ -55,6 +57,12 @@ class GameEngine(
     val eye = EyeAdaptation()
     /** true while the player is under a roof — drives ambience and dust */
     @Volatile var indoors = false
+    /** which light is actually burning; latched on so a dying torch does not silently swap */
+    @Volatile var activeKind = LightKind.NONE
+        private set
+    /** set by the HUD while the wind button is held */
+    @Volatile var crankHeld = false
+    private var windNoise = 0f
 
     val zombies = CopyOnWriteArrayList<Zombie>()
     private val tasks = ConcurrentLinkedQueue<Runnable>()
@@ -124,31 +132,94 @@ class GameEngine(
         indoors = sky < 0.55f && isIndoors()
 
         if (player.flashlightOn) {
-            player.battery = max(0f, player.battery - dt * (100f / 420f))   // ~7 min per set
-            if (player.battery <= 0f) {
+            if (activeKind == LightKind.NONE) activeKind = preferredLight()   // e.g. straight off a save
+            val k = activeKind
+            val left = max(0f, chargeOf(k) - dt * k.drainPerSecond)
+            setCharge(k, left)
+            if (left <= 0f) {
                 player.flashlightOn = false
-                listener?.onToast("The flashlight dies.")
+                activeKind = LightKind.NONE
+                sound.play("light_click", 0.6f)
+                listener?.onToast(
+                    if (k == LightKind.SHAKE) "The dynamo winds down." else "The flashlight dies.")
             }
         }
 
+        if (crankHeld) windUp(LightSpec.CRANK_RATE * dt)
+        if (windNoise >= 9f) { windNoise = 0f; sound.play("shake_crank", 0.55f) }
+
         var target = sky * env.daylight
-        if (player.flashlightOn) target += 0.34f
+        if (player.flashlightOn)
+            target += 0.34f * (activeKind.strength / LightKind.ELECTRIC.strength)
         eye.update(target, dt)
     }
 
+    /** which light the player would reach for: a charged torch first, then the dynamo */
+    fun preferredLight(): LightKind {
+        val e = player.hasElectricLight(); val s = player.hasShakeLight()
+        return when {
+            e && player.battery > 0f -> LightKind.ELECTRIC
+            s && player.shakeCharge > 0f -> LightKind.SHAKE
+            e -> LightKind.ELECTRIC
+            s -> LightKind.SHAKE
+            else -> LightKind.NONE
+        }
+    }
+
+    fun chargeOf(k: LightKind): Float = when (k) {
+        LightKind.ELECTRIC -> player.battery
+        LightKind.SHAKE -> player.shakeCharge
+        LightKind.NONE -> 0f
+    }
+
+    private fun setCharge(k: LightKind, v: Float) {
+        when (k) {
+            LightKind.ELECTRIC -> player.battery = v
+            LightKind.SHAKE -> player.shakeCharge = v
+            LightKind.NONE -> {}
+        }
+    }
+
+    /** beam strength handed to the renderer, 0 when dark */
+    fun flashStrength(): Float = if (player.flashlightOn) activeKind.strength else 0f
+
+    /**
+     * Wind charge into the dynamo. Called from the crank button on the game
+     * thread and from the accelerometer on the sensor thread, hence the lock.
+     */
+    @Synchronized
+    fun windUp(percent: Float) {
+        if (percent <= 0f || !player.hasShakeLight()) return
+        val before = player.shakeCharge
+        player.shakeCharge = kotlin.math.min(100f, before + percent)
+        windNoise += player.shakeCharge - before
+    }
+
     fun toggleFlashlight() {
-        if (!player.hasFlashlight()) { listener?.onToast("You have no light."); return }
-        if (!player.flashlightOn && player.battery <= 0.5f) {
-            if (player.inventory.remove(Items.BATTERY, 1)) {
-                player.battery = 100f
-                listener?.onToast("Fresh batteries.")
-            } else {
-                listener?.onToast("The batteries are dead.")
-                return
+        if (player.flashlightOn) {
+            player.flashlightOn = false
+            activeKind = LightKind.NONE
+            sound.play("light_click", 0.6f)
+            return
+        }
+        val k = preferredLight()
+        if (k == LightKind.NONE) { listener?.onToast("You have no light."); return }
+        if (chargeOf(k) <= 0.5f) {
+            when {
+                k == LightKind.ELECTRIC && player.inventory.remove(Items.BATTERY, 1) -> {
+                    player.battery = 100f
+                    listener?.onToast("Fresh batteries.")
+                }
+                k == LightKind.SHAKE -> {
+                    listener?.onToast("Flat. Shake the phone, or hold LMP to wind it.")
+                    return
+                }
+                else -> { listener?.onToast("The batteries are dead."); return }
             }
         }
-        player.flashlightOn = !player.flashlightOn
-        sound.play("ui_click", 0.7f)
+        activeKind = k
+        player.flashlightOn = true
+        sound.play("light_click", 0.6f)
     }
 
     // ------------------------------------------------------------ combat
@@ -427,6 +498,9 @@ class GameEngine(
             player.y = (CityPlan.GROUND_Y + 1).toDouble()
             player.yaw = 0f                  // yaw 0 looks along -Z, toward downtown
             val inv = player.inventory
+            // everyone wakes with the wind-up torch — a poor light, but never a dead one
+            inv.add(Items.SHAKE_LIGHT, 1)
+            player.shakeCharge = 100f
             inv.add(Items.WATER, 1)
             inv.add(Items.BEANS, 1)
             when (character.background) {

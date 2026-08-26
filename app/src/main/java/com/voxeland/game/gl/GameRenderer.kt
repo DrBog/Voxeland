@@ -225,7 +225,7 @@ class GameRenderer(private val engine: GameEngine) : GLSurfaceView.Renderer {
         GLES30.glUniform1f(wAmbient, 0.055f * scout)
         GLES30.glUniform1f(wExposure, exposure)
         GLES30.glUniform3f(wFlashDir, fwdX, fwdY, fwdZ)
-        GLES30.glUniform1f(wFlashOn, if (engine.player.flashlightOn) 2.1f else 0f)
+        GLES30.glUniform1f(wFlashOn, engine.flashStrength())
         GLES30.glUniform3f(wWarm, warm[0], warm[1], warm[2])
         GLES30.glUniform1f(wUseSolid, 0f)
         GLES30.glUniform4f(wSolid, 1f, 1f, 1f, 1f)

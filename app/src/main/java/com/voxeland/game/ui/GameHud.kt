@@ -12,6 +12,7 @@ import android.graphics.Typeface
 import android.view.MotionEvent
 import android.view.View
 import com.voxeland.game.GameEngine
+import com.voxeland.game.core.LightKind
 import com.voxeland.game.items.Items
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -79,6 +80,8 @@ class GameHud(
             override fun run() {
                 if (parent == null && !isAttachedToWindow) return   // torn down
                 if (engine.saveRequested) { engine.saveRequested = false; callbacks.onAutosave() }
+                engine.crankHeld = btnLight.pressed &&
+                    System.currentTimeMillis() - lightPressAt > HOLD_MS
                 invalidate()
                 postDelayed(this, 33)
             }
@@ -167,6 +170,9 @@ class GameHud(
     }
 
     private val pressedBy = HashMap<String, Int>()
+    /** when LMP went down — a tap toggles, a hold winds the dynamo */
+    private var lightPressAt = 0L
+    private val HOLD_MS = 250L
 
     private fun press(b: Btn, pid: Int) {
         b.pressed = true; pressedBy[b.id] = pid
@@ -175,7 +181,7 @@ class GameHud(
             "jump" -> engine.wantJump = true
             "use" -> engine.post { if (engine.targetPrompt()?.startsWith("Search") == true) engine.interact() else engine.useHeld() }
             "crouch" -> engine.player.crouching = !engine.player.crouching
-            "light" -> engine.post { engine.toggleFlashlight() }
+            "light" -> lightPressAt = System.currentTimeMillis()
             "pause" -> { engine.sound.play("ui_click", 0.5f); callbacks.onPauseMenu() }
             "inv" -> { engine.sound.play("ui_open", 0.5f); callbacks.onOpenInventory() }
             "skill" -> { engine.sound.play("ui_open", 0.5f); callbacks.onOpenSkills() }
@@ -185,6 +191,12 @@ class GameHud(
     private fun release(b: Btn) {
         b.pressed = false; pressedBy.remove(b.id)
         if (b.id == "attack") engine.attackHeld = false
+        if (b.id == "light") {
+            engine.crankHeld = false
+            // a quick tap is a switch; anything longer was a wind
+            if (System.currentTimeMillis() - lightPressAt <= HOLD_MS)
+                engine.post { engine.toggleFlashlight() }
+        }
     }
 
     private fun updateJoystick() {
@@ -389,6 +401,7 @@ class GameHud(
             }
             if (b == btnCrouch && engine.player.crouching) p.color = 0xCC46543E.toInt()
             if (b == btnLight && engine.player.flashlightOn) p.color = 0xCC6E6236.toInt()
+            if (b == btnLight && engine.crankHeld) p.color = 0xCC4A5A6E.toInt()
             if (round) c.drawCircle(b.rect.centerX(), b.rect.centerY(), b.rect.width() / 2, p)
             else c.drawRoundRect(b.rect, dp(6f), dp(6f), p)
             p.style = Paint.Style.STROKE; p.strokeWidth = dp(1.5f); p.color = 0xAA55534B.toInt()
@@ -396,12 +409,13 @@ class GameHud(
             else c.drawRoundRect(b.rect, dp(6f), dp(6f), p)
             p.style = Paint.Style.FILL
             tp.textSize = dp(12f); tp.color = UiKit.TEXT
-            c.drawText(b.label, b.rect.centerX(), b.rect.centerY() + dp(4f), tp)
+            val label = if (b == btnLight) lightLabel() else b.label
+            c.drawText(label, b.rect.centerX(), b.rect.centerY() + dp(4f), tp)
         }
-        // battery charge along the base of the lamp button
-        if (engine.player.hasFlashlight()) {
+        // charge of whichever light is in hand, along the base of the button
+        if (engine.player.hasAnyLight()) {
             val r = btnLight.rect
-            val frac = (engine.player.battery / 100f).coerceIn(0f, 1f)
+            val frac = (engine.chargeOf(currentLightKind()) / 100f).coerceIn(0f, 1f)
             p.style = Paint.Style.FILL
             p.color = 0x88141412.toInt()
             c.drawRect(r.left, r.bottom - dp(4f), r.right, r.bottom, p)
@@ -415,6 +429,14 @@ class GameHud(
             c.drawCircle(btnUse.rect.centerX(), btnUse.rect.centerY(), btnUse.rect.width() / 2 + dp(3f), p)
             p.style = Paint.Style.FILL
         }
+    }
+
+    private fun currentLightKind(): LightKind =
+        if (engine.player.flashlightOn) engine.activeKind else engine.preferredLight()
+
+    private fun lightLabel(): String {
+        if (engine.crankHeld) return "WIND"
+        return currentLightKind().label
     }
 
     private fun drawJoystick(c: Canvas) {

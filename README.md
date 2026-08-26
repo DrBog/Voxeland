@@ -7,7 +7,7 @@ OpenGL ES 3.0 — no game engine. Think blocky urban horror in the spirit of
 Unturned: one large dead city, realism-leaning survival, and the dark makes
 them bold.
 
-## What's in v0.2.0
+## What's in v0.2.1
 
 - **Voxel engine** — chunked streaming world, face-culled meshing on worker
   threads, procedurally painted texture atlas (every material is synthesized;
@@ -24,8 +24,11 @@ them bold.
     they swing and die as the day turns. Drifting dust motes sample the same
     propagated light, catching fire inside a beam and vanishing outside it.
   - *Scotopic vision*: colour drains toward blue-grey at low luminance.
-  - *Flashlight*: found or crafted, a narrow cone on a battery that lasts
-    about seven minutes. It lights the dust in front of it.
+  - *Two lights*: you wake with a **shake torch** — a wind-up dynamo that
+    runs 60% less than a battery flashlight (2:48 against 7:00) and throws a
+    dimmer cone, but never dies for good: shake the handset or hold LMP to
+    wind it. A found **flashlight** is a real upgrade, and burns batteries.
+    Both light the dust in front of them.
   - 62° base FOV (56° crouched, 68° sprinting) for a tighter, closer frame.
 - **One large city, 100 building variants** — a component builder system
   assembles every structure from archetype × wall material × roof style ×
@@ -81,7 +84,9 @@ device (enable "install unknown apps").
 | ATK (hold) | Attack / mine the targeted block |
 | USE | Search container in view, else eat/drink/heal/place held item |
 | JMP / CRC | Jump / crouch (crouching hides you) |
-| LMP | Toggle flashlight (needs batteries) |
+| LMP tap | Toggle the light in hand |
+| LMP hold | Wind the shake torch |
+| Shake handset | Wind the shake torch |
 | BAG / SKL | Backpack + crafting / skill trees |
 | Hotbar tap | Select slot |
 
@@ -89,7 +94,7 @@ device (enable "install unknown apps").
 
 ```
 core/     Blocks, World+Chunk, Environment (48-min day), LightEngine (sky
-          propagation), EyeAdaptation, deterministic Rng
+          propagation), EyeAdaptation, LightSource (torch kinds), Rng
 gen/      BuildingSystem (components + gate logic + 100-variant catalog),
           CityGen (districts, roads, lots, Blueprint block function)
 gl/       Shader, TextureAtlas, ChunkMesher, Raycast, GameRenderer
