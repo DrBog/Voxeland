@@ -62,17 +62,50 @@ class Environment {
     fun skyColor(out: FloatArray) {
         val d = daylight
         val glow = duskGlow
-        // day: ash gray-blue; night: near-black blue; dusk: dried-blood red
-        var r = 0.06f + 0.32f * d + 0.30f * glow
-        var g = 0.06f + 0.33f * d + 0.08f * glow
-        var b = 0.09f + 0.36f * d + 0.06f * glow
+        // day: ash gray-blue; night: very near black; dusk: dried-blood red
+        var r = 0.020f + 0.26f * d + 0.28f * glow
+        var g = 0.022f + 0.27f * d + 0.07f * glow
+        var b = 0.034f + 0.30f * d + 0.05f * glow
         val m = max(r, max(g, b))
         if (m > 1f) { r /= m; g /= m; b /= m }
         out[0] = r; out[1] = g; out[2] = b
     }
 
+    /**
+     * Horizontal direction sunlight travels, normalised. Light shafts are
+     * baked pointing into their rooms; the shader compares them against this
+     * so beams swing round and die out as the day turns.
+     */
+    fun sunTravelXZ(out: FloatArray) {
+        val a = (time - 0.25f) * 2f * Math.PI.toFloat()
+        val sx = cos(a)
+        val sz = 0.34f                     // the arc leans, so beams are not purely east-west
+        val len = kotlin.math.sqrt(sx * sx + sz * sz)
+        out[0] = -sx / len; out[1] = -sz / len
+    }
+
+    /** 0 below the horizon, rising to 1 with the sun overhead */
+    val sunUp: Float get() = smooth(sunHeight.coerceIn(0f, 1f))
+
+    /** sunlight tint: sodium-orange at the edges of the day, ashen at noon */
+    fun sunTint(out: FloatArray) {
+        val h = sunHeight.coerceIn(0f, 1f)
+        val t = smooth(h)
+        out[0] = 1.18f - 0.16f * t
+        out[1] = 0.92f + 0.04f * t
+        out[2] = 0.74f + 0.28f * t
+    }
+
+    /** airborne dust: worst in the dry afternoon, and always thicker indoors */
+    val dustLevel: Float
+        get() {
+            val h = hour
+            val afternoon = if (h in 10f..19f) smooth(1f - abs(h - 14.5f) / 4.5f) else 0f
+            return 0.45f + 0.55f * afternoon
+        }
+
     /** global light multiplier applied to all block faces */
-    val blockLight: Float get() = 0.10f + 0.90f * daylight
+    val blockLight: Float get() = 0.015f + 0.985f * daylight
 
     /** wind intensity swells through afternoon and in the dead of night */
     val windLevel: Float

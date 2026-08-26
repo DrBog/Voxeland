@@ -11,8 +11,22 @@ them bold.
 
 - **Voxel engine** — chunked streaming world, face-culled meshing on worker
   threads, procedurally painted texture atlas (every material is synthesized;
-  the desaturated palette *is* the art direction), distance fog, interiors
-  that read dark.
+  the desaturated palette *is* the art direction), distance fog.
+- **Atmosphere / horror lighting**
+  - *Propagated sky light*: a flood fill carries daylight in through windows
+    and doorways and attenuates with depth, so a room is bright at the glass
+    and black at the back wall. Player-built roofs darken their own interiors.
+  - *Eye adaptation*: the pupil contracts in about half a second but dark
+    adaptation takes several — step in from daylight and you are genuinely
+    blind for a beat before shapes resolve.
+  - *Light shafts and dust*: beams are baked at openings pointing into their
+    rooms; the shader burns each one according to the live sun bearing, so
+    they swing and die as the day turns. Drifting dust motes sample the same
+    propagated light, catching fire inside a beam and vanishing outside it.
+  - *Scotopic vision*: colour drains toward blue-grey at low luminance.
+  - *Flashlight*: found or crafted, a narrow cone on a battery that lasts
+    about seven minutes. It lights the dust in front of it.
+  - 62° base FOV (56° crouched, 68° sprinting) for a tighter, closer frame.
 - **One large city, 100 building variants** — a component builder system
   assembles every structure from archetype × wall material × roof style ×
   window style × floor count × interior function. Gate logic is enforced in

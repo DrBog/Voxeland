@@ -39,6 +39,7 @@ object SaveManager {
             put("xp", player.xp); put("level", player.level); put("points", player.skillPoints)
             put("kills", player.kills); put("survived", player.timeSurvived.toDouble())
             put("rows", player.inventory.rows); put("selected", player.inventory.selected)
+            put("battery", player.battery.toDouble()); put("flashOn", player.flashlightOn)
             put("skills", JSONArray(player.skills.toList()))
             val inv = JSONArray()
             for (i in player.inventory.slots.indices) {
@@ -83,6 +84,8 @@ object SaveManager {
             player.xp = p.getInt("xp"); player.level = p.getInt("level"); player.skillPoints = p.getInt("points")
             player.kills = p.getInt("kills"); player.timeSurvived = p.getDouble("survived").toFloat()
             player.inventory.rows = p.getInt("rows"); player.inventory.selected = p.getInt("selected")
+            player.battery = p.optDouble("battery", 0.0).toFloat()
+            player.flashlightOn = p.optBoolean("flashOn", false)
             val sk = p.getJSONArray("skills")
             for (i in 0 until sk.length()) player.skills.add(sk.getString(i))
             val inv = p.getJSONArray("inv")
@@ -94,6 +97,7 @@ object SaveManager {
 
             val edits = o.getJSONObject("edits")
             for (k in edits.keys()) world.edits[k.toLong()] = edits.getInt(k).toByte()
+            world.rebuildEditTops()
             val looted = o.getJSONArray("looted")
             for (i in 0 until looted.length()) world.looted.add(looted.getString(i).toLong())
 

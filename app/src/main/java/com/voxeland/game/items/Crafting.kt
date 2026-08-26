@@ -22,5 +22,6 @@ object Recipes {
         Recipe(Items.MEDKIT, 1, listOf(Items.BANDAGE to 3, Items.CHEMICALS to 1, Items.TAPE to 1), requiredSkill = "medic"),
         Recipe(Items.COMPASS, 1, listOf(Items.WATCH to 1, Items.SCRAP to 1, Items.GLASS_SHARD to 1), requiredSkill = "navigator"),
         Recipe(Items.PIPE, 1, listOf(Items.SCRAP to 4, Items.TAPE to 1)),
+        Recipe(Items.FLASHLIGHT, 1, listOf(Items.SCRAP to 2, Items.GLASS_SHARD to 1, Items.BATTERY to 1, Items.TAPE to 1)),
     )
 }

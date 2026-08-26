@@ -64,6 +64,10 @@ object Items {
     val CROWBAR = reg(ItemDef("crowbar", "Crowbar", ItemKind.TOOL, stack = 1, damage = 15f, swingSpeed = 1.0f, mineSpeed = 2.2f, desc = "Opens doors, crates and skulls."))
     val HAMMER = reg(ItemDef("hammer", "Claw Hammer", ItemKind.TOOL, stack = 1, damage = 13f, swingSpeed = 1.2f, mineSpeed = 1.8f, desc = "Builds barricades faster."))
 
+    // light — the difference between looting a dark room and leaving it
+    val FLASHLIGHT = reg(ItemDef("flashlight", "Flashlight", ItemKind.SPECIAL, stack = 1, desc = "A narrow cone of certainty. Eats batteries."))
+    val BATTERY = reg(ItemDef("battery", "Batteries", ItemKind.MATERIAL, stack = 8, desc = "Still holds a charge. Probably."))
+
     // specials (skill-gated utility)
     val COMPASS = reg(ItemDef("compass", "Compass", ItemKind.SPECIAL, stack = 1, desc = "Crafted from a watch and a needle. Unlocks bearings."))
     val WATCH = reg(ItemDef("watch", "Broken Watch", ItemKind.MATERIAL, stack = 5, desc = "Time stopped for its owner."))

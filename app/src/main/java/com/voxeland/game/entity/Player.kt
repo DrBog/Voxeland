@@ -35,6 +35,10 @@ class Player(var character: Character) {
     val skills = HashSet<String>()
     val inventory = Inventory(rows = 2)
 
+    // light
+    var flashlightOn = false
+    var battery = 0f              // charge in the equipped light, 0..100
+
     var timeSurvived = 0f
     var kills = 0
     var damageFlash = 0f       // HUD red vignette timer
@@ -51,6 +55,8 @@ class Player(var character: Character) {
     }
 
     fun has(skill: String) = skill in skills
+
+    fun hasFlashlight(): Boolean = inventory.count(Items.FLASHLIGHT) > 0
 
     fun heldItem(): ItemDef = inventory.held()?.item ?: Items.FISTS
 

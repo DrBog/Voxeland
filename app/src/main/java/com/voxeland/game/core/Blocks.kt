@@ -68,6 +68,20 @@ object Blocks {
         id == AIR || id == GLASS || id == GLASS_DARK || id == FENCE || id == LEAVES_DEAD
     fun isTranslucentMesh(id: Byte): Boolean = id == GLASS || id == GLASS_DARK
     fun isLootable(id: Byte): Boolean = id == CONTAINER || id == SHELF || id == COUNTER
+
+    /**
+     * Cost of light passing through this block, in light levels.
+     * 0 means opaque (light stops). Grimy glass costs more than open air,
+     * so a boarded-up room stays gloomy even in full sun.
+     */
+    fun lightCost(id: Byte): Int = when (id) {
+        AIR -> 1
+        GLASS -> 3
+        GLASS_DARK -> 4
+        FENCE -> 2
+        LEAVES_DEAD -> 3
+        else -> 0
+    }
     fun stepsSoft(id: Byte): Boolean =
         id == DIRT || id == GRASS || id == GRAVEL || id == CARPET || id == RUBBLE || id == LEAVES_DEAD
 

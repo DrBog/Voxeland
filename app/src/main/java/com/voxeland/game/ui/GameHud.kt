@@ -63,10 +63,11 @@ class GameHud(
     private val btnUse = Btn("use", "USE")
     private val btnJump = Btn("jump", "JMP")
     private val btnCrouch = Btn("crouch", "CRC")
+    private val btnLight = Btn("light", "LMP")
     private val btnPause = Btn("pause", "II")
     private val btnInv = Btn("inv", "BAG")
     private val btnSkill = Btn("skill", "SKL")
-    private val buttons = listOf(btnAttack, btnUse, btnJump, btnCrouch, btnPause, btnInv, btnSkill)
+    private val buttons = listOf(btnAttack, btnUse, btnJump, btnCrouch, btnLight, btnPause, btnInv, btnSkill)
     private val hotbarRects = Array(5) { RectF() }
 
     private var w = 0f; private var h = 0f; private var den = 1f
@@ -95,6 +96,7 @@ class GameHud(
         btnJump.rect.set(w - dp(52f) - bs, h - dp(170f) - bs, w - dp(52f) + bs, h - dp(170f) + bs)
         btnUse.rect.set(w - dp(52f) - bs, h - dp(70f) - bs, w - dp(52f) + bs, h - dp(70f) + bs)
         btnCrouch.rect.set(dp(30f), h - dp(190f) - dp(26f), dp(30f) + dp(76f), h - dp(190f) + dp(26f))
+        btnLight.rect.set(dp(114f), h - dp(190f) - dp(26f), dp(114f) + dp(76f), h - dp(190f) + dp(26f))
         // top-right utility row
         val tr = dp(24f)
         btnPause.rect.set(w - dp(56f), dp(12f), w - dp(12f), dp(12f) + tr * 2)
@@ -173,6 +175,7 @@ class GameHud(
             "jump" -> engine.wantJump = true
             "use" -> engine.post { if (engine.targetPrompt()?.startsWith("Search") == true) engine.interact() else engine.useHeld() }
             "crouch" -> engine.player.crouching = !engine.player.crouching
+            "light" -> engine.post { engine.toggleFlashlight() }
             "pause" -> { engine.sound.play("ui_click", 0.5f); callbacks.onPauseMenu() }
             "inv" -> { engine.sound.play("ui_open", 0.5f); callbacks.onOpenInventory() }
             "skill" -> { engine.sound.play("ui_open", 0.5f); callbacks.onOpenSkills() }
@@ -228,6 +231,14 @@ class GameHud(
             c.drawRect(0f, 0f, w, h, p)
             p.shader = null
         }
+        // indoors the walls close in — a heavier frame than open street
+        if (engine.indoors) {
+            p.shader = RadialGradient(w / 2, h / 2, w * 0.62f,
+                0x00000000, 0xCC000000.toInt(), Shader.TileMode.CLAMP)
+            c.drawRect(0f, 0f, w, h, p)
+            p.shader = null
+        }
+
         // infection creep — sickly green edges
         if (player.infection > 25f) {
             val ia = ((player.infection - 25f) / 75f * 120).toInt().coerceIn(0, 120)
@@ -377,6 +388,7 @@ class GameHud(
                 else -> 0x8823231F.toInt()
             }
             if (b == btnCrouch && engine.player.crouching) p.color = 0xCC46543E.toInt()
+            if (b == btnLight && engine.player.flashlightOn) p.color = 0xCC6E6236.toInt()
             if (round) c.drawCircle(b.rect.centerX(), b.rect.centerY(), b.rect.width() / 2, p)
             else c.drawRoundRect(b.rect, dp(6f), dp(6f), p)
             p.style = Paint.Style.STROKE; p.strokeWidth = dp(1.5f); p.color = 0xAA55534B.toInt()
@@ -386,6 +398,17 @@ class GameHud(
             tp.textSize = dp(12f); tp.color = UiKit.TEXT
             c.drawText(b.label, b.rect.centerX(), b.rect.centerY() + dp(4f), tp)
         }
+        // battery charge along the base of the lamp button
+        if (engine.player.hasFlashlight()) {
+            val r = btnLight.rect
+            val frac = (engine.player.battery / 100f).coerceIn(0f, 1f)
+            p.style = Paint.Style.FILL
+            p.color = 0x88141412.toInt()
+            c.drawRect(r.left, r.bottom - dp(4f), r.right, r.bottom, p)
+            p.color = if (frac < 0.2f) UiKit.ACCENT else 0xCC9C7C3C.toInt()
+            c.drawRect(r.left, r.bottom - dp(4f), r.left + r.width() * frac, r.bottom, p)
+        }
+
         // context ring on USE when something is searchable
         if (engine.targetHint) {
             p.style = Paint.Style.STROKE; p.strokeWidth = dp(2.5f); p.color = UiKit.WARN

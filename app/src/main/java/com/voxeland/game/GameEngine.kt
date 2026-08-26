@@ -3,6 +3,7 @@ package com.voxeland.game
 import com.voxeland.game.audio.SoundManager
 import com.voxeland.game.core.Blocks
 import com.voxeland.game.core.Environment
+import com.voxeland.game.core.EyeAdaptation
 import com.voxeland.game.core.SplitMix
 import com.voxeland.game.core.World
 import com.voxeland.game.entity.Player
@@ -19,6 +20,7 @@ import com.voxeland.game.progression.Character
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -48,6 +50,11 @@ class GameEngine(
     @Volatile var moveZ = 0f
     @Volatile var wantJump = false
     @Volatile var attackHeld = false
+
+    /** pupil/rod adaptation driving scene exposure */
+    val eye = EyeAdaptation()
+    /** true while the player is under a roof — drives ambience and dust */
+    @Volatile var indoors = false
 
     val zombies = CopyOnWriteArrayList<Zombie>()
     private val tasks = ConcurrentLinkedQueue<Runnable>()
@@ -95,12 +102,53 @@ class GameEngine(
         swingCooldown -= dt
         if (attackHeld) doAttack(dt) else { mineProgress = 0f; mineX = Int.MIN_VALUE }
 
+        updateLightState(dt)
         updateZombies(dt)
         updateSpawns(dt)
         updateAudio(dt)
 
         autosaveTimer += dt
         if (autosaveTimer > 60f) { autosaveTimer = 0f; saveRequested = true }
+    }
+
+    /**
+     * How bright the world is where the player is standing, and how far the
+     * eye has caught up to it. Sampling the propagated light means stepping
+     * through a doorway genuinely changes what the eye is tuned to.
+     */
+    private fun updateLightState(dt: Float) {
+        val bx = Math.floor(player.x).toInt()
+        val by = Math.floor(player.y + player.eyeHeight).toInt()
+        val bz = Math.floor(player.z).toInt()
+        val sky = world.skyLight(bx, by, bz)
+        indoors = sky < 0.55f && isIndoors()
+
+        if (player.flashlightOn) {
+            player.battery = max(0f, player.battery - dt * (100f / 420f))   // ~7 min per set
+            if (player.battery <= 0f) {
+                player.flashlightOn = false
+                listener?.onToast("The flashlight dies.")
+            }
+        }
+
+        var target = sky * env.daylight
+        if (player.flashlightOn) target += 0.34f
+        eye.update(target, dt)
+    }
+
+    fun toggleFlashlight() {
+        if (!player.hasFlashlight()) { listener?.onToast("You have no light."); return }
+        if (!player.flashlightOn && player.battery <= 0.5f) {
+            if (player.inventory.remove(Items.BATTERY, 1)) {
+                player.battery = 100f
+                listener?.onToast("Fresh batteries.")
+            } else {
+                listener?.onToast("The batteries are dead.")
+                return
+            }
+        }
+        player.flashlightOn = !player.flashlightOn
+        sound.play("ui_click", 0.7f)
     }
 
     // ------------------------------------------------------------ combat
@@ -350,7 +398,7 @@ class GameEngine(
         }
 
         // ambient cross-mix from the environment
-        val indoors = isIndoors()
+        val indoors = this.indoors
         val wind = env.windLevel * (if (indoors) 0.15f else 1f)
         val city = (0.35f + 0.3f * env.daylight) * (if (indoors) 0.3f else 1f)
         val night = env.darkness * (if (indoors) 0.4f else 0.9f)
