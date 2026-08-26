@@ -43,17 +43,29 @@ object UiKit {
             typeface = mono
         }
 
-    fun button(ctx: Context, text: String, accent: Boolean = false, onClick: () -> Unit): Button =
-        Button(ctx).apply {
-            this.text = text
-            isAllCaps = true
-            textSize = 14f
-            typeface = Typeface.create(mono, Typeface.BOLD)
-            setTextColor(if (accent) 0xFFD8D5CB.toInt() else TEXT)
-            setBackgroundColor(if (accent) ACCENT else 0xFF262622.toInt())
-            setPadding(40, 22, 40, 22)
-            setOnClickListener { onClick() }
-        }
+    /** density-independent pixels — every layout size must go through this */
+    fun dp(ctx: Context, v: Float): Int = (v * ctx.resources.displayMetrics.density).toInt()
+
+    fun button(
+        ctx: Context,
+        text: String,
+        accent: Boolean = false,
+        compact: Boolean = false,
+        onClick: () -> Unit,
+    ): Button = Button(ctx).apply {
+        this.text = text
+        isAllCaps = true
+        textSize = if (compact) 15f else 14f
+        typeface = Typeface.create(mono, Typeface.BOLD)
+        setTextColor(if (accent) 0xFFD8D5CB.toInt() else TEXT)
+        setBackgroundColor(if (accent) ACCENT else 0xFF262622.toInt())
+        val px = dp(ctx, if (compact) 6f else 18f)
+        val py = dp(ctx, if (compact) 8f else 11f)
+        setPadding(px, py, px, py)
+        minWidth = 0
+        minimumWidth = 0
+        setOnClickListener { onClick() }
+    }
 
     fun vspace(ctx: Context, h: Int) = android.view.View(ctx).apply {
         layoutParams = LinearLayout.LayoutParams(1, h)

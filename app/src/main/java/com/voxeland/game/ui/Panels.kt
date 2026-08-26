@@ -32,7 +32,7 @@ object Panels {
         val panel = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(UiKit.PANEL)
-            setPadding(36, 24, 36, 24)
+            setPadding(dp(ctx, 18f), dp(ctx, 12f), dp(ctx, 18f), dp(ctx, 12f))
             isClickable = true
         }
         val header = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
@@ -60,7 +60,7 @@ object Panels {
         // right: crafting list
         val craftCol = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(24, 0, 0, 0)
+            setPadding(dp(ctx, 14f), 0, 0, 0)
         }
         craftCol.addView(UiKit.label(ctx, "CRAFTING", 14f, UiKit.TEXT))
         craftCol.addView(UiKit.vspace(ctx, 8))
@@ -71,7 +71,7 @@ object Panels {
             for (r in Recipes.all) {
                 val gated = r.requiredSkill != null && !engine.player.has(r.requiredSkill)
                 val canCraft = !gated && r.inputs.all { (item, n) -> engine.player.inventory.count(item) >= n }
-                val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 6, 0, 6) }
+                val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(ctx, 3f), 0, dp(ctx, 3f)) }
                 val need = r.inputs.joinToString(" + ") { (i, n) -> "$n ${i.name}" }
                 val lockTxt = if (gated) "  [needs ${Skills.byId(r.requiredSkill!!)?.name}]" else ""
                 val lbl = UiKit.label(ctx, "${r.outCount}x ${r.output.name}\n$need$lockTxt", 11f,
@@ -209,7 +209,7 @@ object Panels {
             for (tree in SkillTree.entries) {
                 val colV = LinearLayout(ctx).apply {
                     orientation = LinearLayout.VERTICAL
-                    setPadding(12, 0, 12, 0)
+                    setPadding(dp(ctx, 6f), 0, dp(ctx, 6f), 0)
                 }
                 colV.addView(UiKit.label(ctx, tree.title.uppercase(), 13f, UiKit.TEXT))
                 colV.addView(UiKit.vspace(ctx, 6))
@@ -236,7 +236,7 @@ object Panels {
                     b.isEnabled = !owned && prereqOk && afford
                     if (owned) b.setBackgroundColor(0xFF2E3A2A.toInt())
                     val lp = LinearLayout.LayoutParams(dp(ctx, 210f), LinearLayout.LayoutParams.WRAP_CONTENT)
-                    lp.bottomMargin = 8
+                    lp.bottomMargin = dp(ctx, 4f)
                     colV.addView(b, lp)
                 }
                 cols.addView(colV)
@@ -283,7 +283,7 @@ object Panels {
         val col = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(UiKit.PANEL)
-            setPadding(28, 18, 28, 18)
+            setPadding(dp(ctx, 14f), dp(ctx, 9f), dp(ctx, 14f), dp(ctx, 9f))
         }
         col.addView(UiKit.label(ctx, "FOUND:", 12f, UiKit.TEXT))
         for (s in items) col.addView(UiKit.label(ctx, "  ${s.count}x ${s.item.name}", 12f, UiKit.GOOD))
