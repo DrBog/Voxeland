@@ -7,7 +7,7 @@ OpenGL ES 3.0 — no game engine. Think blocky urban horror in the spirit of
 Unturned: one large dead city, realism-leaning survival, and the dark makes
 them bold.
 
-## What's in v0.1.0
+## What's in v0.2.0
 
 - **Voxel engine** — chunked streaming world, face-culled meshing on worker
   threads, procedurally painted texture atlas (every material is synthesized;
@@ -81,13 +81,15 @@ device (enable "install unknown apps").
 | ATK (hold) | Attack / mine the targeted block |
 | USE | Search container in view, else eat/drink/heal/place held item |
 | JMP / CRC | Jump / crouch (crouching hides you) |
+| LMP | Toggle flashlight (needs batteries) |
 | BAG / SKL | Backpack + crafting / skill trees |
 | Hotbar tap | Select slot |
 
 ## Architecture map
 
 ```
-core/     Blocks, World+Chunk, Environment (48-min day), deterministic Rng
+core/     Blocks, World+Chunk, Environment (48-min day), LightEngine (sky
+          propagation), EyeAdaptation, deterministic Rng
 gen/      BuildingSystem (components + gate logic + 100-variant catalog),
           CityGen (districts, roads, lots, Blueprint block function)
 gl/       Shader, TextureAtlas, ChunkMesher, Raycast, GameRenderer
