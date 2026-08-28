@@ -91,6 +91,14 @@ class GameHud(
 
     private fun dp(v: Float) = v * den
 
+    /** On-screen rect of every control, for layout tests. */
+    internal fun controlRects(): Map<String, RectF> {
+        val m = HashMap<String, RectF>()
+        for (b in buttons) m[b.id] = RectF(b.rect)
+        for (i in 0 until 5) m["hotbar$i"] = RectF(hotbarRects[i])
+        return m
+    }
+
     override fun onSizeChanged(nw: Int, nh: Int, ow: Int, oh: Int) {
         w = nw.toFloat(); h = nh.toFloat()
         val bs = dp(34f)   // button radius
@@ -105,12 +113,19 @@ class GameHud(
         btnPause.rect.set(w - dp(56f), dp(12f), w - dp(12f), dp(12f) + tr * 2)
         btnInv.rect.set(w - dp(116f), dp(12f), w - dp(64f), dp(12f) + tr * 2)
         btnSkill.rect.set(w - dp(176f), dp(12f), w - dp(124f), dp(12f) + tr * 2)
-        // hotbar
-        val slot = dp(52f)
-        val total = slot * 5 + dp(8f) * 4
-        val x0 = (w - total) / 2
+        // Hotbar: sized from what is actually free, and centred in the band
+        // left of the ATK/USE cluster so the two can never collide.
+        val bandLeft = dp(14f)
+        val bandRight = w - dp(100f)
+        val band = (bandRight - bandLeft).coerceAtLeast(dp(120f))
+        val gap = dp(6f)
+        var slot = minOf(dp(58f), (band - gap * 4) / 5f, h * 0.17f)
+        slot = slot.coerceAtLeast(dp(30f))
+        val total = slot * 5 + gap * 4
+        val x0 = bandLeft + (band - total) / 2f
+        val top = h - slot - dp(10f)
         for (i in 0 until 5)
-            hotbarRects[i].set(x0 + i * (slot + dp(8f)), h - slot - dp(10f), x0 + i * (slot + dp(8f)) + slot, h - dp(10f))
+            hotbarRects[i].set(x0 + i * (slot + gap), top, x0 + i * (slot + gap) + slot, top + slot)
     }
 
     // ------------------------------------------------------------ touch
@@ -362,32 +377,30 @@ class GameHud(
     private fun drawHotbar(c: Canvas) {
         val inv = engine.player.inventory
         for (i in 0 until 5) {
-            val r = hotbarRects[i]
-            p.style = Paint.Style.FILL
-            p.color = if (i == inv.selected) 0xCC2A2A26.toInt() else 0x88141412.toInt()
-            c.drawRect(r, p)
-            p.style = Paint.Style.STROKE
-            p.strokeWidth = dp(if (i == inv.selected) 2.5f else 1f)
-            p.color = if (i == inv.selected) 0xFF8A8578.toInt() else UiKit.EDGE
-            c.drawRect(r, p)
-            p.style = Paint.Style.FILL
-            val s = inv.slots[i]
-            if (s != null) {
-                UiKit.drawItemIcon(c, r, s.item, p)
-                if (s.count > 1) {
-                    tp.textSize = dp(10f); tp.color = UiKit.TEXT
-                    tp.textAlign = Paint.Align.RIGHT
-                    c.drawText("${s.count}", r.right - dp(3f), r.bottom - dp(4f), tp)
-                    tp.textAlign = Paint.Align.CENTER
-                }
-            }
+            UiKit.drawSlot(
+                c, hotbarRects[i], inv.slots[i],
+                selected = false,
+                inHand = i == inv.selected,
+                index = i,
+                density = den, p = p, tp = tp,
+            )
         }
-        // held item name above bar
+        // name of what is in hand, on a plate so it stays readable over the world
         val held = inv.held()
         if (held != null) {
-            tp.textSize = dp(11f); tp.color = UiKit.TEXT_DIM
-            c.drawText(held.item.name, w / 2, hotbarRects[0].top - dp(8f), tp)
+            tp.textAlign = Paint.Align.CENTER
+            tp.textSize = dp(11f)
+            val label = held.item.name
+            val tw = tp.measureText(label)
+            val cx = (hotbarRects[0].left + hotbarRects[4].right) / 2f
+            val baseY = hotbarRects[0].top - dp(6f)
+            p.style = Paint.Style.FILL
+            p.color = 0xAA111110.toInt()
+            c.drawRect(cx - tw / 2 - dp(6f), baseY - dp(12f), cx + tw / 2 + dp(6f), baseY + dp(3f), p)
+            tp.color = UiKit.TEXT
+            c.drawText(label, cx, baseY, tp)
         }
+        tp.textAlign = Paint.Align.CENTER
     }
 
     private fun drawButtons(c: Canvas) {
@@ -442,7 +455,7 @@ class GameHud(
     private fun drawJoystick(c: Canvas) {
         if (joyPointer == -1) {
             tp.textSize = dp(10f); tp.color = 0x6677746C
-            c.drawText("MOVE — hold & push up to sprint", w * 0.2f, h - dp(40f), tp)
+            c.drawText("MOVE — hold & push up to sprint", w * 0.22f, h * 0.52f, tp)
             return
         }
         p.style = Paint.Style.STROKE; p.strokeWidth = dp(2f); p.color = 0x8877746C.toInt()

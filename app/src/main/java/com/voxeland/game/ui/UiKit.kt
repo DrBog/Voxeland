@@ -12,6 +12,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.voxeland.game.items.ItemDef
 import com.voxeland.game.items.ItemKind
+import com.voxeland.game.items.Stack
 
 /** Shared grim styling + procedural item icons (no art assets anywhere). */
 object UiKit {
@@ -85,7 +86,7 @@ object UiKit {
         val col = itemColor(item)
         paint.style = Paint.Style.FILL
         val cx = r.centerX(); val cy = r.centerY()
-        val s = r.width() * 0.32f
+        val s = kotlin.math.min(r.width(), r.height()) * 0.30f
         when (item.kind) {
             ItemKind.FOOD -> {          // can
                 paint.color = col
@@ -134,6 +135,66 @@ object UiKit {
                 c.drawRect(cx - s * 0.2f, cy - s * 0.8f, cx + s, cy + s * 0.4f, paint)
             }
         }
+    }
+
+    /**
+     * One slot, drawn the same way in the hotbar and the backpack so the two
+     * read as the same object. [index] >= 0 prints the hotbar key number.
+     */
+    fun drawSlot(
+        c: Canvas,
+        r: RectF,
+        stack: Stack?,
+        selected: Boolean,
+        inHand: Boolean,
+        index: Int,
+        density: Float,
+        p: Paint,
+        tp: Paint,
+    ) {
+        val rad = 3f * density
+        p.style = Paint.Style.FILL
+        p.color = when {
+            selected -> 0xFF3A3A33.toInt()
+            inHand -> 0xFF2C2C26.toInt()
+            else -> 0xE01B1B18.toInt()
+        }
+        c.drawRoundRect(r, rad, rad, p)
+
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = if (inHand || selected) 2.2f * density else 1.2f * density
+        p.color = when {
+            selected -> 0xFFC8C3B4.toInt()
+            inHand -> 0xFF8A8578.toInt()
+            else -> EDGE
+        }
+        c.drawRoundRect(r, rad, rad, p)
+        p.style = Paint.Style.FILL
+
+        if (index >= 0) {
+            tp.textAlign = Paint.Align.LEFT
+            tp.textSize = 8f * density
+            tp.color = 0xFF6E6B63.toInt()
+            c.drawText("${index + 1}", r.left + 3f * density, r.top + 10f * density, tp)
+        }
+
+        if (stack == null) return
+        drawItemIcon(c, r, stack.item, p)
+
+        if (stack.count > 1) {
+            tp.textAlign = Paint.Align.RIGHT
+            tp.textSize = 10f * density
+            val txt = "${stack.count}"
+            val tw = tp.measureText(txt)
+            // a plate behind the number so it stays readable over any icon
+            p.color = 0xCC0E0E0C.toInt()
+            c.drawRect(
+                r.right - tw - 6f * density, r.bottom - 13f * density,
+                r.right - 1f * density, r.bottom - 1f * density, p)
+            tp.color = 0xFFDDD9CC.toInt()
+            c.drawText(txt, r.right - 3f * density, r.bottom - 3.5f * density, tp)
+        }
+        tp.textAlign = Paint.Align.LEFT
     }
 
     private fun brighten(c: Int, f: Float): Int {

@@ -7,7 +7,7 @@ OpenGL ES 3.0 — no game engine. Think blocky urban horror in the spirit of
 Unturned: one large dead city, realism-leaning survival, and the dark makes
 them bold.
 
-## What's in v0.2.1
+## What's in v0.2.2
 
 - **Voxel engine** — chunked streaming world, face-culled meshing on worker
   threads, procedurally painted texture atlas (every material is synthesized;
@@ -47,9 +47,13 @@ them bold.
 - **Character creation (fresh saves)** — name, build, skin, hair, and a
   past life (Mechanic / Paramedic / Scout / Cook), each with real gameplay
   modifiers and starting gear.
-- **Inventory & crafting** — 5-slot hotbar + expandable backpack, container
-  looting driven by building function (pharmacies hold medicine, hardware
-  stores hold nails), 12 recipes, some skill-gated.
+- **Inventory & crafting** — 5-slot hotbar plus an expandable backpack, both
+  drawn as the same square thumb-sized slots (geometry in `SlotGrid`, so
+  drawing and hit-testing can never disagree). Selecting a slot shows the
+  item and offers USE / TO HAND / DISCARD outright rather than hiding actions
+  behind a second tap. Container loot is driven by building function
+  (pharmacies hold medicine, hardware stores hold nails); 13 recipes, some
+  skill-gated.
 - **Leveling trees** — Survival / Scavenging / Endurance. Unlock the
   compass (crafted from a dead man's watch — the HUD gains a bearing
   ribbon), deeper pockets (+inventory rows), silent steps, and more.
@@ -103,7 +107,7 @@ items/    Items, Inventory, Recipes, Loot tables
 progression/  Skills (3 trees), Character (CAC data + modifiers)
 audio/    SoundManager (SoundPool sfx + cross-mixed ambient beds)
 save/     JSON save: world edits, looted set, player, clock
-ui/       GameHud (HUD + touch), Panels, MenuViews, UiKit
+ui/       GameHud (HUD + touch), Panels, MenuViews, SlotGrid, UiKit
 ```
 
 Everything world-related is a pure function of the seed — the save file

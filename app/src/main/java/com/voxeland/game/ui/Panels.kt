@@ -13,6 +13,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import com.voxeland.game.GameEngine
+import com.voxeland.game.items.Inventory
 import com.voxeland.game.items.ItemKind
 import com.voxeland.game.items.Recipes
 import com.voxeland.game.items.Stack
@@ -25,7 +26,13 @@ import com.voxeland.game.progression.Skills
  */
 object Panels {
 
-    private fun shell(ctx: Context, title: String, onClose: () -> Unit, content: View): FrameLayout {
+    private fun shell(
+        ctx: Context,
+        title: String,
+        onClose: () -> Unit,
+        content: View,
+        panelWidth: Int = FrameLayout.LayoutParams.WRAP_CONTENT,
+    ): FrameLayout {
         val root = FrameLayout(ctx)
         root.setBackgroundColor(0xB80C0C0B.toInt())
         root.setOnClickListener { onClose() }
@@ -42,155 +49,204 @@ object Panels {
         panel.addView(UiKit.vspace(ctx, 16))
         panel.addView(content)
         val lp = FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
+            panelWidth, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
         root.addView(panel, lp)
         return root
     }
 
     // ------------------------------------------------------------ inventory + crafting
 
+    /**
+     * Backpack. Sized from the actual display so it can never be wider than
+     * the screen, with square thumb-sized slots and explicit actions — the
+     * old build hid "use" behind a second tap and hardcoded seven rows into
+     * the height, which squashed the grid into a corner.
+     */
     @SuppressLint("SetTextI18n")
     fun inventory(ctx: Context, engine: GameEngine, onClose: () -> Unit): View {
-        val col = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+        val dm = ctx.resources.displayMetrics
+        val panelW = minOf(dm.widthPixels - dp(ctx, 28f), dp(ctx, 720f))
+        val panelH = minOf(dm.heightPixels - dp(ctx, 20f), dp(ctx, 430f))
+        val bodyH = panelH - dp(ctx, 74f)          // minus header and padding
 
-        // left: slot grid
+        val body = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+
+        // ---- left: the grid, the selected item, and what you can do with it
+        val left = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
         val grid = InventoryGrid(ctx, engine)
-        col.addView(grid, LinearLayout.LayoutParams(dp(ctx, 320f), dp(ctx, 250f)))
+        val detail = UiKit.label(ctx, "", 11f, UiKit.TEXT_DIM).apply { maxLines = 2 }
+        val actions = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
 
-        // right: crafting list
+        lateinit var refreshAll: () -> Unit
+
+        val useBtn = UiKit.button(ctx, "USE", accent = true, compact = true) {
+            val i = grid.selectedIndex
+            val st = engine.player.inventory.slots.getOrNull(i) ?: return@button
+            engine.post {
+                val inv = engine.player.inventory
+                val keep = inv.selected
+                inv.selected = i
+                engine.useHeld()
+                inv.selected = keep
+                post(ctx) { refreshAll() }
+            }
+        }
+        val handBtn = UiKit.button(ctx, "TO HAND", compact = true) {
+            val i = grid.selectedIndex
+            val inv = engine.player.inventory
+            if (i < 0 || inv.slots[i] == null) return@button
+            engine.post {
+                // prefer an empty hotbar slot, otherwise swap with the held one
+                var target = (0 until Inventory.HOTBAR).firstOrNull { inv.slots[it] == null } ?: inv.selected
+                if (target == i) target = inv.selected
+                val tmp = inv.slots[target]
+                inv.slots[target] = inv.slots[i]
+                inv.slots[i] = tmp
+                inv.selected = target
+                post(ctx) { refreshAll() }
+            }
+        }
+        val dropBtn = UiKit.button(ctx, "DISCARD", compact = true) {
+            val i = grid.selectedIndex
+            val inv = engine.player.inventory
+            if (i < 0 || inv.slots[i] == null) return@button
+            engine.post {
+                inv.slots[i] = null
+                post(ctx) { refreshAll() }
+            }
+        }
+        for (b in listOf(useBtn, handBtn, dropBtn)) {
+            val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            lp.rightMargin = dp(ctx, 4f)
+            actions.addView(b, lp)
+        }
+
+        // ---- right: crafting
         val craftCol = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(ctx, 14f), 0, 0, 0)
+            setPadding(dp(ctx, 12f), 0, 0, 0)
         }
-        craftCol.addView(UiKit.label(ctx, "CRAFTING", 14f, UiKit.TEXT))
-        craftCol.addView(UiKit.vspace(ctx, 8))
+        craftCol.addView(UiKit.label(ctx, "CRAFTING", 12f, UiKit.TEXT))
         val list = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
 
-        fun refresh() {
+        fun refreshCrafting() {
             list.removeAllViews()
             for (r in Recipes.all) {
                 val gated = r.requiredSkill != null && !engine.player.has(r.requiredSkill)
                 val canCraft = !gated && r.inputs.all { (item, n) -> engine.player.inventory.count(item) >= n }
-                val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(ctx, 3f), 0, dp(ctx, 3f)) }
-                val need = r.inputs.joinToString(" + ") { (i, n) -> "$n ${i.name}" }
-                val lockTxt = if (gated) "  [needs ${Skills.byId(r.requiredSkill!!)?.name}]" else ""
-                val lbl = UiKit.label(ctx, "${r.outCount}x ${r.output.name}\n$need$lockTxt", 11f,
+                val row = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, dp(ctx, 3f), 0, dp(ctx, 3f))
+                }
+                val need = r.inputs.joinToString(" + ") { (i, n) ->
+                    "$n ${i.name} (${engine.player.inventory.count(i)})"
+                }
+                val lockTxt = if (gated) "\nneeds ${Skills.byId(r.requiredSkill!!)?.name}" else ""
+                val lbl = UiKit.label(ctx, "${r.outCount}x ${r.output.name}\n$need$lockTxt", 10f,
                     if (canCraft) UiKit.TEXT else UiKit.TEXT_DIM)
                 row.addView(lbl, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-                val btn = UiKit.button(ctx, "MAKE", accent = canCraft) {
-                    engine.post {
-                        if (engine.craft(r)) post(ctx) { refresh(); grid.invalidate() }
-                    }
+                val btn = UiKit.button(ctx, "MAKE", accent = canCraft, compact = true) {
+                    engine.post { if (engine.craft(r)) post(ctx) { refreshAll() } }
                 }
                 btn.isEnabled = canCraft
                 row.addView(btn)
                 list.addView(row)
             }
         }
-        refresh()
+
+        refreshAll = {
+            refreshCrafting()
+            grid.invalidate()
+            val inv = engine.player.inventory
+            val st = inv.slots.getOrNull(grid.selectedIndex)
+            detail.text = if (st == null)
+                "Tap a slot. Top row is your hotbar — TO HAND puts an item there."
+            else
+                "${st.item.name} x${st.count}\n${st.item.desc.ifEmpty { st.item.kind.name.lowercase() }}"
+            val has = st != null
+            useBtn.isEnabled = has && st!!.item.let {
+                it.kind == ItemKind.FOOD || it.kind == ItemKind.DRINK ||
+                it.kind == ItemKind.MEDICAL || it.kind == ItemKind.BLOCK
+            }
+            handBtn.isEnabled = has
+            dropBtn.isEnabled = has
+            useBtn.alpha = if (useBtn.isEnabled) 1f else 0.4f
+            handBtn.alpha = if (handBtn.isEnabled) 1f else 0.4f
+            dropBtn.alpha = if (dropBtn.isEnabled) 1f else 0.4f
+        }
+        grid.onSelect = { refreshAll() }
+        refreshAll()
+
+        val gridH = bodyH - dp(ctx, 62f)
+        left.addView(grid, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, gridH))
+        left.addView(detail, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(ctx, 30f)))
+        left.addView(actions, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
         val scroll = ScrollView(ctx)
         scroll.addView(list)
-        craftCol.addView(scroll, LinearLayout.LayoutParams(dp(ctx, 330f), dp(ctx, 210f)))
-        col.addView(craftCol)
+        craftCol.addView(scroll, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
 
-        grid.onChanged = { refresh() }
-        return shell(ctx, "BACKPACK — ${engine.player.character.name}", onClose, col)
+        body.addView(left, LinearLayout.LayoutParams(0, bodyH, 52f))
+        body.addView(craftCol, LinearLayout.LayoutParams(0, bodyH, 48f))
+
+        return shell(ctx, "BACKPACK — ${engine.player.character.name}", onClose, body, panelW)
     }
 
     private fun post(ctx: Context, r: () -> Unit) {
         android.os.Handler(ctx.mainLooper).post(r)
     }
 
-    /** tap a slot to select/act: consumables are used, gear is equipped to the tapped hotbar slot */
+    /** The slot grid itself. All geometry comes from [SlotGrid]. */
     private class InventoryGrid(ctx: Context, val engine: GameEngine) : View(ctx) {
-        var onChanged: (() -> Unit)? = null
+        var onSelect: (() -> Unit)? = null
+        var selectedIndex = -1
+            private set
+
         private val p = Paint(Paint.ANTI_ALIAS_FLAG)
         private val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             typeface = android.graphics.Typeface.MONOSPACE
         }
+        private val rect = RectF()
+        private val den = ctx.resources.displayMetrics.density
 
-        private var sel = -1
+        private fun layout() = SlotGrid.layout(
+            width.toFloat(), height.toFloat(), 1 + engine.player.inventory.rows, den)
 
         override fun onDraw(c: Canvas) {
             val inv = engine.player.inventory
-            val cols = 5
-            val cell = width / cols.toFloat()
-            val rows = 1 + inv.rows
-            val ch = (height - dp(context, 40f)) / (1 + 6).toFloat()
+            val l = layout()
             for (i in 0 until inv.capacity) {
-                val r = slotRect(i, cell, ch)
-                p.style = Paint.Style.FILL
-                p.color = if (i == sel) 0xFF33332E.toInt() else if (i < 5) 0xFF232320.toInt() else 0xFF1D1D1A.toInt()
-                c.drawRect(r, p)
-                p.style = Paint.Style.STROKE; p.strokeWidth = 2f
-                p.color = if (i == inv.selected) 0xFF8A8578.toInt() else UiKit.EDGE
-                c.drawRect(r, p)
-                p.style = Paint.Style.FILL
-                val s = inv.slots[i]
-                if (s != null) {
-                    UiKit.drawItemIcon(c, r, s.item, p)
-                    if (s.count > 1) {
-                        tp.textSize = dp(context, 10f).toFloat(); tp.color = UiKit.TEXT
-                        tp.textAlign = Paint.Align.RIGHT
-                        c.drawText("${s.count}", r.right - 4f, r.bottom - 5f, tp)
-                    }
-                }
+                val cell = l.rect(i)
+                rect.set(cell.left, cell.top, cell.right, cell.bottom)
+                UiKit.drawSlot(
+                    c, rect, inv.slots[i],
+                    selected = i == selectedIndex,
+                    inHand = i == inv.selected,
+                    index = if (i < Inventory.HOTBAR) i else -1,
+                    density = den, p = p, tp = tp,
+                )
             }
-            // selected item info line
-            tp.textAlign = Paint.Align.LEFT
-            tp.textSize = dp(context, 11f).toFloat(); tp.color = UiKit.TEXT_DIM
-            val info = sel.takeIf { it in 0 until inv.capacity }?.let { inv.slots[it] }?.let {
-                "${it.item.name} — ${it.item.desc.ifEmpty { it.item.kind.name.lowercase() }}  (tap again: use / move to hand)"
-            } ?: "Tap an item, tap again to use or equip. Top row = hotbar."
-            c.drawText(info, 4f, height - 8f, tp)
-        }
-
-        private fun slotRect(i: Int, cell: Float, ch: Float): RectF {
-            val row = i / 5; val colI = i % 5
-            val gap = 4f
-            val y0 = row * (ch + gap) + if (row > 0) 10f else 0f
-            return RectF(colI * cell + gap, y0 + gap, (colI + 1) * cell - gap, y0 + ch - gap)
         }
 
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(e: android.view.MotionEvent): Boolean {
             if (e.actionMasked != android.view.MotionEvent.ACTION_DOWN) return true
             val inv = engine.player.inventory
-            val cell = width / 5f
-            val ch = (height - dp(context, 40f)) / 7f
-            for (i in 0 until inv.capacity) {
-                if (slotRect(i, cell, ch).contains(e.x, e.y)) {
-                    engine.sound.play("ui_click", 0.4f)
-                    if (sel == i) {
-                        // second tap: act on the item
-                        val s = inv.slots[i]
-                        if (s != null) {
-                            when (s.item.kind) {
-                                ItemKind.FOOD, ItemKind.DRINK, ItemKind.MEDICAL -> engine.post {
-                                    val keep = inv.selected
-                                    inv.selected = i
-                                    engine.useHeld()
-                                    inv.selected = keep
-                                    post(context) { invalidate(); onChanged?.invoke() }
-                                }
-                                else -> {
-                                    // swap into first hotbar slot
-                                    val tmp = inv.slots[inv.selected]
-                                    inv.slots[inv.selected] = s
-                                    inv.slots[i] = tmp
-                                }
-                            }
-                        }
-                        sel = -1
-                    } else sel = i
-                    invalidate()
-                    return true
-                }
+            val hit = layout().indexAt(e.x, e.y, inv.capacity)
+            selectedIndex = hit
+            if (hit >= 0) {
+                engine.sound.play("ui_click", 0.4f)
+                // tapping a hotbar slot also equips it, which is what people expect
+                if (hit < Inventory.HOTBAR) engine.post { inv.selected = hit }
             }
-            sel = -1; invalidate()
+            invalidate()
+            onSelect?.invoke()
             return true
         }
-        private fun post(ctx: Context, r: () -> Unit) { android.os.Handler(ctx.mainLooper).post(r) }
     }
 
     // ------------------------------------------------------------ skills
