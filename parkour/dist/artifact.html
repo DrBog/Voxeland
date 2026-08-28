@@ -1,0 +1,3635 @@
+<title>KINESIS</title>
+<style>
+/* KINESIS */
+:root {
+  --bg: #06080e;
+  --ink: #e9edf6;
+  --dim: #8790a4;
+  --dimmer: #5b6376;
+  --line: rgba(255,255,255,0.085);
+  --card: rgba(255,255,255,0.035);
+  --amber: #ffb057;
+  --green: #8fe3a0;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, system-ui, sans-serif;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  background: var(--bg); color: var(--ink);
+  font-family: var(--sans);
+  overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
+}
+body { touch-action: manipulation; }
+
+#app {
+  position: fixed; inset: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 46%);
+}
+#stage { position: relative; min-height: 0; overflow: hidden; background: #05070c; }
+#view { display: block; width: 100%; height: 100%; }
+
+/* ------------------------------------------------------------------ HUD */
+#hud { position: absolute; inset: 0; pointer-events: none; padding: 12px 14px; }
+#hud button { pointer-events: auto; }
+
+.hud-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.district-name {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.2em;
+  color: var(--ink); opacity: 0.92;
+}
+.district-tag {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em;
+  color: var(--dim); margin-top: 3px; max-width: 46vw;
+}
+.readout { text-align: right; }
+.distance {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: clamp(26px, 8.4vw, 40px); font-weight: 300; line-height: 1;
+  letter-spacing: -0.02em;
+  text-shadow: 0 2px 18px rgba(0,0,0,0.7);
+}
+.best {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em;
+  color: var(--dim); margin-top: 5px;
+}
+
+.hud-body { position: absolute; left: 14px; bottom: 58px; }
+.chip {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  border: 1px solid rgba(255,255,255,0.2); border-radius: 999px;
+  padding: 4px 11px; backdrop-filter: blur(6px);
+  transition: color .18s, background .18s, border-color .18s;
+}
+.chip-state { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.18em; }
+.chip-hint { font-family: var(--mono); font-size: 9px; letter-spacing: 0.04em; opacity: 0.6; color: var(--ink); }
+.bars { margin-top: 9px; display: grid; gap: 5px; }
+.bar { display: flex; align-items: center; gap: 7px; }
+.bar-label { font-family: var(--mono); font-size: 8px; letter-spacing: 0.14em; color: var(--dimmer); width: 38px; }
+.bar-track { width: 84px; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.12); overflow: hidden; }
+.bar-fill { height: 100%; width: 100%; background: var(--green); border-radius: 2px; transition: width .12s linear; }
+.notes { margin-top: 8px; display: grid; gap: 2px; }
+.note {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.06em; color: var(--dim);
+  transition: opacity .3s;
+}
+.note.good { color: var(--green); }
+.note.warn { color: var(--amber); }
+.note.bad { color: #ff7b86; }
+
+.wallet { position: absolute; right: 14px; bottom: 14px; text-align: right; }
+.momentum {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 17px; letter-spacing: 0.02em; color: var(--amber);
+  text-shadow: 0 2px 14px rgba(0,0,0,0.6);
+}
+.rate { font-family: var(--mono); font-size: 9.5px; color: var(--dim); margin-top: 3px; letter-spacing: 0.1em; }
+
+.cam-btn {
+  position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+  padding: 6px 12px; border-radius: 999px;
+  background: rgba(0,0,0,0.35); border: 1px solid var(--line);
+  color: var(--dim); font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.18em;
+  cursor: pointer; backdrop-filter: blur(6px); pointer-events: auto;
+}
+.cam-btn:active { color: var(--ink); }
+.icon-btn {
+  position: absolute; top: 12px; right: 50%; transform: translateX(50%);
+  width: 30px; height: 30px; border-radius: 999px;
+  background: rgba(0,0,0,0.35); border: 1px solid var(--line);
+  color: var(--ink); font-size: 13px; line-height: 1; cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.icon-btn.off { color: var(--dimmer); }
+
+.banner {
+  position: absolute; left: 0; right: 0; top: 34%;
+  text-align: center; opacity: 0; transform: translateY(6px) scale(0.98);
+  transition: opacity .25s, transform .25s; pointer-events: none;
+}
+.banner.show { opacity: 1; transform: none; }
+.banner-title {
+  font-family: var(--mono); font-size: clamp(15px, 4.6vw, 22px);
+  letter-spacing: 0.26em; color: var(--ink);
+  text-shadow: 0 3px 24px rgba(0,0,0,0.8);
+}
+.banner.gate .banner-title { color: var(--green); }
+.banner.record .banner-title { color: var(--amber); }
+.banner-sub {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+  color: var(--dim); margin-top: 7px; padding: 0 24px;
+}
+
+/* ---------------------------------------------------------------- panel */
+#panel {
+  min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  background: linear-gradient(180deg, #0a0d15 0%, #07090f 100%);
+  border-top: 1px solid var(--line);
+  padding-bottom: max(14px, env(safe-area-inset-bottom));
+}
+.tabs {
+  position: sticky; top: 0; z-index: 5;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  background: rgba(8,10,17,0.94); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.tab {
+  appearance: none; background: none; border: 0; color: var(--dimmer);
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em;
+  padding: 13px 0 12px; cursor: pointer; border-bottom: 2px solid transparent;
+}
+.tab.on { color: var(--ink); border-bottom-color: var(--amber); }
+.panel-body { padding: 12px 12px 20px; }
+
+.row-head { display: flex; align-items: center; justify-content: space-between; margin: 4px 2px 12px; }
+.row-title { font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; color: var(--dim); margin: 4px 2px 12px; }
+.row-head .row-title { margin: 0; }
+.modes { display: flex; gap: 5px; }
+.mode {
+  appearance: none; background: rgba(255,255,255,0.05); border: 1px solid var(--line);
+  color: var(--dim); font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.1em;
+  padding: 5px 9px; border-radius: 7px; cursor: pointer;
+}
+.mode.on { color: var(--amber); border-color: rgba(255,176,87,0.4); background: rgba(255,176,87,0.1); }
+
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 12px 13px; margin-bottom: 9px;
+}
+.card.locked { opacity: 0.42; }
+.card-line { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.card-name { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.16em; }
+.card-level { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--dim); }
+.card-read { font-family: var(--mono); font-size: 10.5px; color: var(--amber); margin-top: 7px; letter-spacing: 0.02em; }
+.card-blurb { font-size: 12px; line-height: 1.45; color: var(--dim); margin-top: 6px; }
+.card-state { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.1em; color: var(--dimmer); margin-top: 8px; }
+
+.buy {
+  appearance: none; width: 100%; margin-top: 11px; height: 40px; border-radius: 11px;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--line); color: var(--dimmer);
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; cursor: not-allowed;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.buy.can {
+  background: rgba(255,176,87,0.12); border-color: rgba(255,176,87,0.42);
+  color: var(--amber); cursor: pointer;
+}
+.buy.can:active { background: rgba(255,176,87,0.24); transform: translateY(1px); }
+.buy.big { height: 46px; }
+
+.toggle {
+  appearance: none; background: rgba(255,255,255,0.05); border: 1px solid var(--line);
+  color: var(--dim); font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em;
+  padding: 7px 13px; border-radius: 9px; cursor: pointer;
+}
+.toggle.on { color: var(--green); border-color: rgba(143,227,160,0.4); background: rgba(143,227,160,0.1); }
+.toggle.danger { color: #ff7b86; border-color: rgba(255,123,134,0.3); width: 100%; }
+
+.gate.open { border-color: rgba(143,227,160,0.28); }
+.gate.ready { border-color: rgba(255,176,87,0.28); }
+.req { display: flex; justify-content: space-between; margin-top: 9px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; }
+.req-name { color: var(--dim); }
+.req-val { color: #ff7b86; }
+.req-val.met { color: var(--green); }
+
+.dline { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.dline:last-child { border-bottom: 0; }
+.dname { font-size: 12px; color: var(--dim); }
+.dmult { font-family: var(--mono); font-size: 10px; color: var(--ink); letter-spacing: 0.06em; }
+.dline.seen .dname { color: var(--ink); }
+
+.card.log.record { border-color: rgba(255,176,87,0.3); }
+.card.log.gate { border-color: rgba(143,227,160,0.25); }
+
+/* --------------------------------------------------------------- splash */
+#splash {
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 30px;
+  background: radial-gradient(120% 90% at 50% 20%, rgba(255,176,87,0.10), rgba(4,6,11,0.96) 60%), #04060b;
+  transition: opacity .5s, visibility .5s;
+}
+#splash.gone { opacity: 0; visibility: hidden; }
+.title {
+  font-family: var(--mono); font-size: clamp(30px, 12vw, 58px); font-weight: 300;
+  letter-spacing: 0.34em; text-indent: 0.34em; margin-bottom: 2px;
+}
+.tagline { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.2em; color: var(--amber); }
+.blurb { max-width: 380px; text-align: center; color: var(--dim); font-size: 13px; line-height: 1.6; margin: 18px 0 22px; }
+.blurb b { color: var(--ink); font-weight: 500; }
+.splash-btns { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.start {
+  appearance: none; padding: 13px 22px; border-radius: 12px; cursor: pointer;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em;
+  background: rgba(255,176,87,0.14); border: 1px solid rgba(255,176,87,0.45); color: var(--amber);
+}
+.start.quiet { background: rgba(255,255,255,0.04); border-color: var(--line); color: var(--dim); }
+.start:active { transform: translateY(1px); }
+
+/* ---------------------------------------------------------------- ghost */
+#ghost {
+  position: fixed; z-index: 30; left: 50%; top: 14px; transform: translate(-50%, -140%);
+  width: min(420px, calc(100vw - 24px));
+  background: rgba(10,13,20,0.95); border: 1px solid rgba(255,176,87,0.3);
+  border-radius: 14px; padding: 14px; backdrop-filter: blur(10px);
+  transition: transform .45s cubic-bezier(.2,.8,.2,1);
+}
+#ghost.show { transform: translate(-50%, 0); }
+.ghost-head { display: flex; justify-content: space-between; align-items: baseline; }
+.ghost-title { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.2em; color: var(--amber); }
+#ghost-gain { font-family: var(--mono); font-size: 15px; color: var(--ink); }
+#ghost-note { font-size: 12px; color: var(--dim); margin-top: 8px; line-height: 1.4; }
+#ghost-ok {
+  appearance: none; margin-top: 12px; width: 100%; height: 34px; border-radius: 9px;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--line); color: var(--ink);
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; cursor: pointer;
+}
+
+@media (min-width: 860px) {
+  #app { grid-template-rows: none; grid-template-columns: minmax(0,1fr) 400px; }
+  #panel { border-top: 0; border-left: 1px solid var(--line); }
+  .hud-body { bottom: 24px; }
+}
+@media (max-height: 620px) {
+  #app { grid-template-rows: minmax(0, 1fr) minmax(0, 40%); }
+  .bars { display: none; }
+}
+
+</style>
+<div id="app">
+  <section id="stage">
+    <canvas id="view"></canvas>
+    <div id="hud"></div>
+  </section>
+  <section id="panel"></section>
+</div>
+
+<div id="ghost">
+  <div class="ghost-head">
+    <span class="ghost-title">GHOST RUN · <span id="ghost-time">0m</span></span>
+    <span id="ghost-gain">+0</span>
+  </div>
+  <div id="ghost-note"></div>
+  <button id="ghost-ok">GOOD</button>
+</div>
+
+<div id="splash">
+  <div class="title">KINESIS</div>
+  <div class="tagline">AN IDLE PARKOUR RUNNER WITH A REAL BODY</div>
+  <p class="blurb">
+    Nobody is driving. The runner is an <b>active ragdoll</b> — balance, stumbles,
+    catches and collapses all come out of the physics, never out of an animation.
+    You train the body; the body takes the route.
+    <br><br>It runs while you watch, and while you don't.
+  </p>
+  <div class="splash-btns">
+    <button class="start" id="begin">BEGIN</button>
+    <button class="start quiet" id="begin-quiet">BEGIN MUTED</button>
+  </div>
+</div>
+<script>
+/* ---- 00-util.js ---- */
+/* KINESIS — shared math, rng, formatting.
+   Everything hangs off the single global K. */
+window.K = window.K || {};
+
+K.util = (function () {
+  const TAU = Math.PI * 2;
+
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function smooth(a, b, t) { return a + (b - a) * clamp(t, 0, 1); }
+  function mix(a, b, t) { return a + (b - a) * t; }
+  function sign(v) { return v < 0 ? -1 : 1; }
+
+  /* shortest signed difference between two angles */
+  function angDiff(target, current) {
+    let d = (target - current) % TAU;
+    if (d > Math.PI) d -= TAU;
+    if (d < -Math.PI) d += TAU;
+    return d;
+  }
+
+  /* frame-rate independent approach: pull v toward t, `rate` = fraction per second */
+  function approach(v, t, rate, dt) {
+    return t + (v - t) * Math.exp(-rate * dt);
+  }
+
+  /* mulberry32 — small deterministic prng so a seed reproduces a route */
+  function rng(seed) {
+    let a = seed >>> 0;
+    const f = function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    f.range = (lo, hi) => lo + f() * (hi - lo);
+    f.int = (lo, hi) => Math.floor(lo + f() * (hi - lo + 1));
+    f.pick = (arr) => arr[Math.floor(f() * arr.length)];
+    f.chance = (p) => f() < p;
+    return f;
+  }
+
+  const UNITS = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc'];
+  /* idle games live and die by their number formatting */
+  function num(v) {
+    if (!isFinite(v)) return '∞';
+    const neg = v < 0; v = Math.abs(v);
+    if (v < 1000) {
+      if (v >= 100) return (neg ? '-' : '') + Math.floor(v);
+      if (v >= 10) return (neg ? '-' : '') + (Math.round(v * 10) / 10);
+      return (neg ? '-' : '') + (Math.round(v * 100) / 100);
+    }
+    let tier = Math.floor(Math.log10(v) / 3);
+    tier = Math.min(tier, UNITS.length - 1);
+    const scaled = v / Math.pow(1000, tier);
+    const s = scaled >= 100 ? scaled.toFixed(0) : scaled >= 10 ? scaled.toFixed(1) : scaled.toFixed(2);
+    return (neg ? '-' : '') + s + UNITS[tier];
+  }
+
+  function dist(v) {
+    if (v >= 1000) return (v / 1000).toFixed(v >= 10000 ? 1 : 2) + ' km';
+    return v.toFixed(v < 100 ? 1 : 0) + ' m';
+  }
+
+  function time(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    if (h) return h + 'h ' + m + 'm';
+    if (m) return m + 'm ' + s + 's';
+    return s + 's';
+  }
+
+  return { TAU, clamp, lerp, mix, smooth, sign, angDiff, approach, rng, num, dist, time };
+})();
+
+/* ---- 01-physics.js ---- */
+/* KINESIS — verlet body solver, three dimensions.
+   Units are SI: metres, seconds, kilograms.
+     x = lateral (left/right across the deck)
+     y = up
+     z = forward, the direction of the run and of the camera's gaze.
+   A body is point masses held by distance bones and hinge joints. Muscles
+   are not springs — they are drives: a muscle asks for a velocity toward a
+   target and may change the point's real velocity by at most `accel` per
+   second. Weak muscles lose to gravity, which is why a hurt runner folds. */
+K.phys = (function () {
+  const { clamp, angDiff } = K.util;
+
+  const GRAVITY = -11.2;      // a touch hot; reads better on a small screen
+  const AIR_DAMP = 0.020;
+
+  function Part(name, x, y, z, mass, radius) {
+    return {
+      name, x, y, z, px: x, py: y, pz: z,
+      ax: 0, ay: 0, az: 0,
+      vx0: 0, vy0: 0, vz0: 0, fx: 0, fy: 0, fz: 0,
+      m: mass, im: 1 / mass, r: radius,
+      grounded: false, ground: null, friction: 1, touched: false, touchedLast: false,
+      impact: 0, pinned: null
+    };
+  }
+
+  function Body() { return { parts: {}, list: [], bones: [], hinges: [], contacts: 0 }; }
+
+  function add(body, name, x, y, z, mass, radius) {
+    const p = Part(name, x, y, z, mass, radius);
+    body.parts[name] = p; body.list.push(p);
+    return p;
+  }
+
+  function bone(body, a, b, k) {
+    const A = body.parts[a], B = body.parts[b];
+    const len = Math.hypot(A.x - B.x, A.y - B.y, A.z - B.z);
+    body.bones.push({ a: A, b: B, len, k: k === undefined ? 1 : k });
+  }
+
+  /* A hinge: the middle point is pulled into the plane whose normal is the
+     joint axis, and the bend angle is clamped. Knees and elbows therefore
+     fold one way, on one plane, however hard the body lands. */
+  function hinge(body, a, b, c, axis, min, max) {
+    body.hinges.push({ a: body.parts[a], b: body.parts[b], c: body.parts[c], axis, min, max });
+  }
+
+  function integrate(body, dt, gscale) {
+    const g = GRAVITY * (gscale === undefined ? 1 : gscale);
+    for (const p of body.list) {
+      // NB: contact flags are cleared in collide(), not here — the behaviour
+      // layer runs between the two and has to be able to see the last plant
+      p.touchedLast = p.touched; p.touched = false;
+      if (p.pinned) {
+        p.px = p.x = p.pinned.x; p.py = p.y = p.pinned.y; p.pz = p.z = p.pinned.z;
+        p.ax = p.ay = p.az = 0; p.vx0 = p.vy0 = p.vz0 = 0;
+        continue;
+      }
+      p.vx0 = (p.x - p.px) / dt; p.vy0 = (p.y - p.py) / dt; p.vz0 = (p.z - p.pz) / dt;
+      // Constraint solving turns position corrections into velocity, and at
+      // 180 Hz a millimetre reads as metres per second. Impacts are judged on
+      // a short moving average instead, which noise cannot fake but a real
+      // arrival sustains.
+      p.fx += (p.vx0 - p.fx) * 0.22; p.fy += (p.vy0 - p.fy) * 0.22; p.fz += (p.vz0 - p.fz) * 0.22;
+      let vx = p.x - p.px, vy = p.y - p.py, vz = p.z - p.pz;
+      const sp = Math.hypot(vx, vy, vz) / dt;
+      const drag = Math.max(0.5, 1 - AIR_DAMP * sp * dt);
+      vx *= drag; vy *= drag; vz *= drag;
+      const nx = p.x + vx + p.ax * dt * dt;
+      const ny = p.y + vy + (p.ay + g) * dt * dt;
+      const nz = p.z + vz + p.az * dt * dt;
+      p.px = p.x; p.py = p.y; p.pz = p.z;
+      p.x = nx; p.y = ny; p.z = nz;
+      p.ax = p.ay = p.az = 0;
+    }
+  }
+
+  function solveBones(body) {
+    for (const c of body.bones) {
+      const a = c.a, b = c.b;
+      let dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+      let d = Math.hypot(dx, dy, dz);
+      if (d < 1e-6) { d = 1e-6; dx = 1e-6; }
+      const diff = (d - c.len) / d * c.k;
+      const wa = a.pinned ? 0 : a.im, wb = b.pinned ? 0 : b.im;
+      const w = wa + wb; if (w === 0) continue;
+      const fa = diff * (wa / w), fb = diff * (wb / w);
+      a.x += dx * fa; a.y += dy * fa; a.z += dz * fa;
+      b.x -= dx * fb; b.y -= dy * fb; b.z -= dz * fb;
+    }
+  }
+
+  /* rotate p around pivot, about unit axis k, by angle t (Rodrigues).
+     `quiet` rotates the previous position too, so the correction moves the
+     point without inventing velocity. Joint limits must be quiet — they are
+     structure, not muscle — or the skeleton pumps itself into orbit. */
+  function spin(p, piv, kx, ky, kz, t, quiet) {
+    const c = Math.cos(t), s = Math.sin(t);
+    const dot0 = kx * (p.x - piv.x) + ky * (p.y - piv.y) + kz * (p.z - piv.z);
+    const dx = p.x - piv.x, dy = p.y - piv.y, dz = p.z - piv.z;
+    const cx = ky * dz - kz * dy, cy = kz * dx - kx * dz, cz = kx * dy - ky * dx;
+    p.x = piv.x + dx * c + cx * s + kx * dot0 * (1 - c);
+    p.y = piv.y + dy * c + cy * s + ky * dot0 * (1 - c);
+    p.z = piv.z + dz * c + cz * s + kz * dot0 * (1 - c);
+    if (quiet) {
+      const qx = p.px - piv.x, qy = p.py - piv.y, qz = p.pz - piv.z;
+      const qdot = kx * qx + ky * qy + kz * qz;
+      const ax = ky * qz - kz * qy, ay = kz * qx - kx * qz, az = kx * qy - ky * qx;
+      p.px = piv.x + qx * c + ax * s + kx * qdot * (1 - c);
+      p.py = piv.y + qy * c + ay * s + ky * qdot * (1 - c);
+      p.pz = piv.z + qz * c + az * s + kz * qdot * (1 - c);
+    }
+  }
+
+  function bendAngle(a, b, c) {
+    const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z;
+    const vx = c.x - b.x, vy = c.y - b.y, vz = c.z - b.z;
+    const cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx;
+    return Math.atan2(Math.hypot(cx, cy, cz), ux * vx + uy * vy + uz * vz);
+  }
+
+  /* push the a-b-c bend toward `target` radians, strength 0..1 */
+  function torque(a, b, c, target, strength, quiet) {
+    const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z;
+    const vx = c.x - b.x, vy = c.y - b.y, vz = c.z - b.z;
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const nl = Math.hypot(nx, ny, nz);
+    if (nl < 1e-7) return;
+    nx /= nl; ny /= nl; nz /= nl;
+    const cur = Math.atan2(nl, ux * vx + uy * vy + uz * vz);
+    const err = (target - cur) * clamp(strength, 0, 1);
+    if (Math.abs(err) < 1e-5) return;
+    const wa = a.pinned ? 0 : a.im, wc = c.pinned ? 0 : c.im;
+    const w = wa + wc; if (w === 0) return;
+    spin(a, b, nx, ny, nz, err * (wa / w), quiet);
+    spin(c, b, nx, ny, nz, -err * (wc / w), quiet);
+  }
+
+  /* swing the segment a->b toward a target direction (unit vector) */
+  function aim(a, b, tx, ty, tz, strength) {
+    let ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z;
+    const ul = Math.hypot(ux, uy, uz); if (ul < 1e-7) return;
+    ux /= ul; uy /= ul; uz /= ul;
+    let nx = uy * tz - uz * ty, ny = uz * tx - ux * tz, nz = ux * ty - uy * tx;
+    const nl = Math.hypot(nx, ny, nz);
+    const dot = clamp(ux * tx + uy * ty + uz * tz, -1, 1);
+    const ang = Math.atan2(nl, dot) * clamp(strength, 0, 1);
+    if (nl < 1e-7 || Math.abs(ang) < 1e-5) return;
+    nx /= nl; ny /= nl; nz /= nl;
+    const wa = a.pinned ? 0 : a.im, wb = b.pinned ? 0 : b.im;
+    const w = wa + wb; if (w === 0) return;
+    const piv = {
+      x: (a.x * wb + b.x * wa) / w, y: (a.y * wb + b.y * wa) / w, z: (a.z * wb + b.z * wa) / w
+    };
+    spin(a, piv, nx, ny, nz, ang);
+    spin(b, piv, nx, ny, nz, ang);
+  }
+
+  function solveHinges(body, frame) {
+    for (const h of body.hinges) {
+      const a = h.a, b = h.b, c = h.c;
+      // 1. hold the joint on its plane
+      const ax = h.axis === 'lat' ? frame.rx : 0;
+      const ay = h.axis === 'lat' ? frame.ry : 1;
+      const az = h.axis === 'lat' ? frame.rz : 0;
+      const mx = (a.x + c.x) / 2, my = (a.y + c.y) / 2, mz = (a.z + c.z) / 2;
+      const dx = b.x - mx, dy = b.y - my, dz = b.z - mz;
+      const comp = dx * ax + dy * ay + dz * az;
+      const k = 0.35;
+      b.x -= ax * comp * k; b.y -= ay * comp * k; b.z -= az * comp * k;
+      b.px -= ax * comp * k; b.py -= ay * comp * k; b.pz -= az * comp * k;
+      // 2. clamp the fold, quietly
+      const cur = bendAngle(a, b, c);
+      if (cur < h.min) torque(a, b, c, h.min, 0.6, true);
+      else if (cur > h.max) torque(a, b, c, h.max, 0.6, true);
+    }
+  }
+
+  function drive(p, tx, ty, tz, maxSpeed, dt, accel) {
+    if (p.pinned) return 0;
+    const dx = tx - p.x, dy = ty - p.y, dz = tz - p.z;
+    const d = Math.hypot(dx, dy, dz);
+    if (d < 1e-5) return 0;
+    const want = Math.min(maxSpeed, d / 0.05);
+    const k = want / d;
+    let ddx = dx * k - (p.x - p.px) / dt;
+    let ddy = dy * k - (p.y - p.py) / dt;
+    let ddz = dz * k - (p.z - p.pz) / dt;
+    const dd = Math.hypot(ddx, ddy, ddz);
+    const cap = (accel === undefined ? maxSpeed * 16 : accel) * dt;
+    if (dd > cap) { const s = cap / dd; ddx *= s; ddy *= s; ddz *= s; }
+    p.px -= ddx * dt; p.py -= ddy * dt; p.pz -= ddz * dt;
+    return d;
+  }
+
+  function addVel(p, vx, vy, vz, dt) { p.px -= vx * dt; p.py -= vy * dt; p.pz -= vz * dt; }
+  function vel(p, dt) { return { x: (p.x - p.px) / dt, y: (p.y - p.py) / dt, z: (p.z - p.pz) / dt }; }
+
+  function collide(body, level, dt) {
+    body.contacts = 0;
+    for (const p of body.list) {
+      p.grounded = false; p.ground = null;
+      if (p.pinned) continue;
+      const boxes = level.solidsNear(p.z, p.r + 0.6);
+      for (const b of boxes) {
+        // A foot resting a few millimetres proud of a deck is standing on it.
+        // Without this skin, contact flickers on and off at 180 Hz and the
+        // support leg spends half its life believing it is in mid-air.
+        if (p.x > b.x0 - p.r && p.x < b.x1 + p.r && p.z > b.z0 - p.r && p.z < b.z1 + p.r) {
+          const gap = p.y - (b.y1 + p.r);
+          if (gap >= 0 && gap < 0.035) {
+            p.grounded = true; p.ground = b; p.touched = true; body.contacts++;
+            continue;
+          }
+        }
+        if (p.x < b.x0 - p.r || p.x > b.x1 + p.r) continue;
+        if (p.y < b.y0 - p.r || p.y > b.y1 + p.r) continue;
+        if (p.z < b.z0 - p.r || p.z > b.z1 + p.r) continue;
+        const dTop = (b.y1 + p.r) - p.y, dBot = p.y - (b.y0 - p.r);
+        const dL = p.x - (b.x0 - p.r), dR = (b.x1 + p.r) - p.x;
+        const dB = p.z - (b.z0 - p.r), dF = (b.z1 + p.r) - p.z;
+        const m = Math.min(dTop, dBot, dL, dR, dB, dF);
+        let nx = 0, ny = 0, nz = 0;
+        if (m === dTop) ny = 1; else if (m === dBot) ny = -1;
+        else if (m === dL) nx = -1; else if (m === dR) nx = 1;
+        else if (m === dB) nz = -1; else nz = 1;
+
+        let vx = (p.x - p.px) / dt, vy = (p.y - p.py) / dt, vz = (p.z - p.pz) / dt;
+        // an impact is an arrival, not a resting load: a part already in
+        // contact last step is leaning, not hitting
+        const vn0 = p.fx * nx + p.fy * ny + p.fz * nz;
+        if (!p.touchedLast && vn0 < -1 && -vn0 > p.impact) p.impact = -vn0;
+        p.touched = true;
+
+        p.x += nx * m; p.y += ny * m; p.z += nz * m;
+        const vn = vx * nx + vy * ny + vz * nz;
+        if (vn < 0) { vx -= nx * vn; vy -= ny * vn; vz -= nz * vn; }
+        // coulomb-ish friction: a fixed tangential deceleration, so glass is
+        // genuinely glass and a dry deck genuinely holds a plant
+        // friction follows the normal: a foot on a deck grips, a shoulder
+        // scraping a vertical face does not hang there like velcro
+        const grip = ny > 0.3 ? 1 : 0.08;
+        const mu = (b.friction === undefined ? 1 : b.friction) * p.friction * grip;
+        const vt = Math.hypot(vx, vy, vz);
+        if (vt > 1e-6) {
+          const fr = mu * 55 * dt;
+          const s = vt <= fr ? 0 : (vt - fr) / vt;
+          vx *= s; vy *= s; vz *= s;
+        }
+        p.px = p.x - vx * dt; p.py = p.y - vy * dt; p.pz = p.z - vz * dt;
+        // touching a wall is still touching something; only an upward normal
+        // counts as standing on it
+        body.contacts++;
+        if (ny > 0) { p.grounded = true; p.ground = b; }
+      }
+      // last-resort sanity clamp, so a bad frame cannot fling the body away
+      const sp2 = Math.hypot(p.x - p.px, p.y - p.py, p.z - p.pz) / dt;
+      if (sp2 > 34) {
+        const k = 34 / sp2;
+        p.px = p.x - (p.x - p.px) * k; p.py = p.y - (p.y - p.py) * k; p.pz = p.z - (p.z - p.pz) * k;
+      }
+    }
+  }
+
+  function com(body) {
+    let x = 0, y = 0, z = 0, m = 0;
+    for (const p of body.list) { x += p.x * p.m; y += p.y * p.m; z += p.z * p.m; m += p.m; }
+    return { x: x / m, y: y / m, z: z / m, m };
+  }
+
+  function comVel(body, dt) {
+    let x = 0, y = 0, z = 0, m = 0;
+    for (const p of body.list) {
+      x += (p.x - p.px) / dt * p.m; y += (p.y - p.py) / dt * p.m; z += (p.z - p.pz) / dt * p.m; m += p.m;
+    }
+    return { x: x / m, y: y / m, z: z / m };
+  }
+
+  /* two-link IK. `hint` biases which way the knee or elbow breaks. */
+  function ik(rx, ry, rz, tx, ty, tz, l1, l2, hx, hy, hz) {
+    let dx = tx - rx, dy = ty - ry, dz = tz - rz;
+    let d = Math.hypot(dx, dy, dz);
+    const maxd = (l1 + l2) * 0.998, mind = Math.abs(l1 - l2) + 1e-3;
+    if (d > maxd) { const s = maxd / d; dx *= s; dy *= s; dz *= s; d = maxd; }
+    if (d < mind) { const s = mind / (d || 1e-6); dx *= s; dy *= s; dz *= s; d = mind; }
+    const ux = dx / d, uy = dy / d, uz = dz / d;
+    const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d);
+    const h = Math.sqrt(Math.max(0, l1 * l1 - a * a));
+    // hint, perpendicular to the limb line
+    const hd = hx * ux + hy * uy + hz * uz;
+    let px = hx - ux * hd, py = hy - uy * hd, pz = hz - uz * hd;
+    let pl = Math.hypot(px, py, pz);
+    if (pl < 1e-5) { px = -uy; py = ux; pz = 0; pl = Math.hypot(px, py, pz) || 1; }
+    px /= pl; py /= pl; pz /= pl;
+    return {
+      jx: rx + ux * a + px * h, jy: ry + uy * a + py * h, jz: rz + uz * a + pz * h,
+      ex: rx + dx, ey: ry + dy, ez: rz + dz
+    };
+  }
+
+  return {
+    GRAVITY, Body, add, bone, hinge, integrate, solveBones, solveHinges,
+    torque, aim, bendAngle, drive, collide, com, comVel, ik, vel, addVel, spin
+  };
+})();
+
+/* ---- 02-ragdoll.js ---- */
+/* KINESIS — the runner's body, in three dimensions.
+   Seventeen point masses: a shoulder and hip yoke keep the limbs apart
+   laterally so the thing reads as a person from behind rather than as a
+   stick collapsing to the centre line. ~1.78 m, ~72 kg. */
+K.rag = (function () {
+  const P = K.phys, U = K.util;
+
+  const L = {
+    shin: 0.42, thigh: 0.42, foot: 0.17,
+    spine: 0.47, neck: 0.26,
+    upperArm: 0.29, foreArm: 0.27,
+    hipW: 0.12, shW: 0.19,
+    hipH: 0.97, chestH: 1.44, headH: 1.70
+  };
+  L.leg = L.shin + L.thigh;           // hip yoke to ankle, fully straight
+  /* Where a foot is asked to go when it is asked to stand on something.
+     The ankle rests 0.075 m (its radius) above a surface, so a target
+     slightly below that is what makes the foot press in and register as
+     contact at all — aim level with the deck and the runner hovers. */
+  L.plant = 0.048;
+  L.arm = L.upperArm + L.foreArm;
+
+  function build(x, y, z) {
+    const b = P.Body();
+    const A = (n, dx, dy, dz, m, r) => P.add(b, n, x + dx, y + dy, z + dz, m, r);
+
+    A('pelvis', 0, L.hipH, 0, 14, 0.13);
+    A('chest', 0, L.chestH, 0.01, 18, 0.15);
+    A('head', 0, L.headH, 0.02, 5, 0.115);
+    for (const s of [-1, 1]) {
+      const t = s < 0 ? 'L' : 'R';
+      A('hip' + t, s * L.hipW, L.hipH - 0.04, 0, 3, 0.10);
+      A('sh' + t, s * L.shW, L.chestH + 0.06, 0, 3, 0.10);
+      A('knee' + t, s * L.hipW, 0.52, 0.03, 5, 0.085);
+      A('foot' + t, s * L.hipW, 0.10, 0, 2.4, 0.075);
+      A('toe' + t, s * L.hipW, 0.045, 0.17, 0.8, 0.055);
+      A('elbow' + t, s * (L.shW + 0.02), 1.16, -0.02, 2, 0.07);
+      A('hand' + t, s * (L.shW + 0.03), 0.91, 0.05, 1.4, 0.062);
+    }
+
+    P.bone(b, 'pelvis', 'chest', 1);
+    P.bone(b, 'chest', 'head', 1);
+    P.bone(b, 'pelvis', 'head', 0.30);
+    P.bone(b, 'hipL', 'hipR', 1); P.bone(b, 'shL', 'shR', 1);
+    for (const t of ['L', 'R']) {
+      P.bone(b, 'hip' + t, 'pelvis', 1);
+      P.bone(b, 'hip' + t, 'chest', 0.65);
+      P.bone(b, 'sh' + t, 'chest', 1);
+      P.bone(b, 'sh' + t, 'pelvis', 0.65);
+      P.bone(b, 'sh' + t, 'head', 0.35);
+      P.bone(b, 'hip' + t, 'knee' + t, 1);
+      P.bone(b, 'knee' + t, 'foot' + t, 1);
+      P.bone(b, 'foot' + t, 'toe' + t, 1);
+      P.bone(b, 'sh' + t, 'elbow' + t, 1);
+      P.bone(b, 'elbow' + t, 'hand' + t, 1);
+      P.hinge(b, 'hip' + t, 'knee' + t, 'foot' + t, 'lat', 0.04, 2.40);
+      P.hinge(b, 'knee' + t, 'foot' + t, 'toe' + t, 'lat', 0.35, 1.70);
+      P.hinge(b, 'sh' + t, 'elbow' + t, 'hand' + t, 'lat', 0.04, 2.60);
+    }
+    b.L = L;
+    // the sprung mass: what a planted leg is actually holding up
+    b.trunk = ['pelvis', 'hipL', 'hipR', 'chest', 'shL', 'shR', 'head'].map(n => b.parts[n]);
+    return b;
+  }
+
+  function legs(b) {
+    return [
+      { hip: b.parts.hipL, knee: b.parts.kneeL, foot: b.parts.footL, toe: b.parts.toeL, tag: 'L', side: -1 },
+      { hip: b.parts.hipR, knee: b.parts.kneeR, foot: b.parts.footR, toe: b.parts.toeR, tag: 'R', side: 1 }
+    ];
+  }
+  function arms(b) {
+    return [
+      { sh: b.parts.shL, elbow: b.parts.elbowL, hand: b.parts.handL, tag: 'L', side: -1 },
+      { sh: b.parts.shR, elbow: b.parts.elbowR, hand: b.parts.handR, tag: 'R', side: 1 }
+    ];
+  }
+
+  /* body frame: right / up / forward, read off the shoulders and spine */
+  function frame(b) {
+    const p = b.parts;
+    let rx = p.shR.x - p.shL.x, ry = p.shR.y - p.shL.y, rz = p.shR.z - p.shL.z;
+    let rl = Math.hypot(rx, ry, rz) || 1;
+    rx /= rl; ry /= rl; rz /= rl;
+    let ux = p.chest.x - p.pelvis.x, uy = p.chest.y - p.pelvis.y, uz = p.chest.z - p.pelvis.z;
+    const ul = Math.hypot(ux, uy, uz) || 1;
+    ux /= ul; uy /= ul; uz /= ul;
+    // forward = right x up
+    const fx = ry * uz - rz * uy, fy = rz * ux - rx * uz, fz = rx * uy - ry * ux;
+    const fl = Math.hypot(fx, fy, fz) || 1;
+    return { rx, ry, rz, ux, uy, uz, fx: fx / fl, fy: fy / fl, fz: fz / fl };
+  }
+
+  function reachLeg(b, leg, tx, ty, tz, speed, dt, hint) {
+    const h = leg.hip;
+    const s = P.ik(h.x, h.y, h.z, tx, ty, tz, L.thigh, L.shin, hint.x, hint.y, hint.z);
+    P.drive(leg.knee, s.jx, s.jy, s.jz, speed * 1.1, dt, speed * 12);
+    return P.drive(leg.foot, s.ex, s.ey, s.ez, speed, dt, speed * 26);
+  }
+
+  function reachArm(b, arm, tx, ty, tz, speed, dt, hint) {
+    const s0 = arm.sh;
+    const s = P.ik(s0.x, s0.y, s0.z, tx, ty, tz, L.upperArm, L.foreArm, hint.x, hint.y, hint.z);
+    P.drive(arm.elbow, s.jx, s.jy, s.jz, speed * 1.1, dt, speed * 26);
+    return P.drive(arm.hand, s.ex, s.ey, s.ez, speed, dt, speed * 34);
+  }
+
+  /* The support leg, as a height servo over the planted foot.
+     A pure axial spring is not enough: a straight leg carries no load along
+     its own axis and the hip simply rides an arc into the deck as the body
+     vaults over it. What a real stance leg does is hold the hip at a height
+     over the foot — flexing and extending the knee to do it — and that is
+     what this regulates, with a hard ceiling on the acceleration it can
+     produce. The ceiling is what LEG DRIVE buys, and what a hurt or
+     unconscious runner loses. */
+  const HOLD = 16.6;      // m/s^2 on the sprung mass to merely not sink
+  function support(b, leg, targetH, maxAcc, dt, share) {
+    const hip = leg.hip, f = leg.foot;
+    const err = (f.y + targetH) - hip.y;
+    const rate = ((hip.y - hip.py) - (f.y - f.py)) / dt;
+    // feed-forward the body's own weight, then correct: a pure proportional
+    // servo sags by exactly however much weight it forgot to carry
+    let a = HOLD * (share === undefined ? 1 : share) + err * 90 - rate * 10;
+    a = U.clamp(a, 0, maxAcc);
+    for (const t of b.trunk) P.addVel(t, 0, a * dt, 0, dt);
+    P.addVel(f, 0, -a * dt * 0.5, 0, dt);
+    P.addVel(leg.toe, 0, -a * dt * 0.2, 0, dt);
+    return a;
+  }
+
+  /* Axial push along the leg: the toe-off that turns support into travel. */
+  function legSpring(b, leg, targetLen, stiff, maxAcc, dt) {
+    const hip = leg.hip, f = leg.foot;
+    let dx = hip.x - f.x, dy = hip.y - f.y, dz = hip.z - f.z;
+    const d = Math.hypot(dx, dy, dz) || 1e-6;
+    const ux = dx / d, uy = dy / d, uz = dz / d;
+    const rate = (((hip.x - hip.px) - (f.x - f.px)) * ux
+                + ((hip.y - hip.py) - (f.y - f.py)) * uy
+                + ((hip.z - hip.pz) - (f.z - f.pz)) * uz) / dt;
+    // A leg can push on a roof. It cannot pull on one: clamped at zero, so
+    // the body settles where the spring balances its weight and no further.
+    let a = (targetLen - d) * stiff - rate * 16;
+    a = U.clamp(a, 0, maxAcc);
+    // the push goes into the whole sprung mass, not just the hip: a leg
+    // lifting only its own joint would never get a body off the deck
+    for (const t of b.trunk) P.addVel(t, ux * a * dt, uy * a * dt, uz * a * dt, dt);
+    P.addVel(f, -ux * a * dt * 0.55, -uy * a * dt * 0.55, -uz * a * dt * 0.55, dt);
+    P.addVel(leg.toe, -ux * a * dt * 0.2, -uy * a * dt * 0.2, -uz * a * dt * 0.2, dt);
+    return targetLen - d;
+  }
+
+  function poseLeg(b, leg, fx, fy, fz, speed, dt, hint) {
+    const h = leg.hip;
+    const s = P.ik(h.x, h.y, h.z, fx, fy, fz, L.thigh, L.shin, hint.x, hint.y, hint.z);
+    P.drive(leg.knee, s.jx, s.jy, s.jz, speed, dt, speed * 22);
+  }
+
+  function uprightness(b) {
+    const p = b.parts.pelvis, c = b.parts.chest;
+    const dx = c.x - p.x, dy = c.y - p.y, dz = c.z - p.z;
+    const l = Math.hypot(dx, dy, dz) || 1;
+    return { tilt: Math.acos(U.clamp(dy / l, -1, 1)) };
+  }
+
+  return { L, build, legs, arms, frame, reachLeg, reachArm, support, legSpring, poseLeg, uprightness };
+})();
+
+/* ---- 03-euphoria.js ---- */
+/* KINESIS — the behaviour stack, in three dimensions.
+   Nothing here plays an animation. Every pose is a set of world-space
+   targets that muscles chase at a bounded speed, layered lowest priority
+   first:
+
+       gait -> balance -> steer -> stagger -> protect -> catch -> get up
+
+   A behaviour only ever asks. Whether the body delivers is decided by the
+   solver, by muscle strength (which upgrades buy) and by consciousness
+   (which impacts take away). Everything worth watching lives in that gap. */
+K.euphoria = (function () {
+  const P = K.phys, R = K.rag, U = K.util;
+  const { clamp, lerp, TAU } = U;
+
+  const S = {
+    RUN: 'RUN', AIR: 'AIRBORNE', VAULT: 'VAULT', GRAB: 'CATCH', ROLL: 'ROLL',
+    STAGGER: 'STAGGER', FALL: 'PROTECT', DOWN: 'DOWN', GETUP: 'RISE', OUT: 'WIPEOUT'
+  };
+
+  function Controller(body, stats) {
+    return {
+      body, stats,
+      state: S.RUN, stateT: 0, prevState: S.RUN,
+      phase: 0, swing: 0, swingFrom: null,
+      anchor: { x: 0, y: 0, z: 0 }, anchorSet: false,
+      consciousness: 1, integrity: 1, injury: { L: 0, R: 0 },
+      balanceErr: 0, tilt: 0, speed: 0, drift: 0, grounded: false, airT: 0,
+      laneX: 0, targetSpeed: 4,
+      grabPoint: null, grabT: 0, vaultObs: null,
+      staggerT: 0, downT: 0, rollT: 0, duckT: 0,
+      lastImpact: 0, hits: 0, notes: [], flags: {}, protect: '',
+      intent: { duck: false },
+      effects: []
+    };
+  }
+
+  function muscle(c, base) {
+    const s = c.stats;
+    return base * (0.55 + s.legPower * 0.75) * (0.35 + c.consciousness * 0.65);
+  }
+
+  function note(c, text, kind) {
+    c.notes.push({ text, kind: kind || 'info', t: 0 });
+    if (c.notes.length > 6) c.notes.shift();
+  }
+
+  function fx(c, type, x, y, z, a) {
+    c.effects.push({ type, x, y, z, a: a === undefined ? 1 : a });
+    if (c.effects.length > 40) c.effects.shift();
+  }
+
+  function setState(c, s) {
+    if (c.state === s) return;
+    c.prevState = c.state; c.state = s; c.stateT = 0; c.anchorSet = false;
+  }
+
+  /* ---------------------------------------------------------- perception */
+
+  function sense(c, level, dt) {  // eslint-disable-line
+    const b = c.body;
+    const com = P.com(b), cv = P.comVel(b, dt);
+    c.com = com; c.comVel = cv;
+    c.speed = cv.z; c.drift = cv.x;
+    c.tilt = R.uprightness(b).tilt;
+    c.frame = R.frame(b);
+
+    let sx = 0, sz = 0, contacts = 0;
+    for (const L of R.legs(b)) {
+      if (L.foot.grounded || L.toe.grounded) { sx += L.foot.x; sz += L.foot.z; contacts++; }
+    }
+    c.grounded = contacts > 0;
+    c.groundedAny = b.contacts > 0;
+
+    // Where the next foot has to land. Running is a controlled fall, so the
+    // honest question is not "is the mass over the feet" — it never is — but
+    // "can the next step reach the neutral point before the fall wins".
+    const tau = clamp(0.25 / Math.max(1.2, c.cadence || 2.2) + 0.06, 0.08, 0.26);
+    c.tau = tau;
+    c.captureX = com.x + cv.x * tau;
+    c.captureZ = com.z + cv.z * tau;
+    c.supportX = contacts ? sx / contacts : com.x;
+    c.supportZ = contacts ? sz / contacts : com.z;
+    const gnd = level.groundAt(com.x, com.z, com.y + 0.6);
+    c.floor = gnd ? gnd.y : null;
+    c.stance = gnd ? b.parts.pelvis.y - gnd.y : 1;
+    c.reach = (0.40 + c.stats.balance * 0.48 + c.stats.legPower * 0.18)
+      * (0.5 + c.consciousness * 0.5) + Math.abs(cv.z) * 0.045;
+    const need = Math.hypot(cv.x, cv.z) * tau;
+    c.margin = c.reach - need;
+    c.balanceErr = Math.max(0, -c.margin);
+  }
+
+  /* -------------------------------------------------------------- damage */
+
+  const HURT = {
+    head: { w: 2.4, floor: 3.0 }, chest: { w: 1.15, floor: 4.2 }, pelvis: { w: 1.0, floor: 4.6 },
+    hip: { w: 0.8, floor: 4.8 }, sh: { w: 0.8, floor: 4.8 },
+    knee: { w: 0.45, floor: 6.5 }, foot: { w: 0.30, floor: 8.5 }, toe: { w: 0.15, floor: 9.5 },
+    elbow: { w: 0.40, floor: 5.5 }, hand: { w: 0.28, floor: 6.5 }
+  };
+
+  function damage(c, dt) {
+    const b = c.body;
+    let worst = 0, worstPart = null, worstCore = false;
+    for (const p of b.list) {
+      if (p.impact <= 0) continue;
+      const key = p.name.replace(/[LR]$/, '');
+      const hurt = HURT[key] || { w: 0.3, floor: 5 };
+      const over = p.impact - hurt.floor;
+      if (over > 0) {
+        const dmg = Math.pow(over, 1.30) * hurt.w * 0.009 / (0.55 + c.stats.conditioning * 0.75);
+        c.integrity = Math.max(0, c.integrity - dmg);
+        c.consciousness = Math.max(0.05, c.consciousness - dmg * 2.6);
+        if (key === 'knee' || key === 'foot') {
+          const side = p.name.slice(-1);
+          if (c.injury[side] !== undefined) c.injury[side] = clamp(c.injury[side] + dmg * 1.4, 0, 0.85);
+        }
+        if (p.impact > worst) { worst = p.impact; worstPart = p; worstCore = hurt.w > 0.7; }
+      }
+      p.impact = 0;
+    }
+    if (worst > 5.5) {
+      c.lastImpact = worst; c.hits++;
+      fx(c, 'impact', worstPart.x, worstPart.y, worstPart.z, clamp(worst / 14, 0.2, 1));
+      // only a core hit knocks the runner down; feet and knees take
+      // punishment every stride and must not read as a collapse
+      const rising = c.state === S.GETUP || c.state === S.DOWN;
+      if (worstCore && worst > (rising ? 13 : 8.5) && c.state !== S.ROLL && c.state !== S.AIR) {
+        setState(c, S.FALL);
+        note(c, worstPart.name.startsWith('head') ? 'head strike' : 'hard contact', 'bad');
+      }
+    }
+    c.consciousness = clamp(c.consciousness + dt * (0.34 + c.stats.conditioning * 0.26), 0, 1);
+    c.injury.L = Math.max(0, c.injury.L - dt * 0.02);
+    c.injury.R = Math.max(0, c.injury.R - dt * 0.02);
+    if (c.integrity <= 0 && c.state !== S.OUT) { setState(c, S.OUT); note(c, 'wiped out', 'bad'); }
+  }
+
+  /* ------------------------------------------------------------ postures */
+
+  function trunk(c, lean, sideLean, strength) {
+    const b = c.body;
+    // aim the spine at a direction: mostly up, pitched forward, rolled into the turn
+    let tx = sideLean, ty = 1, tz = lean;
+    const l = Math.hypot(tx, ty, tz);
+    P.aim(b.parts.pelvis, b.parts.chest, tx / l, ty / l, tz / l, strength);
+    P.aim(b.parts.chest, b.parts.head, tx / l * 0.4, 1, lean * 0.2, strength * 0.7);
+  }
+
+  function armSwing(c, dt, amp, height) {
+    const b = c.body, sp = muscle(c, 4.4);
+    const hint = { x: 0, y: 0, z: -1 };            // elbows break backward
+    for (const A of R.arms(b)) {
+      const ph = c.phase + (A.side < 0 ? 0 : Math.PI);
+      const s = Math.sin(ph);
+      // arms cross slightly in front as they come through, like a runner's
+      R.reachArm(b, A, A.sh.x + A.side * (0.16 - Math.max(0, s) * 0.14),
+        A.sh.y - height + Math.abs(s) * 0.07,
+        A.sh.z + s * amp, sp, dt, hint);
+    }
+  }
+
+  /* The one honest way to get a body off the floor: push with everything,
+     into the whole sprung mass, limited by what the muscles have left. */
+  function heave(c, floor, targetH, dt, gain) {
+    const b = c.body, st = c.stats;
+    const err = (floor + targetH) - b.parts.pelvis.y;
+    if (err <= 0.01) return 0;
+    const cap = (24 + st.legPower * 22 + st.rebound * 18) * (0.35 + c.consciousness * 0.65) * (gain || 1);
+    const a = clamp(err * 70, 0, cap);
+    for (const t of b.trunk) P.addVel(t, 0, a * dt, 0, dt);
+    return a;
+  }
+
+  function tuckLegs(c, dt, amount) {
+    const b = c.body, sp = muscle(c, 3.4);
+    const hint = { x: 0, y: 0, z: 1 };
+    for (const L of R.legs(b)) {
+      R.reachLeg(b, L, L.hip.x, L.hip.y - R.L.leg * (1 - 0.45 * amount),
+        L.hip.z + 0.20 * amount, sp, dt, hint);
+    }
+  }
+
+  /* ---------------------------------------------------------------- gait */
+
+  function gait(c, level, dt, opts) {
+    const b = c.body, pel = b.parts.pelvis;
+    const sp = muscle(c, 6.0);
+    const eff = clamp(1 - (c.injury.L + c.injury.R) * 0.5, 0.35, 1);
+    const hint = { x: 0, y: 0, z: 1 };            // knees break forward
+
+    // cadence follows the speed the runner is TRYING to hold; a gait that
+    // only steps as fast as it is already going can never accelerate
+    const drive = Math.max(Math.abs(c.speed), opts.speed * 0.8);
+    const cad = clamp(1.45 + drive * 0.34, 1.4, 4.8) * opts.cadence;
+    c.cadence = cad;
+    c.phase += TAU * cad * 0.5 * dt;
+    if (c.phase >= TAU) c.phase -= TAU;
+    const nowSwing = c.phase < Math.PI ? 0 : 1;
+    const all = R.legs(b);
+    if (nowSwing !== c.swing) {
+      c.swing = nowSwing; c.anchorSet = false;
+      const nl = all[nowSwing];
+      c.swingFrom = { x: nl.foot.x, y: nl.foot.y, z: nl.foot.z };
+    }
+    if (!c.swingFrom) c.swingFrom = { x: pel.x, y: pel.y - R.L.leg, z: pel.z };
+    const sPhase = (c.phase % Math.PI) / Math.PI;
+    const swingLeg = all[c.swing], stanceLeg = all[1 - c.swing];
+
+    // ---- support: ANY grounded foot carries the body. Tying support to
+    // the nominal stance leg means one mistimed contact drops the runner on
+    // its face, which is drama the physics should earn, not a bookkeeping bug.
+    // A stance leg must sit well inside its full extension or the hip just
+    // rides an arc down as the body vaults over a straight leg. The spring
+    // needs compression room, and it needs to out-push gravity on the whole
+    // sprung mass, not just its own joint.
+    // faster running crouches: a lower hip is what buys forward reach, and
+    // forward reach is what a stride is made of
+    const bob = (0.855 - clamp(Math.abs(c.speed) * 0.016, 0, 0.13))
+      + Math.sin(sPhase * Math.PI) * 0.05;
+    const power = (44 + c.stats.legPower * 26) * (0.4 + c.consciousness * 0.6) * eff;
+    let carried = false;
+    let down = 0;
+    for (const L of all) if (L.foot.grounded || L.toe.grounded) down++;
+    for (const L of all) {
+      if (!(L.foot.grounded || L.toe.grounded)) continue;
+      // a foot has to be under the body to carry it; a foot up by the hip is
+      // a foot on a wall, and standing on it would be climbing your own leg
+      if (L.foot.y > L.hip.y - 0.30) continue;
+      carried = true;
+      const isStance = L === stanceLeg;
+      const len = R.L.leg * (isStance ? bob : 0.90) * opts.crouch;
+      R.support(b, L, len, power * (isStance ? 1 : 0.55), dt, 1 / Math.max(1, down));
+      if (isStance && sPhase > 0.55) R.legSpring(b, L, R.L.leg * 0.97, 160, power * 0.5, dt);
+    }
+    c.carried = carried;
+
+    if (!c.anchorSet && (stanceLeg.foot.grounded || stanceLeg.toe.grounded)) {
+      c.anchor.x = stanceLeg.foot.x; c.anchor.y = stanceLeg.foot.y; c.anchor.z = stanceLeg.foot.z;
+      c.anchorSet = true;
+      if (Math.abs(c.speed) > 1.5) {
+        fx(c, 'dust', stanceLeg.foot.x, stanceLeg.foot.y, stanceLeg.foot.z, clamp(Math.abs(c.speed) / 9, 0.2, 1));
+      }
+    }
+    if (c.anchorSet && !(stanceLeg.foot.grounded || stanceLeg.toe.grounded)) c.anchorSet = false;
+    // Toe-off: once the support leg runs out of leg, holding the plant any
+    // longer just drags the body backwards. Ending stance on geometry rather
+    // than on a timer is what lets a stronger runner actually run faster.
+    if (c.anchorSet) {
+      const legOut = Math.hypot(stanceLeg.hip.x - stanceLeg.foot.x,
+        stanceLeg.hip.y - stanceLeg.foot.y, stanceLeg.hip.z - stanceLeg.foot.z);
+      if (legOut > R.L.leg * 0.93 && stanceLeg.foot.z < pel.z - 0.05) {
+        c.anchorSet = false;
+        c.phase = (c.swing === 0 ? Math.PI : 0) + 0.02;
+        c.swing = 1 - c.swing;
+        c.swingFrom = { x: stanceLeg.foot.x, y: stanceLeg.foot.y, z: stanceLeg.foot.z };
+      }
+    }
+    if (c.anchorSet) {
+      // hold the plant horizontally only: pulling it vertically would lift
+      // the foot off the deck it is standing on
+      P.drive(stanceLeg.foot, c.anchor.x, stanceLeg.foot.y, c.anchor.z, sp * 0.45, dt, sp * 8);
+      R.poseLeg(b, stanceLeg, c.anchor.x, c.anchor.y, c.anchor.z, sp * 0.8, dt, hint);
+    } else {
+      // no plant: reach the stance foot down for the deck under the hip
+      const sg = level.groundAt(stanceLeg.hip.x, pel.z - 0.06, pel.y + 0.6);
+      const fy = sg ? sg.y + R.L.plant : pel.y - R.L.leg;
+      R.reachLeg(b, stanceLeg, stanceLeg.hip.x, fy, pel.z - 0.06, sp, dt, hint);
+    }
+
+    // ---- swing: put the foot where the body needs it, in both axes.
+    // Steering IS foot placement: plant inside the turn and the body goes.
+    // How far ahead a foot can actually be planted is geometry, not wish:
+    // a leg of length L with the hip at height h reaches sqrt(L^2 - h^2)
+    // forward, plus whatever the flight phase adds at speed. Ask for more
+    // and the runner over-strides into the splits, which is exactly what a
+    // real runner does when they try to out-run their own legs.
+    // measured against the hip height the gait is TRYING to hold, not the
+    // one it currently has, or a sinking body talks itself into the splits
+    const hipH = R.L.leg * 0.855 * opts.crouch;
+    const maxAhead = Math.sqrt(Math.max(0.04, R.L.leg * R.L.leg - hipH * hipH)) * 0.92
+      + Math.abs(c.speed) * 0.045;
+    const bias = (0.02 + Math.abs(c.speed) * 0.014) * opts.stride;
+    const landZ = clamp(c.captureZ + bias, pel.z - 0.32, pel.z + maxAhead);
+    const steer = clamp((c.laneX - c.com.x) * 0.55 - c.drift * 0.12, -0.34, 0.34)
+      * (0.55 + c.stats.balance * 0.5) * opts.steer;
+    const landX = clamp(c.captureX - steer + swingLeg.side * 0.11,
+      c.com.x - 0.5, c.com.x + 0.5);
+    const g = level.groundAt(landX, landZ, pel.y + 0.6);
+    const groundY = g ? g.y : pel.y - R.L.leg - 0.8;
+    const lift = (0.14 + Math.abs(c.speed) * 0.022) * opts.lift
+      * Math.sin(Math.pow(clamp(sPhase, 0, 1), 0.55) * Math.PI);
+    const t = clamp(sPhase * 1.3, 0, 1);
+    const tx = lerp(c.swingFrom.x, landX, t);
+    const tz = lerp(c.swingFrom.z, landZ, t);
+    const ty = groundY + R.L.plant + lift;
+    R.reachLeg(b, swingLeg, tx, ty, tz, sp * eff, dt, hint);
+    // toe target sits exactly one foot-bone from the ankle, or the bone and
+    // the muscle fight each other forever
+    const fl = R.L.foot, fn = Math.hypot(0.3, 1);
+    P.drive(swingLeg.toe, swingLeg.foot.x, swingLeg.foot.y - fl * 0.3 / fn, swingLeg.foot.z + fl / fn,
+      sp * 0.8, dt, sp * 16);
+
+    // ---- drive, only while something is planted
+    if (c.grounded) {
+      const errZ = opts.speed * eff - c.speed;
+      const accZ = clamp(errZ * 5.0, -14, 9 + c.stats.legPower * 14) * (0.4 + c.consciousness * 0.6);
+      // lateral: a damped approach to the chosen line. Overshooting a lane
+      // on a deck with nothing under its edges is how a runner dies stupidly.
+      const wantX = clamp((c.laneX - c.com.x) * 1.5, -2.0, 2.0);
+      let accX = clamp((wantX - c.drift) * 3.6, -5.5, 5.5) * (0.4 + c.consciousness * 0.6) * opts.steer;
+      // hip/ankle strategy: a standing human is always quietly pushing its
+      // mass back over its feet sideways. Without it the runner walks off
+      // the edge of the world with a completely level trunk.
+      const lat = clamp((c.supportX - c.com.x) * 7 - c.drift * 2.0, -2.6, 2.6)
+        * (0.4 + c.consciousness * 0.6) * (0.6 + c.stats.balance * 0.5);
+      accX += lat;
+      for (const p of b.trunk) P.addVel(p, accX * dt * 0.8, 0, accZ * dt * 0.8, dt);
+    }
+    return { swingLeg, stanceLeg, sPhase };
+  }
+
+  /* --------------------------------------------------------- behaviours */
+
+  function behaveRun(c, level, dt) {
+    const st = c.stats;
+    // lean into the acceleration, like anyone does
+    const accel = clamp((c.targetSpeed - c.speed) * 0.05, -0.06, 0.16);
+    const lean = clamp(0.13 + Math.abs(c.speed) * 0.026 + accel, 0, 0.60);
+    const side = clamp((c.laneX - c.com.x) * 0.22, -0.28, 0.28);
+    gait(c, level, dt, {
+      speed: c.targetSpeed, cadence: 1, stride: 1, lift: 1,
+      steer: 1 + (c.edgeFear || 0) * 1.4,
+      crouch: c.intent.duck ? 0.66 : 1
+    });
+    trunk(c, lean, side, clamp(0.34 * (0.6 + st.balance) * c.consciousness, 0, 0.85));
+    armSwing(c, dt, 0.42, 0.32);
+
+    // A body dragging itself along the deck is not running, whatever the
+    // state machine believes. But a single low frame is a landing, not a
+    // collapse, so the reading has to persist before it counts.
+    c.grace = Math.max(0, (c.grace || 0) - dt);
+    if (c.stance < 0.52 && c.groundedAny && !c.grace) c.lowT = (c.lowT || 0) + dt;
+    else c.lowT = 0;
+    if (c.lowT > 0.16) {
+      c.lowT = 0;
+      setState(c, S.GETUP);
+      note(c, 'down low', 'warn');
+    } else if (c.balanceErr > 0.07 || c.tilt > 0.62) {
+      setState(c, S.STAGGER);
+      note(c, c.tilt > 0.62 ? 'trunk pitched' : 'off balance', 'warn');
+    } else if (!c.groundedAny) {
+      // running has a flight phase; that is not the same as being airborne
+      c.airT += dt;
+      const high = c.floor !== null && (c.body.parts.pelvis.y - c.floor) > 1.15;
+      if (c.airT > 0.40 || high) setState(c, S.AIR);
+    } else c.airT = 0;
+  }
+
+  function behaveStagger(c, level, dt) {
+    const st = c.stats;
+    c.staggerT += dt;
+    gait(c, level, dt, {
+      speed: c.targetSpeed * 0.6, cadence: 1.9, stride: 1.9, lift: 0.75, steer: 0.5, crouch: 0.86
+    });
+    const pitch = clamp((c.captureZ - c.supportZ) * -0.9, -0.7, 0.7);
+    const roll = clamp((c.captureX - c.supportX) * -0.8, -0.6, 0.6);
+    trunk(c, pitch, roll, clamp(0.46 * (0.6 + st.balance) * c.consciousness, 0, 0.95));
+
+    const b = c.body, sp = muscle(c, 5.5), w = Math.sin(c.stateT * 22);
+    const hint = { x: 0, y: 0, z: -1 };
+    const A = R.arms(b);
+    R.reachArm(b, A[0], A[0].sh.x - 0.36, A[0].sh.y + 0.22 + w * 0.10, A[0].sh.z - 0.05, sp, dt, hint);
+    R.reachArm(b, A[1], A[1].sh.x + 0.36, A[1].sh.y + 0.20 - w * 0.10, A[1].sh.z + 0.05, sp, dt, hint);
+
+    const budget = 0.40 + st.balance * 1.70;
+    if (c.balanceErr < 0.012 && c.tilt < 0.34) {
+      c.staggerT = 0; setState(c, S.RUN);
+      note(c, 'recovered', 'good');
+      c.flags.recovered = (c.flags.recovered || 0) + 1;
+    } else if (c.stance < 0.45 && c.groundedAny) {
+      c.staggerT = 0; setState(c, S.GETUP);
+    } else if (c.staggerT > budget || c.tilt > 1.05) {
+      c.staggerT = 0; setState(c, S.FALL); note(c, 'lost it', 'bad');
+    }
+  }
+
+  function predictImpact(c, level) {
+    const ch = c.body.parts.chest;
+    let x = ch.x, y = ch.y, z = ch.z;
+    let vx = c.comVel.x, vy = c.comVel.y, vz = c.comVel.z, t = 0;
+    for (let i = 0; i < 46; i++) {
+      const h = 0.033;
+      x += vx * h; z += vz * h; vy -= 11.2 * h; y += vy * h; t += h;
+      const g = level.groundAt(x, z, y);
+      if (g && y - 0.35 <= g.y) return { x, y: g.y, z, t };
+    }
+    return { x, y: y - 1.2, z, t };
+  }
+
+  function behaveAir(c, level, dt) {
+    const b = c.body, st = c.stats;
+    c.airT += dt;
+    const sp = muscle(c, 5.0);
+    const hit = c.predicted = predictImpact(c, level);
+    const hintK = { x: 0, y: 0, z: 1 }, hintA = { x: 0, y: 0, z: -1 };
+
+    // a lip in reach? go for it. the most-loved euphoria behaviour there is
+    if (c.comVel.y < 1.5 && !c.grabPoint) {
+      const range = 0.45 + st.grip * 0.6;
+      const led = level.ledgeNear(b.parts.chest.x, b.parts.chest.y, b.parts.chest.z, range + 0.9);
+      if (led && led.y < b.parts.chest.y + 0.6 && led.y > b.parts.chest.y - 1.5) {
+        const d = Math.hypot(led.x - b.parts.handR.x, led.y - b.parts.handR.y, led.z - b.parts.handR.z);
+        if (d < range) { c.grabPoint = led; setState(c, S.GRAB); return; }
+        R.reachArm(b, R.arms(b)[1], led.x + 0.16, led.y, led.z, sp * 1.5, dt, hintA);
+        R.reachArm(b, R.arms(b)[0], led.x - 0.16, led.y, led.z, sp * 1.4, dt, hintA);
+        trunk(c, 0.22, 0, 0.32);
+        return;
+      }
+    }
+
+    // steer in the air, a little
+    const wantX = clamp((c.laneX - c.com.x) * 1.4, -2.2, 2.2);
+    P.addVel(b.parts.pelvis, clamp(wantX - c.drift, -1, 1) * 1.6 * dt, 0, 0, dt);
+
+    if (hit.t < 0.26) {
+      const tx = hit.x + clamp(c.comVel.x * 0.10, -0.3, 0.3);
+      const tz = hit.z + clamp(c.comVel.z * 0.10, -0.2, 0.5);
+      for (const L of R.legs(b)) R.reachLeg(b, L, tx + L.side * 0.12, hit.y + R.L.plant, tz, sp * 1.3, dt, hintK);
+      armSwing(c, dt, 0.24, 0.22);
+      trunk(c, 0.24, 0, 0.36 * (0.4 + st.balance));
+      if (c.groundedAny) {
+        const impactV = -c.comVel.y;
+        const rollThresh = 5.6 + st.rebound * 3.4;
+        if (impactV > rollThresh && Math.abs(c.speed) > 3.4) { setState(c, S.ROLL); note(c, 'roll out', 'good'); }
+        else if (impactV > 11.5 + st.conditioning * 5) { setState(c, S.FALL); note(c, 'landed heavy', 'bad'); }
+        else {
+          setState(c, S.RUN); c.airT = 0;
+          fx(c, 'dust', hit.x, hit.y, hit.z, clamp(impactV / 9, 0.2, 1));
+        }
+      }
+    } else {
+      tuckLegs(c, dt, 0.55 + Math.sin(c.airT * 6) * 0.2);
+      const A = R.arms(b);
+      R.reachArm(b, A[0], A[0].sh.x - 0.24, A[0].sh.y - 0.14, A[0].sh.z + 0.20, sp, dt, hintA);
+      R.reachArm(b, A[1], A[1].sh.x + 0.24, A[1].sh.y - 0.06, A[1].sh.z + 0.26, sp, dt, hintA);
+      trunk(c, 0.26, 0, 0.28 * (0.4 + st.balance));
+    }
+    if (c.groundedAny && c.airT > 0.4 && hit.t >= 0.26) { setState(c, S.RUN); c.airT = 0; }
+    // wedged, snagged, or resting on something the feet never found: a body
+    // that has stopped moving is not airborne, whatever the state says
+    const still = Math.hypot(c.comVel.x, c.comVel.y, c.comVel.z) < 1.6;
+    if (c.airT > 1.0 && still) { setState(c, S.GETUP); note(c, 'shook it off', 'warn'); }
+  }
+
+  function behaveGrab(c, level, dt) {
+    const b = c.body, st = c.stats, gp = c.grabPoint;
+    if (!gp) { setState(c, S.AIR); return; }
+    const R2 = b.parts.handR, L2 = b.parts.handL;
+    if (!R2.pinned) {
+      R2.pinned = { x: gp.x + 0.16, y: gp.y, z: gp.z };
+      fx(c, 'grab', gp.x, gp.y, gp.z, 1);
+      note(c, 'caught the edge', 'good');
+      c.flags.grabs = (c.flags.grabs || 0) + 1;
+    }
+    const sp = muscle(c, 4.6);
+    const hintA = { x: 0, y: 0, z: -1 };
+    R.reachArm(b, R.arms(b)[0], gp.x - 0.16, gp.y, gp.z, sp, dt, hintA);
+    c.grabT += dt;
+
+    const load = Math.hypot(c.comVel.x, c.comVel.y, c.comVel.z) * 0.1;
+    const hold = 0.38 + st.grip * 1.2;
+    if (load > hold && c.grabT > 0.12) {
+      R2.pinned = null; L2.pinned = null; c.grabPoint = null; c.grabT = 0;
+      setState(c, S.FALL); note(c, 'grip slipped', 'bad');
+      return;
+    }
+    const pullTime = 0.85 - st.grip * 0.42;
+    if (c.grabT > pullTime * 0.35) {
+      P.drive(b.parts.pelvis, gp.x, gp.y + 0.35, gp.z - 0.15, sp * 0.8, dt, sp * 18);
+      for (const L of R.legs(b)) R.reachLeg(b, L, gp.x + L.side * 0.14, gp.y + R.L.plant, gp.z + 0.32, sp, dt, { x: 0, y: 0, z: 1 });
+      trunk(c, 0.34, 0, 0.42);
+    } else {
+      tuckLegs(c, dt, 0.5);
+      trunk(c, 0.1, 0, 0.3);
+    }
+    if (c.grabT > pullTime) {
+      R2.pinned = null; L2.pinned = null;
+      P.addVel(b.parts.pelvis, 0, 1.4, 1.8 + st.grip * 1.6, 1 / 60);
+      c.grabPoint = null; c.grabT = 0;
+      setState(c, S.RUN);
+      c.targetSpeed *= 0.6;
+    }
+  }
+
+  function behaveVault(c, level, dt) {
+    const b = c.body, o = c.vaultObs;
+    if (!o) { setState(c, S.RUN); return; }
+    const sp = muscle(c, 6.4);
+    const px = clamp(c.com.x, o.x0 + 0.2, o.x1 - 0.2);
+    const py = o.y1, pz = o.z1 - 0.06;
+    const hintA = { x: 0, y: 0, z: -1 }, hintK = { x: 0, y: 0, z: 1 };
+    const A = R.arms(b);
+    R.reachArm(b, A[1], px + 0.18, py + 0.02, pz, sp * 1.5, dt, hintA);
+    R.reachArm(b, A[0], px - 0.18, py + 0.06, pz, sp * 1.3, dt, hintA);
+    const th = clamp(c.stateT / 0.42, 0, 1);
+    P.drive(b.parts.pelvis, px, py + 0.55 + Math.sin(th * Math.PI) * 0.14, pz + th * 0.7, sp * 0.8, dt, sp * 20);
+    for (const L of R.legs(b)) {
+      R.reachLeg(b, L, px + L.side * 0.16, py + 0.32 - th * 0.30, pz + 0.20 + th * 0.9, sp * 1.1, dt, hintK);
+    }
+    trunk(c, 0.55, 0, 0.45);
+    if (c.stateT === 0) fx(c, 'plant', px, py, pz, 1);
+    if (c.stateT > 0.42 || b.parts.pelvis.z > o.z1 + 0.35) {
+      c.vaultObs = null;
+      c.flags.vaults = (c.flags.vaults || 0) + 1;
+      setState(c, b.parts.pelvis.y > o.y1 + 0.45 ? S.AIR : S.RUN);
+    }
+  }
+
+  function behaveRoll(c, level, dt) {
+    const b = c.body;
+    c.rollT += dt;
+    const sp = muscle(c, 6.0);
+    const pel = b.parts.pelvis, ch = b.parts.chest;
+    for (const L of R.legs(b)) R.reachLeg(b, L, L.hip.x, pel.y - 0.28, pel.z + 0.22, sp, dt, { x: 0, y: 0, z: 1 });
+    for (const A of R.arms(b)) R.reachArm(b, A, A.sh.x + A.side * 0.10, pel.y - 0.10, pel.z + 0.26, sp, dt, { x: 0, y: 0, z: -1 });
+    const spin = 9 * (1 - c.rollT / 0.55);
+    P.addVel(ch, 0, -spin * dt * 0.25, spin * dt * 0.55, dt);
+    for (const L of R.legs(b)) P.addVel(L.foot, 0, spin * dt * 0.35, -spin * dt * 0.30, dt);
+    if (c.rollT > 0.5) { c.rollT = 0; setState(c, S.GETUP); c.flags.rolls = (c.flags.rolls || 0) + 1; }
+  }
+
+  function behaveFall(c, level, dt) {
+    const b = c.body;
+    const sp = muscle(c, 2.2) * 0.7;
+    const hit = c.predicted = predictImpact(c, level);
+    const ch = b.parts.chest, hd = b.parts.head;
+    const A = R.arms(b), hintA = { x: 0, y: 0, z: -1 };
+
+    if (hd.y < ch.y + 0.05 && c.comVel.y < -1.5) {
+      R.reachArm(b, A[0], hd.x - 0.12, hd.y + 0.12, hd.z + 0.06, sp * 2.4, dt, hintA);
+      R.reachArm(b, A[1], hit.x + 0.20, hit.y + 0.16, hit.z, sp * 2.2, dt, hintA);
+      P.torque(b.parts.pelvis, ch, hd, 0.55, 0.3);
+      c.protect = 'head';
+    } else {
+      const bx = hit.x + clamp(c.comVel.x * 0.08, -0.25, 0.25);
+      const bz = hit.z + clamp(c.comVel.z * 0.06, -0.2, 0.35);
+      R.reachArm(b, A[0], bx - 0.20, hit.y + 0.28, bz, sp * 2.2, dt, hintA);
+      R.reachArm(b, A[1], bx + 0.20, hit.y + 0.28, bz, sp * 2.2, dt, hintA);
+      c.protect = 'brace';
+    }
+    if (c.comVel.y < -2 && hit.t < 0.3) {
+      for (const L of R.legs(b)) R.reachLeg(b, L, hit.x + L.side * 0.14, hit.y + R.L.plant, hit.z - 0.20, sp * 1.6, dt, { x: 0, y: 0, z: 1 });
+    } else tuckLegs(c, dt, 0.4);
+    trunk(c, 0.2, 0, 0.10 * c.consciousness);
+
+    const v = Math.hypot(c.comVel.x, c.comVel.y, c.comVel.z);
+    if (c.stateT > 1.6 && v < 1.6) { setState(c, S.DOWN); return; }
+    if (c.groundedAny && v < 2.4) {
+      c.downT += dt;
+      if (c.downT > 0.15) { c.downT = 0; setState(c, S.DOWN); }
+    } else c.downT = 0;
+    // never lie in the protective pose forever: a body that has stopped
+    // being thrown around is a body that should be getting up
+    if (c.stateT > 1.3 && c.groundedAny) { c.downT = 0; setState(c, S.DOWN); }
+  }
+
+  function behaveDown(c, level, dt) {
+    tuckLegs(c, dt, 0.25);
+    const pause = clamp(0.55 - c.stats.rebound * 0.30, 0.12, 0.6) * (1.6 - c.consciousness);
+    if (c.stateT > pause) setState(c, S.GETUP);
+  }
+
+  function behaveGetup(c, level, dt) {
+    const b = c.body, st = c.stats;
+    const rate = 0.75 + st.rebound * 0.85;
+    const sp = muscle(c, 4.2) * (0.7 + st.rebound * 0.7);
+    const pel = b.parts.pelvis, ch = b.parts.chest;
+    const g = level.groundAt(pel.x, pel.z, pel.y + 0.8);
+    const floor = g ? g.y : pel.y - 1;
+    const t = c.stateT * rate;
+    const hintA = { x: 0, y: 0, z: -1 }, hintK = { x: 0, y: 0, z: 1 };
+
+    // feet gather under the hips from the first moment
+    for (const L of R.legs(b)) {
+      R.reachLeg(b, L, L.hip.x + L.side * 0.04, floor + R.L.plant,
+        pel.z - 0.10 + clamp(t, 0, 0.5) * 0.2, sp * 1.4, dt, hintK);
+    }
+    if (t < 0.45) {
+      // hands press the deck, chest comes off it
+      for (const A of R.arms(b)) {
+        R.reachArm(b, A, A.sh.x + A.side * 0.22, floor + 0.05, ch.z + 0.28, sp * 1.5, dt, hintA);
+      }
+      heave(c, floor, 0.42, dt, 0.8);
+      P.drive(ch, ch.x, floor + 0.58, ch.z, sp, dt, sp * 14);
+      trunk(c, 0.5, 0, 0.35);
+    } else {
+      // stand up out of the crouch
+      const want = lerp(0.45, 0.92, clamp((t - 0.45) / 0.55, 0, 1));
+      heave(c, floor, want, dt, 1.15);
+      for (const L of R.legs(b)) {
+        if (L.foot.grounded || L.toe.grounded) R.legSpring(b, L, R.L.leg * 0.9, 460, 30 + st.legPower * 26, dt);
+      }
+      trunk(c, 0.2, 0, 0.55 * (0.5 + st.balance));
+      armSwing(c, dt, 0.18, 0.30);
+      c.phase += TAU * 0.7 * dt;
+    }
+    // stand all the way up before running again: rising into a crouch and
+    // calling it running is how the runner ends up in a fall/rise loop
+    const up = c.tilt < 0.5 && (pel.y - floor) > 0.78;
+    if (up && c.stateT > 0.25) {
+      setState(c, S.RUN);
+      c.targetSpeed = 1.6;
+      c.anchorSet = false;
+      c.grace = 0.6;
+      note(c, 'up again', 'good');
+    }
+    if (t > 5) { setState(c, S.RUN); c.targetSpeed = 1.2; }
+  }
+
+  /* ------------------------------------------------------------ requests */
+
+  /* Running has a flight phase, so the moment a take-off is decided is
+     usually a moment with no foot on the deck. Buffer the intent and fire it
+     on the next plant — the same thing a person does when they see the edge
+     coming mid-stride. */
+  function requestJump(c, power) {
+    if (c.state !== S.RUN && c.state !== S.STAGGER) return false;
+    // anything in contact can be pushed off. Requiring a foot specifically
+    // strands the runner on the lip of a gap with its toes over the drop,
+    // asking to jump forever and never being allowed to.
+    if (!c.grounded && !c.groundedAny) {
+      c.jumpBuffer = { power, t: 0 };
+      return false;
+    }
+    c.jumpBuffer = null;
+    const b = c.body, st = c.stats;
+    // A person jumps half a metre standing, a metre with a run-up. Anything
+    // much past that turns every gap into a two-second flight and a crash.
+    const v = (2.7 + st.legPower * 1.5) * clamp(power, 0.4, 1.25) * (0.5 + c.consciousness * 0.5);
+    const eff = clamp(1 - (c.injury.L + c.injury.R) * 0.6, 0.3, 1);
+    const dt = 1 / 60;
+    // the whole body leaves the deck, not just the bits with names: a jump
+    // is an impulse through the centre of mass
+    for (const p of b.list) P.addVel(p, 0, v * eff, v * 0.22 * eff, dt);
+    for (const L of R.legs(b)) P.addVel(L.foot, 0, -v * 0.25, 0, dt);
+    c.flags.jumps = (c.flags.jumps || 0) + 1;
+    fx(c, 'dust', b.parts.footL.x, b.parts.footL.y, b.parts.footL.z, 0.8);
+    setState(c, S.AIR); c.airT = 0.19;
+    return true;
+  }
+
+  function requestVault(c, obs) {
+    if (c.state !== S.RUN) return false;
+    c.vaultObs = obs; setState(c, S.VAULT);
+    return true;
+  }
+
+  function step(c, level, dt) {
+    c.stateT += dt;
+    sense(c, level, dt);
+    if (c.jumpBuffer) {
+      c.jumpBuffer.t += dt;
+      if (c.jumpBuffer.t > 0.42) c.jumpBuffer = null;
+      else if (c.grounded && (c.state === S.RUN || c.state === S.STAGGER)) {
+        const p = c.jumpBuffer.power; c.jumpBuffer = null;
+        requestJump(c, p);
+      }
+    }
+    switch (c.state) {
+      case S.RUN: behaveRun(c, level, dt); break;
+      case S.STAGGER: behaveStagger(c, level, dt); break;
+      case S.AIR: behaveAir(c, level, dt); break;
+      case S.GRAB: behaveGrab(c, level, dt); break;
+      case S.VAULT: behaveVault(c, level, dt); break;
+      case S.ROLL: behaveRoll(c, level, dt); break;
+      case S.FALL: behaveFall(c, level, dt); break;
+      case S.DOWN: behaveDown(c, level, dt); break;
+      case S.GETUP: behaveGetup(c, level, dt); break;
+      case S.OUT: tuckLegs(c, dt, 0.15); break;
+    }
+    damage(c, dt);
+  }
+
+  return { S, Controller, step, requestJump, requestVault, note, muscle };
+})();
+
+/* ---- 04-world.js ---- */
+/* KINESIS — the route, running away from the camera along +z.
+   An elevated deck through a city: gaps to clear, blocks to vault, bars to
+   duck, narrow spans where the balance simulation is the whole game, and a
+   long fall on both sides. Districts change the physics, not only the
+   palette. A gate is geometry sized so that the stat it names is the stat
+   that clears it — nothing checks a number and waves you through. */
+K.world = (function () {
+  const U = K.util;
+  const { clamp, lerp } = U;
+
+  const LANES = [-2.0, 0, 2.0];
+  const HALF = 5.2;
+
+  const DISTRICTS = [
+    { name: 'THE FLATS', tag: 'low decks, sodium light', end: 150,
+      sky: ['#0d1424', '#22304c', '#77452f', '#e0894a'], build: '#0d1524', accent: '#ffb057',
+      friction: 1, wind: 0, gap: 1, density: 0.5, narrow: 0, mult: 1 },
+    { name: 'NIGHT MARKET', tag: 'wire, awnings, neon spill', end: 470,
+      sky: ['#160f24', '#33204a', '#7d2550', '#ff5f7a'], build: '#150e22', accent: '#ff5f9e',
+      friction: 0.95, wind: 0, gap: 1.12, density: 0.85, narrow: 0.12, mult: 1.9 },
+    { name: 'THE STACKS', tag: 'towers, long air', end: 950,
+      sky: ['#0a1220', '#17304e', '#2b6a8a', '#79d0d8'], build: '#0a1420', accent: '#79d0d8',
+      friction: 1, wind: 0.6, gap: 1.35, density: 0.7, narrow: 0.25, mult: 3.6 },
+    { name: 'GLASSWORKS', tag: 'wet glass, no grip', end: 1750,
+      sky: ['#0d1a1c', '#14403c', '#2f7d63', '#c8e6a0'], build: '#0b1c20', accent: '#9ff2c0',
+      friction: 0.34, wind: 0.3, gap: 1.25, density: 0.9, narrow: 0.2, mult: 7 },
+    { name: 'THE VEINS', tag: 'steam, low steel', end: 3000,
+      sky: ['#1a0f12', '#3b1a24', '#8a3a2a', '#ffb36b'], build: '#1a1014', accent: '#ff8a5c',
+      friction: 0.9, wind: 0, gap: 1.2, density: 1.35, narrow: 0.2, mult: 14 },
+    { name: 'UPPER SPINE', tag: 'crosswind, thin deck', end: 5200,
+      sky: ['#06101f', '#12294d', '#3a4f9a', '#a8b6ff'], build: '#08101e', accent: '#a8b6ff',
+      friction: 0.85, wind: 1.7, gap: 1.5, density: 0.8, narrow: 0.5, mult: 32 },
+    { name: 'THE CROWN', tag: 'everything, at once', end: Infinity,
+      sky: ['#0b0713', '#2a1140', '#6b1f6b', '#ffd36b'], build: '#120b1c', accent: '#ffd36b',
+      friction: 0.75, wind: 1.1, gap: 1.6, density: 1.2, narrow: 0.45, mult: 78 }
+  ];
+
+  const GATES = [
+    { at: 140, name: 'THE JUNCTION', kind: 'gap', stat: 'legPower', need: 5, blurb: 'A six-lane cut with nothing under it.' },
+    { at: 460, name: 'SHUTTER ROW', kind: 'wall', stat: 'grip', need: 6, blurb: 'Too tall to vault. Catch the lip or wear it.' },
+    { at: 940, name: 'THE LEAP', kind: 'speed', stat: 'flow', need: 7, blurb: 'Three decks, no room to gather.' },
+    { at: 1740, name: 'THE GLASSHOUSE', kind: 'slick', stat: 'balance', need: 9, blurb: 'Wet glass, one metre wide. Stay over your feet.' },
+    { at: 2980, name: 'PIPE ALLEY', kind: 'pipes', stat: 'reflex', need: 11, blurb: 'Low steel at head height, three in a row.' },
+    { at: 5180, name: 'THE DROP', kind: 'chasm', stat: 'conditioning', need: 13, blurb: 'Nine metres down onto a ledge you have to want.' },
+    { at: 8200, name: 'THE CROWN', kind: 'crown', stat: 'all', need: 15, blurb: 'The whole city, in eighty metres.' }
+  ];
+
+  function districtIndex(d) {
+    for (let i = 0; i < DISTRICTS.length; i++) if (d < DISTRICTS[i].end) return i;
+    return DISTRICTS.length - 1;
+  }
+
+  function Level(seed, statLevel) {
+    const rnd = U.rng(seed);
+    const lv = {
+      seed, boxes: [], cells: new Map(), ledges: [], props: [], towers: [],
+      headZ: 0, lastTop: 0, tailZ: -40, gatesHit: [], statLevel, towerZ: -40
+    };
+
+    function push(b) {
+      lv.boxes.push(b);
+      const c0 = Math.floor(b.z0 / 8), c1 = Math.floor(b.z1 / 8);
+      for (let c = c0; c <= c1; c++) {
+        if (!lv.cells.has(c)) lv.cells.set(c, []);
+        lv.cells.get(c).push(b);
+      }
+      return b;
+    }
+
+    function deck(z0, z1, top, opts) {
+      opts = opts || {};
+      const half = opts.half === undefined ? HALF : opts.half;
+      const x = opts.x || 0;
+      const b = push({
+        x0: x - half, x1: x + half, y0: top - 0.9, y1: top, z0, z1,
+        kind: opts.kind || 'deck', top,
+        friction: opts.friction === undefined ? 1 : opts.friction,
+        d: districtIndex(z0), seed: rnd()
+      });
+      if (opts.noLedge !== true) lv.ledges.push({ x, y: top, z: z0, half });
+      return b;
+    }
+
+    function block(x, z0, z1, base, height, opts) {
+      opts = opts || {};
+      const half = opts.half === undefined ? 0.55 : opts.half;
+      return push({
+        x0: x - half, x1: x + half, y0: base, y1: base + height, z0, z1,
+        kind: opts.kind || 'block', friction: opts.friction === undefined ? 1 : opts.friction,
+        vaultable: opts.vaultable !== false, d: districtIndex(z0), seed: rnd()
+      });
+    }
+
+    function prop(kind, x, y, z, s, d) { lv.props.push({ kind, x, y, z, s: s || 1, d, seed: rnd() }); }
+
+    function towersTo(z) {
+      while (lv.towerZ < z) {
+        const d = districtIndex(lv.towerZ);
+        for (const side of [-1, 1]) {
+          const off = 6.5 + rnd() * 7;
+          const w = 2.4 + rnd() * 4.5;
+          const h = 6 + rnd() * (14 + d * 5);
+          const base = lv.lastTop - 12 - rnd() * 8;
+          lv.towers.push({
+            x0: side * off - w / 2, x1: side * off + w / 2,
+            y0: base, y1: base + h, z0: lv.towerZ, z1: lv.towerZ + 3 + rnd() * 5,
+            d, seed: rnd(), lit: rnd()
+          });
+        }
+        lv.towerZ += 5 + rnd() * 5;
+      }
+    }
+
+    /* ---- gates: geometry tuned so the named stat is the one that pays */
+    function buildGate(g, z, top) {
+      const met = statLevel(g.stat) >= g.need;
+      const mark = { gate: g, z, top, met, entryZ: z };
+      lv.gatesHit.push(mark);
+      prop('gatesign', 0, top, z + 1, 1, districtIndex(z));
+
+      if (g.kind === 'gap') {
+        deck(z, z + 6, top, { kind: 'gatepad' });
+        const w = 3.1 + g.need * 0.36;
+        deck(z + 6 + w, z + 6 + w + 20, top - 0.4);
+        lv.headZ = z + 6 + w + 20; lv.lastTop = top - 0.4;
+      } else if (g.kind === 'wall') {
+        deck(z, z + 12, top, { kind: 'gatepad' });
+        const h = 1.9 + g.need * 0.14;
+        block(0, z + 12, z + 12.7, top, h, { half: HALF, kind: 'gatewall', vaultable: false });
+        deck(z + 12.7, z + 30, top + h - 0.02);
+        lv.headZ = z + 30; lv.lastTop = top + h - 0.02;
+      } else if (g.kind === 'speed') {
+        deck(z, z + 10, top, { kind: 'gatepad' });
+        let cz = z + 10;
+        for (let i = 0; i < 3; i++) {
+          const w = 2.9 + g.need * 0.17 + i * 0.55;
+          cz += w;
+          const len = 5.5 - i * 0.9;
+          deck(cz, cz + len, top + (i % 2 ? 0.6 : -0.3), { half: 2.6 });
+          cz += len;
+        }
+        deck(cz + 3.6, cz + 22, top);
+        lv.headZ = cz + 22; lv.lastTop = top;
+      } else if (g.kind === 'slick') {
+        let cz = z;
+        for (let i = 0; i < 4; i++) {
+          deck(cz, cz + 11, top + (i % 2 ? 0.5 : 0), { friction: 0.14, kind: 'glass', half: 1.05 });
+          if (i % 2 === 0) block(0.4, cz + 6, cz + 6.6, top, 0.7, { friction: 0.2, kind: 'vent' });
+          cz += 11 + 1.7;
+        }
+        deck(cz, cz + 18, top);
+        lv.headZ = cz + 18; lv.lastTop = top;
+      } else if (g.kind === 'pipes') {
+        deck(z, z + 36, top, { kind: 'gatepad' });
+        for (let i = 0; i < 3; i++) {
+          block(0, z + 10 + i * 8, z + 10.5 + i * 8, top + 1.02 - i * 0.05, 0.30,
+            { half: HALF, kind: 'bar', vaultable: false });
+        }
+        deck(z + 36, z + 48, top);
+        lv.headZ = z + 48; lv.lastTop = top;
+      } else if (g.kind === 'chasm') {
+        deck(z, z + 10, top, { kind: 'gatepad' });
+        const drop = 4.4 + g.need * 0.24, w = 3.6;
+        deck(z + 10 + w, z + 10 + w + 4, top - drop, { kind: 'ledgepad', half: 2.4 });
+        deck(z + 10 + w + 4, z + 10 + w + 24, top - drop - 0.4);
+        lv.headZ = z + 10 + w + 24; lv.lastTop = top - drop - 0.4;
+      } else {
+        deck(z, z + 8, top, { kind: 'gatepad' });
+        block(0, z + 12, z + 12.7, top, 1.7, { half: HALF, kind: 'gatewall', vaultable: false });
+        deck(z + 12.7, z + 26, top + 1.68, { half: 1.6, friction: 0.2, kind: 'glass' });
+        block(0, z + 20, z + 20.5, top + 2.7, 0.3, { half: HALF, kind: 'bar', vaultable: false });
+        deck(z + 31, z + 48, top + 0.4);
+        block(-1.6, z + 38, z + 38.8, top + 0.4, 0.85, { kind: 'crate' });
+        block(1.6, z + 41, z + 41.8, top + 0.4, 0.85, { kind: 'crate' });
+        deck(z + 53, z + 78, top - 1.2);
+        lv.headZ = z + 78; lv.lastTop = top - 1.2;
+      }
+      mark.exitZ = lv.headZ;
+    }
+
+    /* ---- ordinary route */
+    function segment() {
+      const z = lv.headZ;
+      const d = districtIndex(z);
+      const D = DISTRICTS[d];
+
+      const gate = GATES.find(g => !lv.gatesHit.some(h => h.gate === g) && z >= g.at - 24);
+      if (gate) { buildGate(gate, z + 3, lv.lastTop); return; }
+
+      // the first stretch is deliberately kind: a level-zero body needs
+      // somewhere to find its feet before the city starts asking questions
+      const warm = clamp(z / 420, 0, 1);
+      const diff = clamp(z / 4000, 0, 1.4);
+      // Gaps are sized against the legs that have to clear them. The route
+      // gets harder because you get faster, not in spite of it — an idle
+      // runner that meets an unjumpable hole just farms the same 40 metres
+      // forever, and that is not a game, it is a wall.
+      const jumpCap = 0.9 + statLevel('legPower') * 0.075 + statLevel('flow') * 0.03;
+      const gap = z < 34 ? 0
+        : Math.min(jumpCap, (0.7 + rnd() * (1.0 + diff * 1.7)) * D.gap * (0.45 + warm * 0.55));
+      const len = lerp(16, 8, clamp(diff * 0.6 + rnd() * 0.4, 0, 1)) + rnd() * 6;
+      let top = lv.lastTop + (rnd() - 0.45) * 2.4;
+      top = clamp(top, -6, 6);
+      if (Math.abs(top - lv.lastTop) > 2.2) top = lv.lastTop + Math.sign(top - lv.lastTop) * 2.2;
+
+      const z0 = z + gap;
+      const narrow = rnd() < D.narrow * warm;
+      const half = narrow ? 1.4 + rnd() * 0.6 : HALF;
+      const fr = D.friction * (rnd() < 0.12 ? 0.5 : 1);
+      deck(z0, z0 + len, top, { friction: fr, half, kind: fr < 0.6 ? 'glass' : 'deck' });
+
+      // obstacles
+      let oz = z0 + 3.5;
+      while (oz < z0 + len - 3) {
+        if (rnd() < D.density * 0.5 * (0.15 + warm * 0.85)) {
+          const roll = rnd();
+          if (roll < 0.42 && !narrow) {
+            // crate or vent in one or two lanes
+            const lane = LANES[(rnd() * 3) | 0];
+            block(lane, oz, oz + 0.7 + rnd() * 0.4, top, (0.30 + rnd() * (0.3 + diff * 0.3)) * (0.6 + warm * 0.4),
+              { kind: rnd() < 0.5 ? 'vent' : 'crate', friction: fr, half: 0.62 });
+            if (rnd() < 0.3) {
+              const l2 = LANES[(rnd() * 3) | 0];
+              if (Math.abs(l2 - lane) > 1) block(l2, oz, oz + 0.8, top, 0.55 + rnd() * 0.4, { kind: 'crate', half: 0.62 });
+            }
+          } else if (roll < 0.62) {
+            block(0, oz, oz + 0.45, top + 1.02 + rnd() * 0.14, 0.30,
+              { half: HALF, kind: 'bar', vaultable: false });
+          } else if (roll < 0.80 && !narrow && z > 700) {
+            const lane = LANES[(rnd() * 3) | 0];
+            block(lane, oz, oz + 0.6, top, 1.8 + rnd() * 0.5, { kind: 'wall', vaultable: false, half: 0.7 });
+          } else {
+            block(0, oz, oz + 1.8 + rnd(), top, 0.26, { kind: 'step', friction: fr, half: half });
+          }
+          oz += 4.5;
+        }
+        oz += 2.6;
+      }
+      if (rnd() < 0.55) prop('antenna', (rnd() - 0.5) * half * 1.6, top, z0 + rnd() * len, 0.7 + rnd(), d);
+      if (rnd() < 0.4) prop('lamp', (rnd() < 0.5 ? -1 : 1) * (half - 0.25), top, z0 + rnd() * len, 1, d);
+      if (rnd() < 0.3) prop('sign', (rnd() < 0.5 ? -1 : 1) * (half + 0.6), top, z0 + rnd() * len, 0.8 + rnd() * 0.7, d);
+
+      lv.lastTop = top;
+      lv.headZ = z0 + len;
+    }
+
+    lv.ensure = function (z) {
+      let guard = 0;
+      while (lv.headZ < z + 120 && guard++ < 60) segment();
+      towersTo(z + 150);
+      if (lv.tailZ < z - 60) {
+        const cut = z - 60;
+        lv.boxes = lv.boxes.filter(b => b.z1 > cut);
+        lv.ledges = lv.ledges.filter(l => l.z > cut);
+        lv.props = lv.props.filter(p => p.z > cut);
+        lv.towers = lv.towers.filter(t => t.z1 > cut);
+        for (const k of Array.from(lv.cells.keys())) if (k * 8 < cut - 16) lv.cells.delete(k);
+        lv.tailZ = cut;
+      }
+    };
+
+    const EMPTY = [];
+    lv.solidsNear = function (z, pad) {
+      const c0 = Math.floor((z - pad) / 8), c1 = Math.floor((z + pad) / 8);
+      if (c0 === c1) return lv.cells.get(c0) || EMPTY;
+      const out = [];
+      for (let c = c0; c <= c1; c++) {
+        const a = lv.cells.get(c);
+        if (a) for (const b of a) if (out.indexOf(b) < 0) out.push(b);
+      }
+      return out;
+    };
+
+    lv.groundAt = function (x, z, fromY) {
+      const boxes = lv.solidsNear(z, 0.3);
+      let best = null;
+      for (const b of boxes) {
+        if (b.kind === 'bar') continue;
+        if (x < b.x0 - 0.06 || x > b.x1 + 0.06) continue;
+        if (z < b.z0 - 0.06 || z > b.z1 + 0.06) continue;
+        if (b.y1 <= fromY + 0.05 && (!best || b.y1 > best.y)) best = { y: b.y1, box: b };
+      }
+      return best;
+    };
+
+    lv.ledgeNear = function (x, y, z, r) {
+      let best = null, bd = r;
+      for (const l of lv.ledges) {
+        if (l.z < z - 0.4) continue;
+        const lx = clamp(x, l.x - l.half + 0.25, l.x + l.half - 0.25);
+        const d = Math.hypot(lx - x, l.y - y, l.z - z);
+        if (d < bd) { bd = d; best = { x: lx, y: l.y, z: l.z }; }
+      }
+      return best;
+    };
+
+    lv.scan = function (z, range) {
+      const out = [];
+      for (const b of lv.solidsNear(z + range / 2, range / 2 + 6)) {
+        if (b.z1 < z || b.z0 > z + range) continue;
+        if (b.kind === 'deck' || b.kind === 'glass' || b.kind === 'gatepad' || b.kind === 'ledgepad') continue;
+        out.push(b);
+      }
+      out.sort((a, b) => a.z0 - b.z0);
+      return out;
+    };
+
+    /* is there a hole between z and z+range on the line x? */
+    lv.gapAhead = function (x, z, y, range) {
+      let cz = z, edge = null;
+      while (cz < z + range) {
+        const g = lv.groundAt(x, cz, y + 0.4);
+        if (!g || g.y < y - 2.4) { if (edge === null) edge = cz; }
+        else if (edge !== null) return { start: edge, end: cz, width: cz - edge, landing: g.y };
+        cz += 0.25;
+      }
+      return edge !== null ? { start: edge, end: z + range, width: z + range - edge, landing: null } : null;
+    };
+
+    /* how wide is the deck here, and where is its middle? */
+    lv.deckAt = function (x, z, y) {
+      const boxes = lv.solidsNear(z, 0.3);
+      let best = null;
+      for (const b of boxes) {
+        if (b.kind === 'bar' || b.kind === 'block' || b.kind === 'wall') continue;
+        if (z < b.z0 || z > b.z1) continue;
+        if (b.y1 <= y + 0.6 && (!best || b.y1 > best.y1)) best = b;
+      }
+      return best;
+    };
+
+    lv.ensure(0);
+    return lv;
+  }
+
+  return { DISTRICTS, GATES, LANES, HALF, districtIndex, Level };
+})();
+
+/* ---- 05-ai.js ---- */
+/* KINESIS — the decision layer.
+   Deliberately thin: it reads the deck ahead, picks a line and a take-off,
+   and gets out of the way. REFLEX buys lookahead and timing precision.
+   Everything it gets wrong is handed to the behaviour stack, which is the
+   part worth watching. */
+K.ai = (function () {
+  const U = K.util, E = K.euphoria;
+  const { clamp } = U;
+  const G = 11.2;
+
+  function range(vz, vy, dy) {
+    const disc = vy * vy - 2 * G * dy;
+    if (disc < 0) return -1;
+    const t = (vy + Math.sqrt(disc)) / G;
+    return (vz + vy * 0.22) * t;
+  }
+
+  /* how far can this line be run before something stops it? */
+  function laneScore(level, x, z, y, look) {
+    let clear = look;
+    for (const o of level.scan(z, look)) {
+      if (x < o.x0 - 0.34 || x > o.x1 + 0.34) continue;
+      const h = o.y1 - y;
+      if (o.kind === 'bar') continue;             // duck, don't dodge
+      if (h < 0.3) continue;
+      const cost = o.vaultable === false ? 0 : 4; // a vaultable crate is survivable
+      clear = Math.min(clear, (o.z0 - z) + cost);
+    }
+    const gap = level.gapAhead(x, z + 0.4, y, look);
+    if (gap && gap.width > 6) clear = Math.min(clear, gap.start - z + 2);
+    return clear;
+  }
+
+  function think(c, level, dt) {
+    const st = c.stats;
+    const b = c.body, pel = b.parts.pelvis;
+    c.intent.duck = false;
+    c.targetSpeed = U.approach(c.targetSpeed, st.speed, 0.55, dt);
+
+    if (c.duckT > 0) { c.duckT -= dt; c.intent.duck = true; }
+    if (!c.com) return;                       // nothing sensed yet, first step
+    if (c.state !== E.S.RUN && c.state !== E.S.STAGGER) return;
+
+    const x = c.com.x, z = pel.z, y = pel.y;
+    const look = 2.2 + Math.abs(c.speed) * (0.34 + st.reflex * 0.10);
+    const ground = level.groundAt(x, z, y);
+    const gy = ground ? ground.y : y - 1.2;
+    const err = 1 - clamp(st.reflex * 0.75, 0, 0.92);
+
+    // ---------- keep it on the deck, first and always
+    c.laneT = (c.laneT || 0) - dt;
+    const here = level.deckAt(x, z + 0.5, y);
+    c.edgeFear = 0;
+    if (here) {
+      const mid0 = (here.x0 + here.x1) / 2, edge = (here.x1 - here.x0) / 2;
+      const out = Math.abs(x - mid0) - (edge - 1.4);
+      if (out > 0) {
+        // edge instinct: aim for the middle, and stop trying to sprint while
+        // you are busy not falling off a building
+        c.laneX = mid0; c.laneT = 0.25;
+        c.edgeFear = clamp(out / 1.2, 0, 1);
+        c.targetSpeed *= 1 - 0.45 * c.edgeFear;
+      }
+    }
+    const deck = level.deckAt(x, z + 2, y);
+    if (c.laneT <= 0) {
+      c.laneT = 0.18;
+      const half = deck ? Math.max(0.2, (deck.x1 - deck.x0) / 2 - 0.9) : 1.2;
+      const mid = deck ? (deck.x0 + deck.x1) / 2 : 0;
+      const cands = [];
+      for (const l of [-2.0, -1.0, 0, 1.0, 2.0]) {
+        const cx = clamp(mid + l, mid - half, mid + half);
+        if (cands.some(v => Math.abs(v.x - cx) < 0.2)) continue;
+        const s = laneScore(level, cx, z, gy, 22) - Math.abs(cx - x) * (1.4 + err * 1.6);
+        cands.push({ x: cx, s });
+      }
+      cands.sort((a, b2) => b2.s - a.s);
+      const pick = cands[0];
+      // hysteresis: changing line costs speed and balance, so a new line has
+      // to be clearly better, not marginally better
+      const cur = cands.find(v => Math.abs(v.x - c.laneX) < 0.55);
+      const curScore = cur ? cur.s : -Infinity;
+      if (pick && pick.s > curScore + 3.5 && Math.abs(pick.x - c.laneX) > 0.3
+          && Math.random() < 0.55 + st.reflex * 0.3) {
+        c.laneX = pick.x;
+        c.laneT = 0.5;
+      }
+      if (deck) c.laneX = clamp(c.laneX, mid - half, mid + half);
+    }
+
+    // ---------- jammed against something: change the line and hop over it
+    if (Math.abs(c.speed) < 0.8) c.stuckT = (c.stuckT || 0) + dt; else c.stuckT = 0;
+    if (c.stuckT > 0.7) {
+      c.stuckT = 0;
+      const mid2 = here ? (here.x0 + here.x1) / 2 : 0;
+      const half2 = here ? Math.max(0.2, (here.x1 - here.x0) / 2 - 0.9) : 1.2;
+      c.laneX = clamp(mid2 + (x > mid2 ? -1.6 : 1.6), mid2 - half2, mid2 + half2);
+      c.laneT = 0.6;
+      E.requestJump(c, 0.9);
+      return;
+    }
+
+    // ---------- solid things in the way
+    for (const o of level.scan(z + 0.1, look + 2)) {
+      if (o.z1 < z + 0.1) continue;
+      const d = o.z0 - z;
+      if (d > look) break;
+      if (x < o.x0 - 0.35 || x > o.x1 + 0.35) continue;
+      const h = o.y1 - gy;
+
+      if (o.kind === 'bar') {
+        if (o.y0 - gy > 0.7 && d < 1.1 + Math.abs(c.speed) * 0.22) {
+          if (Math.random() < 0.985 - err * 0.45) c.duckT = Math.max(c.duckT || 0, 0.45);
+        }
+        continue;
+      }
+      if (h < 0.3) continue;
+      if (c.lastActionZ !== undefined && Math.abs(c.lastActionZ - o.z0) < 0.5) continue;
+
+      if (h <= 1.25 && o.vaultable !== false) {
+        const trigger = 0.62 + Math.abs(c.speed) * 0.11 + (Math.random() - 0.5) * 0.5 * err;
+        if (d < trigger && Math.abs(c.speed) > 1.5) {
+          c.lastActionZ = o.z0;
+          if (E.requestVault(c, o)) return;
+        }
+      } else {
+        const need = h + 0.4;
+        const maxV = (2.7 + st.legPower * 1.5) * 1.25;
+        const vy = Math.sqrt(Math.max(0, 2 * G * need)) * 1.05;
+        const power = clamp(vy / maxV * 1.25, 0.5, 1.25);
+        if (d < 0.8 + Math.abs(c.speed) * 0.10) {
+          c.lastActionZ = o.z0;
+          E.requestJump(c, power);
+          return;
+        }
+      }
+    }
+
+    // ---------- holes
+    const gap = level.gapAhead(x, z + 0.35, gy, look + 2.5);
+    if (gap) {
+      const d = gap.start - z;
+      const dy = (gap.landing === null ? gy - 3 : gap.landing) - gy;
+      // Over-jumping a gap costs nothing. Under-jumping it costs the run.
+      // So the take-off is chosen with a margin, and only mistimed by however
+      // sloppy the reflexes are.
+      const needed = (gap.width + 0.7 + Math.max(0, d)) * 1.25;
+      const maxV = (2.7 + st.legPower * 1.5) * 1.25;
+      let power = 1.25, ok = false;
+      for (let p = 0.7; p <= 1.251; p += 0.05) {
+        if (range(Math.abs(c.speed), maxV * (p / 1.25), dy) >= needed) { power = p; ok = true; break; }
+      }
+      const trigger = 0.45 + Math.abs(c.speed) * 0.09 + (Math.random() - 0.45) * 0.40 * err;
+      // do not spam the request every substep: one intent per approach
+      if (d < trigger && c.lastActionZ !== gap.start) {
+        c.lastActionZ = gap.start;
+        c.plannedGap = { width: gap.width, ok };
+        E.requestJump(c, power * (1 + (Math.random() - 0.5) * 0.10 * err));
+      }
+    }
+  }
+
+  return { think, range, laneScore };
+})();
+
+/* ---- 06-progression.js ---- */
+/* KINESIS — the idle layer.
+   Every upgrade here is wired to a number the physics actually reads. There
+   is no "damage +5%" that means nothing: GRIP is metres of reach and newtons
+   of hold, FLOW is metres per second, FRAME is how much of an impact your
+   skeleton keeps. Buying is how you change the body, and the body is what
+   gets you through the gate. */
+K.prog = (function () {
+  const U = K.util;
+  const { clamp } = U;
+
+  const UPGRADES = [
+    { key: 'legPower', name: 'LEG DRIVE', unit: 'kN', cost: 12, growth: 1.155, step: 0.115,
+      blurb: 'Take-off speed and the shove that carries the hips forward.',
+      read: v => (3.2 + v * 2.9).toFixed(1) + ' m/s take-off' },
+    { key: 'flow', name: 'FLOW', unit: 'm/s', cost: 22, growth: 1.185, step: 0.100,
+      blurb: 'Cruising speed. Everything downstream is distance per second.',
+      read: v => (3.0 + v * 1.6).toFixed(1) + ' m/s cruise' },
+    { key: 'balance', name: 'CORE', unit: '', cost: 15, growth: 1.165, step: 0.100,
+      blurb: 'How far off your feet you can be and still get them back.',
+      read: v => (0.40 + v * 0.48).toFixed(2) + ' m step reach' },
+    { key: 'reflex', name: 'REFLEX', unit: '', cost: 18, growth: 1.170, step: 0.090,
+      blurb: 'Lookahead and timing. Sloppy take-offs come from cheap reflexes.',
+      read: v => (34 + v * 100).toFixed(0) + ' cm/(m/s) lookahead' },
+    { key: 'grip', name: 'GRIP', unit: '', cost: 20, growth: 1.180, step: 0.100,
+      blurb: 'Reach for a lip you are falling past, and hold it once you have it.',
+      read: v => (0.45 + v * 0.55).toFixed(2) + ' m reach' },
+    { key: 'conditioning', name: 'FRAME', unit: '', cost: 16, growth: 1.160, step: 0.100,
+      blurb: 'What your skeleton keeps instead of passing on to the rest of you.',
+      read: v => '-' + (100 - 100 / (0.55 + v * 0.75) * 0.55).toFixed(0) + '% impact' },
+    { key: 'rebound', name: 'REBOUND', unit: 's', cost: 22, growth: 1.175, step: 0.100,
+      blurb: 'Rolling out of a landing, and the seconds you lose lying down.',
+      read: v => clamp(0.55 - v * 0.30, 0.12, 0.6).toFixed(2) + ' s down time' },
+    { key: 'line', name: 'LINE', unit: 'x', cost: 34, growth: 1.215, step: 0.090, econ: true,
+      blurb: 'Reading the route. Pure momentum per metre.',
+      read: v => 'x' + (1 + v).toFixed(2) + ' momentum' },
+    { key: 'ghost', name: 'GHOST', unit: 'h', cost: 120, growth: 1.260, step: 1, econ: true, lock: 1,
+      blurb: 'A version of you that keeps running while the screen is off.',
+      read: v => (2 + v * 1.5).toFixed(1) + ' h banked, ' + (30 + v * 6).toFixed(0) + '% rate' }
+  ];
+  const BY_KEY = {}; for (const u of UPGRADES) BY_KEY[u.key] = u;
+
+  function fresh() {
+    return {
+      v: 1,
+      momentum: 0, earned: 0, lifetime: 0,
+      levels: { legPower: 0, flow: 0, balance: 0, reflex: 0, grip: 0, conditioning: 0, rebound: 0, line: 0, ghost: 0 },
+      instinct: 0, instinctSpent: 0,
+      best: 0, bestRun: 0, runs: 0, totalDistance: 0, resets: 0,
+      gates: {}, log: [], auto: false, muted: true,
+      seen: Date.now(), started: Date.now(),
+      rateSample: 0
+    };
+  }
+
+  function level(s, key) { return s.levels[key] | 0; }
+
+  function cost(s, key, n) {
+    const u = BY_KEY[key];
+    const lv = level(s, key);
+    n = n || 1;
+    let total = 0;
+    for (let i = 0; i < n; i++) total += u.cost * Math.pow(u.growth, lv + i);
+    return Math.ceil(total);
+  }
+
+  function canBuy(s, key) {
+    const u = BY_KEY[key];
+    if (u.lock !== undefined && clearedGates(s) < u.lock) return false;
+    return s.momentum >= cost(s, key);
+  }
+
+  function buy(s, key) {
+    if (!canBuy(s, key)) return false;
+    s.momentum -= cost(s, key);
+    s.levels[key] = level(s, key) + 1;
+    return true;
+  }
+
+  function unlocked(s, key) {
+    const u = BY_KEY[key];
+    return u.lock === undefined || clearedGates(s) >= u.lock;
+  }
+
+  function clearedGates(s) { return Object.keys(s.gates).length; }
+
+  const INSTINCT_BODY = 0.022;   // per point, on every physical stat value
+  const INSTINCT_ECON = 0.060;   // per point, on momentum
+
+  /* normalised values handed to the physics */
+  function physStats(s) {
+    const boost = 1 + s.instinct * INSTINCT_BODY;
+    const out = {};
+    for (const u of UPGRADES) {
+      out[u.key] = level(s, u.key) * u.step * (u.econ ? 1 : boost);
+    }
+    // The gait converts roughly 60% of a commanded pace into ground speed —
+    // stride and turnover are the limit, as they are for a person — so the
+    // controller is asked for more than the readout promises, and the
+    // readout is what the runner actually does.
+    out.speed = 4.8 + out.flow * 2.6;
+    return out;
+  }
+
+  function statLevelFn(s) {
+    return (key) => {
+      if (key === 'all') {
+        let m = Infinity;
+        for (const u of UPGRADES) if (!u.econ) m = Math.min(m, level(s, u.key));
+        return m;
+      }
+      return level(s, key);
+    };
+  }
+
+  function districtMult(distance) {
+    return K.world.DISTRICTS[K.world.districtIndex(distance)].mult;
+  }
+
+  /* momentum per metre at a given point on the route */
+  const BASE_RATE = 2.2;
+  function rate(s, distance) {
+    const st = physStats(s);
+    return BASE_RATE * (1 + st.line) * districtMult(distance) * (1 + s.instinct * INSTINCT_ECON);
+  }
+
+  function gateBonus(s, gate) {
+    const first = !s.gates[gate.name];
+    const base = 40 * Math.pow(2.9, K.world.GATES.indexOf(gate));
+    return { amount: base * (first ? 3 : 1) * (1 + s.instinct * INSTINCT_ECON), first };
+  }
+
+  /* ------------------------------------------------------------ prestige */
+
+  function prestigeGain(s) {
+    const best = Math.max(s.best, s.bestRun);
+    if (best < 1200) return 0;
+    const g = Math.floor(4.2 * Math.pow(best / 1000, 0.78));
+    return Math.max(0, g - s.instinct);
+  }
+
+  function prestige(s) {
+    const gain = prestigeGain(s);
+    if (gain <= 0) return false;
+    s.instinct += gain;
+    s.resets++;
+    s.momentum = 0;
+    for (const k in s.levels) s.levels[k] = 0;
+    s.gates = {};
+    s.bestRun = 0;
+    s.log.unshift({ kind: 'reset', text: 'MUSCLE MEMORY — +' + gain + ' instinct', d: 0 });
+    s.log = s.log.slice(0, 14);
+    return true;
+  }
+
+  /* ------------------------------------------------------------- offline */
+
+  function offline(s, now) {
+    const dt = Math.max(0, (now - (s.seen || now)) / 1000);
+    const st = physStats(s);
+    const capH = 2 + level(s, 'ghost') * 1.5;
+    const eff = 0.30 + level(s, 'ghost') * 0.06;
+    const t = Math.min(dt, capH * 3600);
+    if (t < 60 || !s.rateSample) return null;
+    const gained = s.rateSample * eff * t;
+    s.momentum += gained;
+    s.earned += gained;
+    s.lifetime += gained;
+    return { seconds: t, away: dt, gained, capped: dt > capH * 3600, eff };
+  }
+
+  /* ---------------------------------------------------------------- save */
+
+  const KEY = 'kinesis.save.v1';
+  function save(s) {
+    s.seen = Date.now();
+    try { localStorage.setItem(KEY, JSON.stringify(s)); return true; } catch (e) { return false; }
+  }
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return null;
+      const s = JSON.parse(raw);
+      const f = fresh();
+      for (const k in f) if (s[k] === undefined) s[k] = f[k];
+      for (const k in f.levels) if (s.levels[k] === undefined) s.levels[k] = 0;
+      return s;
+    } catch (e) { return null; }
+  }
+  function wipe() { try { localStorage.removeItem(KEY); } catch (e) {} }
+
+  return {
+    UPGRADES, BY_KEY, fresh, level, cost, canBuy, buy, unlocked, clearedGates,
+    physStats, statLevelFn, rate, districtMult, gateBonus,
+    prestigeGain, prestige, offline, save, load, wipe,
+    INSTINCT_BODY, INSTINCT_ECON
+  };
+})();
+
+/* ---- 07-game.js ---- */
+/* KINESIS — the run.
+   Owns the clock, the camera, the particles and the life of one attempt.
+   Physics runs on a fixed 1/180 s step, so a phone that drops frames gets
+   the same body as one that does not. */
+K.game = (function () {
+  const U = K.util, P = K.phys, E = K.euphoria, R = K.rag;
+  const { clamp, lerp } = U;
+
+  const H = 1 / 180;
+  const CAMS = ['CHASE', 'AHEAD', 'SIDE'];
+
+  function create(state) {
+    const g = {
+      state, level: null, ctrl: null, body: null,
+      startZ: 0, distance: 0, runTime: 0, dead: false, deadT: 0, deadWhy: '',
+      cam: { x: 0, y: 2.4, z: -5, tx: 0, ty: 1, tz: 4, shake: 0, mode: state.cam || 0, fov: 1 },
+      timeScale: 1, slowT: 0, acc: 0,
+      particles: [], ghosts: [], gateFlash: 0, banner: null,
+      earnRate: 0, rateEMA: 0, sinceProgress: 0, runId: 0, popups: [],
+      district: K.world.DISTRICTS[0], districtIndex: 0
+    };
+    newRun(g);
+    return g;
+  }
+
+  function newRun(g) {
+    const s = g.state;
+    g.runId++;
+    g.level = K.world.Level((Math.random() * 1e9) | 0, K.prog.statLevelFn(s));
+    const top = g.level.boxes[0].y1;
+    g.body = R.build(0, top + 0.02, 4.0);
+    g.ctrl = E.Controller(g.body, K.prog.physStats(s));
+    g.ctrl.targetSpeed = g.ctrl.stats.speed * 0.5;
+    g.startZ = 4.0;
+    g.distance = 0; g.runTime = 0; g.dead = false; g.deadT = 0; g.deadWhy = '';
+    g.sinceProgress = 0;
+    g.cam.x = 0; g.cam.y = top + 2.4; g.cam.z = 4 - 5;
+    g.particles.length = 0; g.ghosts.length = 0;
+    g.banner = null; g.groundRef = top;
+    g.timeScale = 1; g.slowT = 0;
+  }
+
+  function pop(g, text, x, y, z, kind) {
+    g.popups.push({ text, x, y, z, t: 0, kind: kind || 'gain' });
+    if (g.popups.length > 12) g.popups.shift();
+  }
+
+  function spawn(g, kind, x, y, z, n, a) {
+    for (let i = 0; i < n; i++) {
+      const th = Math.random() * Math.PI * 2, ph = Math.random() * Math.PI;
+      const sp = (0.4 + Math.random() * 2.0) * (a || 1);
+      g.particles.push({
+        kind, x, y, z,
+        vx: Math.cos(th) * Math.sin(ph) * sp,
+        vy: Math.abs(Math.cos(ph)) * sp * (kind === 'spark' ? 1.1 : 0.7),
+        vz: Math.sin(th) * Math.sin(ph) * sp * 0.8,
+        life: 0, max: kind === 'spark' ? 0.35 : 0.6 + Math.random() * 0.5,
+        r: (kind === 'spark' ? 0.025 : 0.05 + Math.random() * 0.07) * (a || 1)
+      });
+    }
+    if (g.particles.length > 240) g.particles.splice(0, g.particles.length - 240);
+  }
+
+  function endRun(g, why) {
+    if (g.dead) return;
+    const s = g.state, c = g.ctrl;
+    g.dead = true; g.deadT = 0; g.deadWhy = why;
+    s.runs++;
+    s.totalDistance += g.distance;
+    s.bestRun = Math.max(s.bestRun, g.distance);
+    const record = g.distance > s.best;
+    s.best = Math.max(s.best, g.distance);
+    const f = c.flags, bits = [];
+    if (f.grabs) bits.push(f.grabs + ' catch' + (f.grabs > 1 ? 'es' : ''));
+    if (f.vaults) bits.push(f.vaults + ' vault' + (f.vaults > 1 ? 's' : ''));
+    if (f.rolls) bits.push(f.rolls + ' roll' + (f.rolls > 1 ? 's' : ''));
+    if (f.recovered) bits.push(f.recovered + ' save' + (f.recovered > 1 ? 's' : ''));
+    s.log.unshift({
+      kind: record ? 'record' : 'run', run: s.runs, d: g.distance,
+      text: why, detail: bits.join(' · ') || 'clean until it was not'
+    });
+    s.log = s.log.slice(0, 14);
+    g.banner = { title: record ? 'NEW BEST' : 'RUN ENDED', sub: why, t: 0, record };
+    K.audio.down();
+    K.prog.save(s);
+  }
+
+  function step(g, dt) {
+    const s = g.state, c = g.ctrl, lv = g.level, b = g.body;
+    const pel = b.parts.pelvis;
+    lv.ensure(pel.z);
+
+    const di = K.world.districtIndex(g.distance);
+    g.district = K.world.DISTRICTS[di]; g.districtIndex = di;
+
+    // crosswind is a real lateral force on every point, not a filter
+    if (g.district.wind) {
+      const w = Math.sin(g.runTime * 0.7) * 0.6 + Math.sin(g.runTime * 2.3) * 0.3 + 0.35;
+      for (const p of b.list) p.ax += w * g.district.wind * 1.5;
+    }
+
+    K.ai.think(c, lv, dt);
+    P.integrate(b, dt, 1);
+    E.step(c, lv, dt);
+    const frame = R.frame(b);
+    for (let i = 0; i < 5; i++) { P.solveBones(b); P.solveHinges(b, frame); }
+    P.collide(b, lv, dt);
+
+    const d = pel.z - g.startZ;
+    if (d > g.distance) {
+      const dx = d - g.distance;
+      g.distance = d;
+      const gain = dx * K.prog.rate(s, g.distance);
+      s.momentum += gain; s.earned += gain; s.lifetime += gain;
+      g.earnRate = gain / dt;
+      g.sinceProgress = 0;
+    } else g.sinceProgress += dt;
+    g.runTime += dt;
+
+    for (const m of lv.gatesHit) {
+      if (m.done) continue;
+      if (pel.z > m.exitZ && c.state !== E.S.OUT) {
+        m.done = true;
+        const bonus = K.prog.gateBonus(s, m.gate);
+        s.momentum += bonus.amount; s.earned += bonus.amount; s.lifetime += bonus.amount;
+        const wasNew = !s.gates[m.gate.name];
+        s.gates[m.gate.name] = true;
+        g.gateFlash = 1;
+        K.audio.gate();
+        pop(g, '+' + U.num(bonus.amount) + ' M', pel.x, pel.y + 1.5, pel.z, 'gate');
+        g.banner = { title: wasNew ? 'GATE OPEN — ' + m.gate.name : m.gate.name + ' CLEARED', sub: m.gate.blurb, t: 0, gate: true };
+        if (wasNew) {
+          s.log.unshift({ kind: 'gate', text: 'opened ' + m.gate.name, d: g.distance });
+          s.log = s.log.slice(0, 14);
+          K.prog.save(s);
+        }
+      }
+    }
+
+    for (const e of c.effects) {
+      if (e.type === 'dust') { spawn(g, 'dust', e.x, e.y, e.z, 3 + (e.a * 5) | 0, e.a); K.audio.step(e.a); }
+      else if (e.type === 'impact') {
+        spawn(g, 'spark', e.x, e.y, e.z, 4 + (e.a * 9) | 0, e.a);
+        K.audio.impact(e.a);
+        g.cam.shake = Math.min(1.2, g.cam.shake + e.a * 0.85);
+        if (e.a > 0.55) g.slowT = 0.45 * e.a;
+      } else if (e.type === 'grab') {
+        spawn(g, 'spark', e.x, e.y, e.z, 6, 0.5);
+        K.audio.grab();
+        pop(g, 'CAUGHT', e.x, e.y + 0.5, e.z, 'good');
+      } else if (e.type === 'plant') spawn(g, 'dust', e.x, e.y, e.z, 4, 0.5);
+    }
+    c.effects.length = 0;
+
+    const gr = lv.groundAt(pel.x, pel.z, pel.y + 0.6);
+    if (gr) g.groundRef = gr.y;
+    if (!g.dead) {
+      if (c.state === E.S.OUT) endRun(g, 'lost consciousness');
+      else if (pel.y < g.groundRef - 11) {
+        const d2 = lv.deckAt(0, pel.z, g.groundRef + 1);
+        const wide = d2 && (pel.x < d2.x0 - 0.2 || pel.x > d2.x1 + 0.2);
+        endRun(g, wide ? 'over the side' : 'short of the far edge');
+      } else if (g.sinceProgress > 7) endRun(g, 'stopped moving');
+    }
+  }
+
+  function camera(g, dt) {
+    const c = g.ctrl, b = g.body;
+    const pel = b.parts.pelvis, ch = b.parts.chest;
+    const mode = CAMS[g.cam.mode % CAMS.length];
+    const sp = clamp(Math.abs(c.speed) / 10, 0, 1);
+    let px, py, pz, tx, ty, tz;
+    const fx = pel.x * 0.6, fy = clamp(pel.y, g.groundRef - 3, g.groundRef + 6), fz = pel.z;
+    if (mode === 'CHASE') {
+      // a touch off the centre line: dead astern hides the whole stride
+      px = fx + 1.0; py = fy + 2.05 + sp * 0.35; pz = fz - (7.2 + sp * 2.2);
+      tx = pel.x * 0.75 - 0.35; ty = fy + 0.75; tz = fz + 9;
+    } else if (mode === 'AHEAD') {
+      px = fx; py = fy + 1.55; pz = fz + (7.6 + sp * 1.8);
+      tx = pel.x * 0.8; ty = fy + 0.85; tz = fz - 2;
+    } else {
+      px = fx + 7.4; py = fy + 1.9; pz = fz + 2.2;
+      tx = pel.x; ty = fy + 0.6; tz = fz + 2;
+    }
+    // never let the camera sink below whatever it is standing behind, or the
+    // deck the runner just left swallows the whole frame
+    const gc = g.level.groundAt(px, pz, py + 8);
+    if (gc) py = Math.max(py, gc.y + 1.9);
+    const gm = g.level.groundAt(px, (pz + fz) / 2, py + 8);
+    if (gm) py = Math.max(py, gm.y + 1.5);
+
+    const k = g.dead ? 2.2 : 5.5;
+    g.cam.x = U.approach(g.cam.x, px, k, dt);
+    g.cam.y = U.approach(g.cam.y, py, k * 0.7, dt);
+    g.cam.z = U.approach(g.cam.z, pz, k, dt);
+    g.cam.tx = U.approach(g.cam.tx, tx, k, dt);
+    g.cam.ty = U.approach(g.cam.ty, ty, k * 0.7, dt);
+    g.cam.tz = U.approach(g.cam.tz, tz, k, dt);
+    g.cam.fov = U.approach(g.cam.fov, 1 + sp * 0.12, 3, dt);
+    g.cam.shake = Math.max(0, g.cam.shake - dt * 2.6);
+  }
+
+  function cycleCam(g) {
+    g.cam.mode = (g.cam.mode + 1) % CAMS.length;
+    g.state.cam = g.cam.mode;
+    return CAMS[g.cam.mode];
+  }
+  function camName(g) { return CAMS[g.cam.mode % CAMS.length]; }
+
+  function update(g, rawDt) {
+    const c = g.ctrl;
+    if (g.slowT > 0) { g.slowT -= rawDt; g.timeScale = lerp(g.timeScale, 0.32, 0.25); }
+    else g.timeScale = lerp(g.timeScale, 1, 0.08);
+
+    const dt = Math.min(rawDt, 0.05) * (g.dead ? 0.55 : g.timeScale);
+    g.acc += dt;
+    let steps = 0;
+    while (g.acc >= H && steps < 9) { step(g, H); g.acc -= H; steps++; }
+    if (g.acc > H * 9) g.acc = 0;
+
+    for (let i = g.particles.length - 1; i >= 0; i--) {
+      const p = g.particles[i];
+      p.life += rawDt;
+      if (p.life > p.max) { g.particles.splice(i, 1); continue; }
+      p.x += p.vx * rawDt; p.y += p.vy * rawDt; p.z += p.vz * rawDt;
+      p.vy -= (p.kind === 'spark' ? 9 : 1.1) * rawDt;
+      p.vx *= 1 - 1.6 * rawDt; p.vz *= 1 - 1.6 * rawDt;
+    }
+    for (let i = g.popups.length - 1; i >= 0; i--) {
+      const p = g.popups[i]; p.t += rawDt; p.y += rawDt * 0.7;
+      if (p.t > 1.6) g.popups.splice(i, 1);
+    }
+
+    g.ghostT = (g.ghostT || 0) + rawDt;
+    if (Math.abs(c.speed) > 6.5 && g.ghostT > 0.06) {
+      g.ghostT = 0;
+      g.ghosts.push({ pts: g.body.list.map(p => ({ x: p.x, y: p.y, z: p.z, r: p.r })), t: 0 });
+      if (g.ghosts.length > 6) g.ghosts.shift();
+    }
+    for (let i = g.ghosts.length - 1; i >= 0; i--) {
+      g.ghosts[i].t += rawDt;
+      if (g.ghosts[i].t > 0.28) g.ghosts.splice(i, 1);
+    }
+
+    camera(g, rawDt);
+
+    if (g.banner) { g.banner.t += rawDt; if (g.banner.t > 3.2) g.banner = null; }
+    if (g.gateFlash > 0) g.gateFlash = Math.max(0, g.gateFlash - rawDt * 1.4);
+
+    g.rateEMA = g.rateEMA * 0.985 + g.earnRate * 0.015;
+    g.earnRate *= 0.9;
+    g.state.rateSample = Math.max(g.state.rateSample * 0.999, g.rateEMA);
+
+    if (g.dead) { g.deadT += rawDt; if (g.deadT > 2.4) newRun(g); }
+    for (const n of c.notes) n.t += rawDt;
+    while (c.notes.length && c.notes[0].t > 3) c.notes.shift();
+  }
+
+  function restat(g) { Object.assign(g.ctrl.stats, K.prog.physStats(g.state)); }
+
+  return { create, update, newRun, restat, endRun, cycleCam, camName, CAMS };
+})();
+
+/* ---- 08-render.js ---- */
+/* KINESIS — the view.
+   A small software 3D renderer: perspective projection, near-plane clipping,
+   painter's sort, fog. No library, no WebGL — the scene is a few dozen boxes
+   and one body, and canvas2d draws that comfortably at 60 on a phone.
+   Canvas draws the world only; every readable character is DOM. */
+K.render = (function () {
+  const U = K.util;
+  const { clamp, lerp } = U;
+
+  const NEAR = 0.28;
+  const FOG_NEAR = 10, FOG_FAR = 78;
+
+  function hash(i) {
+    let h = Math.imul(i ^ 0x9e3779b9, 0x85ebca6b);
+    h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  }
+
+  function rgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  function mix(a, b, t) {
+    return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  }
+  function css(c, a) {
+    return 'rgba(' + (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0) + ',' + (a === undefined ? 1 : a) + ')';
+  }
+
+  function View(canvas) {
+    return {
+      canvas, ctx: canvas.getContext('2d'), w: 0, h: 0, dpr: 1,
+      f: 500, items: [], poly: []
+    };
+  }
+
+  function resize(v) {
+    const r = v.canvas.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.2);
+    v.w = r.width; v.h = r.height; v.dpr = dpr;
+    v.canvas.width = Math.max(1, Math.round(r.width * dpr));
+    v.canvas.height = Math.max(1, Math.round(r.height * dpr));
+  }
+
+  /* ---------------------------------------------------------------- camera */
+
+  function setCamera(v, cam, shakeX, shakeY) {
+    let fx = cam.tx - cam.x, fy = cam.ty - cam.y, fz = cam.tz - cam.z;
+    const fl = Math.hypot(fx, fy, fz) || 1;
+    fx /= fl; fy /= fl; fz /= fl;
+    // right = fwd x worldUp = (fx,fy,fz) x (0,1,0)
+    let rx = -fz, ry = 0, rz = fx;
+    const rl = Math.hypot(rx, ry, rz) || 1;
+    rx /= rl; ry /= rl; rz /= rl;
+    // up = right x fwd
+    const ux = ry * fz - rz * fy, uy = rz * fx - rx * fz, uz = rx * fy - ry * fx;
+    const fovY = 1.06 / (cam.fov || 1);
+    v.f = (v.h * 0.5) / Math.tan(fovY * 0.5);
+    v.cam = { x: cam.x, y: cam.y, z: cam.z, fx, fy, fz, rx, ry, rz, ux, uy, uz, sx: shakeX, sy: shakeY };
+    // horizon: where a world-forward ray vanishes
+    const dz = { x: 0, y: 0, z: 1 };
+    const dfwd = dz.z * fz + dz.y * fy + dz.x * fx;
+    const dup = dz.z * uz + dz.y * uy + dz.x * ux;
+    v.horizonY = dfwd > 0.01 ? v.h / 2 - v.f * (dup / dfwd) : v.h * 0.35;
+  }
+
+  function proj(v, x, y, z) {
+    const c = v.cam;
+    const dx = x - c.x, dy = y - c.y, dz = z - c.z;
+    const cz = dx * c.fx + dy * c.fy + dz * c.fz;
+    const cx = dx * c.rx + dy * c.ry + dz * c.rz;
+    const cy = dx * c.ux + dy * c.uy + dz * c.uz;
+    return { cx, cy, cz };
+  }
+  function toScreen(v, p) {
+    const s = v.f / p.cz;
+    return { x: v.w / 2 + p.cx * s + v.cam.sx, y: v.h / 2 - p.cy * s + v.cam.sy, s, z: p.cz };
+  }
+
+  /* clip a polygon of camera-space points against the near plane */
+  function clipNear(pts) {
+    const out = [];
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      const ain = a.cz > NEAR, bin = b.cz > NEAR;
+      if (ain) out.push(a);
+      if (ain !== bin) {
+        const t = (NEAR - a.cz) / (b.cz - a.cz);
+        out.push({ cx: a.cx + (b.cx - a.cx) * t, cy: a.cy + (b.cy - a.cy) * t, cz: NEAR });
+      }
+    }
+    return out;
+  }
+
+  function fillPoly(v, ctx, camPts, style, stroke) {
+    const pts = clipNear(camPts);
+    if (pts.length < 3) return;
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const s = toScreen(v, pts[i]);
+      if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = style;
+    ctx.fill();
+    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
+  }
+
+  /* --------------------------------------------------------------- scene */
+
+  const FACES = [
+    { i: [4, 5, 6, 7], n: [0, 1, 0], k: 1.00 },     // top
+    { i: [0, 3, 2, 1], n: [0, -1, 0], k: 0.28 },    // bottom
+    { i: [0, 1, 5, 4], n: [0, 0, -1], k: 0.80 },    // near face (-z)
+    { i: [2, 3, 7, 6], n: [0, 0, 1], k: 0.46 },     // far face (+z)
+    { i: [3, 0, 4, 7], n: [-1, 0, 0], k: 0.60 },    // -x
+    { i: [1, 2, 6, 5], n: [1, 0, 0], k: 0.66 }      // +x
+  ];
+
+  function boxItem(v, g, b, base, opts) {
+    opts = opts || {};
+    const c = v.cam;
+    const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2, cz = (b.z0 + b.z1) / 2;
+    const depth = (cx - c.x) * c.fx + (cy - c.y) * c.fy + (cz - c.z) * c.fz;
+    if (depth < -14 || depth > FOG_FAR + 40) return;
+    const corners = [
+      [b.x0, b.y0, b.z0], [b.x1, b.y0, b.z0], [b.x1, b.y0, b.z1], [b.x0, b.y0, b.z1],
+      [b.x0, b.y1, b.z0], [b.x1, b.y1, b.z0], [b.x1, b.y1, b.z1], [b.x0, b.y1, b.z1]
+    ].map(p => proj(v, p[0], p[1], p[2]));
+    const fogT = clamp((depth - FOG_NEAR) / (FOG_FAR - FOG_NEAR), 0, 1);
+    v.items.push({
+      z: depth,
+      draw: (ctx) => {
+        for (const F of FACES) {
+          // visible if the face normal points back toward the camera
+          const p0 = [b.x0, b.y0, b.z0], p1 = [b.x1, b.y1, b.z1];
+          const fx = F.n[0] > 0 ? p1[0] : F.n[0] < 0 ? p0[0] : (p0[0] + p1[0]) / 2;
+          const fy = F.n[1] > 0 ? p1[1] : F.n[1] < 0 ? p0[1] : (p0[1] + p1[1]) / 2;
+          const fz = F.n[2] > 0 ? p1[2] : F.n[2] < 0 ? p0[2] : (p0[2] + p1[2]) / 2;
+          const vx = fx - c.x, vy = fy - c.y, vz = fz - c.z;
+          if (vx * F.n[0] + vy * F.n[1] + vz * F.n[2] > 0) continue;
+          const shade = mix(base, [0, 0, 0], 1 - F.k);
+          const col = mix(shade, v.fog, fogT * 0.92);
+          fillPoly(v, ctx, F.i.map(i => corners[i]), css(col, opts.alpha === undefined ? 1 : opts.alpha));
+        }
+        if (opts.edge) {
+          const col = mix(rgb(opts.edge), v.fog, fogT);
+          const top = [corners[4], corners[5], corners[6], corners[7]];
+          const pts = clipNear(top);
+          if (pts.length >= 3) {
+            ctx.beginPath();
+            for (let i = 0; i < pts.length; i++) {
+              const s = toScreen(v, pts[i]);
+              if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+            }
+            ctx.closePath();
+            ctx.strokeStyle = css(col, 0.5 * (1 - fogT * 0.7));
+            ctx.lineWidth = 1.4;
+            ctx.stroke();
+          }
+        }
+      }
+    });
+  }
+
+  const KIND_COL = {
+    deck: '#3a3f52', gatepad: '#4a4152', ledgepad: '#3d4356', glass: '#37545e',
+    crate: '#6a5136', vent: '#4e5464', wall: '#5a4046', bar: '#8a8f9c',
+    step: '#454b60', block: '#555b70', gatewall: '#5b4a58'
+  };
+
+  function drawScene(v, g) {
+    const lv = g.level, D = g.district;
+    const build = rgb(D.build);
+    const camZ = g.cam.z;
+
+    for (const t of lv.towers) {
+      if (t.z1 < camZ - 20 || t.z0 > camZ + FOG_FAR + 30) continue;
+      const shade = 0.55 + hash((t.seed * 9871) | 0) * 0.5;
+      boxItem(v, g, t, mix(build, [255, 255, 255], 0.06 * shade), { tower: true });
+      // a few lit windows on the face that looks at the deck
+      const depth = (t.z0 - g.cam.z);
+      if (depth > 0 && depth < 46 && t.lit > 0.35) {
+        v.items.push({
+          z: depth - 0.05,
+          draw: (ctx) => {
+            const face = t.x1 < 0 ? t.x1 : t.x0;
+            const rows = Math.min(10, Math.floor((t.y1 - t.y0) / 1.6));
+            const fogT = clamp((depth - FOG_NEAR) / (FOG_FAR - FOG_NEAR), 0, 1);
+            for (let r = 0; r < rows; r++) {
+              for (let cN = 0; cN < 2; cN++) {
+                const hh = hash((t.seed * 733 + r * 31 + cN * 7) | 0);
+                if (hh < 0.62) continue;
+                const y = t.y0 + 1.0 + r * 1.6;
+                const z = t.z0 + 0.6 + cN * (t.z1 - t.z0 - 1.2);
+                const p = proj(v, face, y, z);
+                if (p.cz < NEAR) continue;
+                const s = toScreen(v, p);
+                const w = Math.max(1, 0.6 * s.s), h2 = Math.max(1, 0.9 * s.s);
+                ctx.fillStyle = css(mix(hh > 0.95 ? [255, 228, 176] : rgb(D.accent), v.fog, fogT * 0.9), 0.55 * (1 - fogT));
+                ctx.fillRect(s.x - w / 2, s.y - h2 / 2, w, h2);
+              }
+            }
+          }
+        });
+      }
+    }
+
+    for (const b of lv.boxes) {
+      if (b.z1 < camZ - 14 || b.z0 > camZ + FOG_FAR + 20) continue;
+      const isDeck = b.kind === 'deck' || b.kind === 'gatepad' || b.kind === 'glass' || b.kind === 'ledgepad';
+      const col = rgb(KIND_COL[b.kind] || '#4a5064');
+      const tinted = mix(col, rgb(D.accent), isDeck ? 0.06 : 0.12);
+      boxItem(v, g, b, tinted, { edge: isDeck ? D.accent : null });
+      if (isDeck) deckMarks(v, g, b, D);
+    }
+
+    for (const p of lv.props) {
+      if (p.z < camZ - 8 || p.z > camZ + FOG_FAR) continue;
+      propItem(v, g, p, D);
+    }
+
+    for (const m of lv.gatesHit) {
+      if (m.entryZ < camZ - 8 || m.entryZ > camZ + FOG_FAR + 20) continue;
+      gateItem(v, g, m, D);
+    }
+  }
+
+  /* transverse rungs on the deck: the cheapest, strongest speed cue there is */
+  function deckMarks(v, g, b, D) {
+    const camZ = g.cam.z;
+    const start = Math.ceil(Math.max(b.z0, camZ - 4) / 2) * 2;
+    const acc = rgb(D.accent);
+    for (let z = start; z < Math.min(b.z1, camZ + 62); z += 2) {
+      const depth = z - camZ;
+      const fogT = clamp((depth - FOG_NEAR) / (FOG_FAR - FOG_NEAR), 0, 1);
+      const major = Math.abs(z % 25) < 1;
+      v.items.push({
+        z: depth - 0.02,
+        draw: (ctx) => {
+          const a = proj(v, b.x0 + 0.12, b.y1 + 0.005, z);
+          const c2 = proj(v, b.x1 - 0.12, b.y1 + 0.005, z);
+          if (a.cz < NEAR && c2.cz < NEAR) return;
+          const pts = clipNear([a, c2, { cx: c2.cx, cy: c2.cy, cz: c2.cz + 0.001 }]);
+          if (pts.length < 2) return;
+          const s0 = toScreen(v, pts[0]), s1 = toScreen(v, pts[1]);
+          ctx.strokeStyle = css(mix(acc, v.fog, fogT), (major ? 0.34 : 0.13) * (1 - fogT * 0.8));
+          ctx.lineWidth = major ? 2 : 1;
+          ctx.beginPath(); ctx.moveTo(s0.x, s0.y); ctx.lineTo(s1.x, s1.y); ctx.stroke();
+        }
+      });
+    }
+  }
+
+  function propItem(v, g, p, D) {
+    const depth = p.z - g.cam.z;
+    const fogT = clamp((depth - FOG_NEAR) / (FOG_FAR - FOG_NEAR), 0, 1);
+    v.items.push({
+      z: depth,
+      draw: (ctx) => {
+        if (p.kind === 'antenna') {
+          const a = proj(v, p.x, p.y, p.z), b = proj(v, p.x, p.y + 1.8 * p.s, p.z);
+          if (a.cz < NEAR || b.cz < NEAR) return;
+          const s0 = toScreen(v, a), s1 = toScreen(v, b);
+          ctx.strokeStyle = css(mix([26, 30, 40], v.fog, fogT), 0.9);
+          ctx.lineWidth = Math.max(1, 0.05 * s0.s);
+          ctx.beginPath(); ctx.moveTo(s0.x, s0.y); ctx.lineTo(s1.x, s1.y); ctx.stroke();
+          ctx.fillStyle = 'rgba(255,90,90,' + (0.35 + 0.4 * Math.sin(g.runTime * 3 + p.seed * 10)) + ')';
+          ctx.beginPath(); ctx.arc(s1.x, s1.y, Math.max(1, 0.07 * s1.s), 0, 7); ctx.fill();
+        } else if (p.kind === 'lamp') {
+          const a = proj(v, p.x, p.y, p.z), b = proj(v, p.x, p.y + 2.4, p.z);
+          if (a.cz < NEAR || b.cz < NEAR) return;
+          const s0 = toScreen(v, a), s1 = toScreen(v, b);
+          ctx.strokeStyle = css(mix([30, 34, 44], v.fog, fogT), 0.9);
+          ctx.lineWidth = Math.max(1, 0.06 * s0.s);
+          ctx.beginPath(); ctx.moveTo(s0.x, s0.y); ctx.lineTo(s1.x, s1.y); ctx.stroke();
+          const gl = ctx.createRadialGradient(s1.x, s1.y, 0, s1.x, s1.y, Math.max(4, 1.6 * s1.s));
+          gl.addColorStop(0, css(rgb(D.accent), 0.55 * (1 - fogT)));
+          gl.addColorStop(1, css(rgb(D.accent), 0));
+          ctx.fillStyle = gl;
+          ctx.beginPath(); ctx.arc(s1.x, s1.y, Math.max(4, 1.6 * s1.s), 0, 7); ctx.fill();
+        } else if (p.kind === 'sign') {
+          const w = 0.9 * p.s, h = 1.5 * p.s;
+          const pts = [
+            proj(v, p.x, p.y + 1.0, p.z - w / 2), proj(v, p.x, p.y + 1.0 + h, p.z - w / 2),
+            proj(v, p.x, p.y + 1.0 + h, p.z + w / 2), proj(v, p.x, p.y + 1.0, p.z + w / 2)
+          ];
+          fillPoly(v, ctx, pts, css(mix(rgb(D.accent), v.fog, fogT), 0.22 + 0.12 * Math.sin(g.runTime * 2 + p.seed * 8)));
+        }
+      }
+    });
+  }
+
+  function gateItem(v, g, m, D) {
+    const depth = m.entryZ - g.cam.z;
+    const col = m.done ? '#8affc0' : m.met ? D.accent : '#ff6b6b';
+    const half = K.world.HALF + 0.4;
+    v.items.push({
+      z: depth,
+      draw: (ctx) => {
+        const fogT = clamp((depth - FOG_NEAR) / (FOG_FAR - FOG_NEAR), 0, 1);
+        const c = rgb(col);
+        // two posts and a beam across the deck
+        for (const sx of [-half, half]) {
+          const a = proj(v, sx, m.top, m.entryZ), b = proj(v, sx, m.top + 3.6, m.entryZ);
+          if (a.cz < NEAR || b.cz < NEAR) continue;
+          const s0 = toScreen(v, a), s1 = toScreen(v, b);
+          ctx.strokeStyle = css(mix(c, v.fog, fogT), 0.75);
+          ctx.lineWidth = Math.max(1.5, 0.12 * s0.s);
+          ctx.beginPath(); ctx.moveTo(s0.x, s0.y); ctx.lineTo(s1.x, s1.y); ctx.stroke();
+        }
+        const l = proj(v, -half, m.top + 3.4, m.entryZ), r = proj(v, half, m.top + 3.4, m.entryZ);
+        if (l.cz > NEAR && r.cz > NEAR) {
+          const s0 = toScreen(v, l), s1 = toScreen(v, r);
+          ctx.strokeStyle = css(mix(c, v.fog, fogT), 0.85);
+          ctx.lineWidth = Math.max(2, 0.16 * s0.s);
+          ctx.beginPath(); ctx.moveTo(s0.x, s0.y); ctx.lineTo(s1.x, s1.y); ctx.stroke();
+          // name and requirement, hung on the beam
+          const mid = proj(v, 0, m.top + 2.85, m.entryZ);
+          if (mid.cz > NEAR && mid.cz < 60) {
+            const s = toScreen(v, mid);
+            const size = clamp(0.42 * s.s, 7, 30);
+            ctx.textAlign = 'center';
+            ctx.font = '600 ' + size.toFixed(0) + 'px ui-monospace, Menlo, monospace';
+            ctx.fillStyle = css(mix(c, v.fog, fogT), 0.95 * (1 - fogT * 0.7));
+            ctx.fillText(m.gate.name, s.x, s.y);
+            ctx.font = '500 ' + (size * 0.62).toFixed(0) + 'px ui-monospace, Menlo, monospace';
+            ctx.fillStyle = css(mix([230, 235, 246], v.fog, fogT), 0.6 * (1 - fogT * 0.7));
+            const req = m.gate.stat === 'all' ? 'ALL ' + m.gate.need : m.gate.stat.toUpperCase() + ' ' + m.gate.need;
+            ctx.fillText(m.done ? 'CLEARED' : req, s.x, s.y + size * 0.9);
+            ctx.textAlign = 'left';
+          }
+        }
+      }
+    });
+  }
+
+  /* ---------------------------------------------------------------- body */
+
+  const LIMBS = [
+    ['hipL', 'kneeL', 0.092, 0], ['kneeL', 'footL', 0.075, 0], ['footL', 'toeL', 0.062, 0],
+    ['hipR', 'kneeR', 0.092, 0], ['kneeR', 'footR', 0.075, 0], ['footR', 'toeR', 0.062, 0],
+    ['shL', 'elbowL', 0.062, 0], ['elbowL', 'handL', 0.052, 0],
+    ['shR', 'elbowR', 0.062, 0], ['elbowR', 'handR', 0.052, 0],
+    ['hipL', 'hipR', 0.085, 1], ['shL', 'shR', 0.095, 1],
+    ['pelvis', 'chest', 0.125, 1], ['chest', 'head', 0.068, 1]
+  ];
+
+  function drawBody(v, ctx, g, alpha, tint) {
+    const b = g.body, c = g.ctrl, P = b.parts;
+    const hurt = 1 - c.consciousness;
+    const skin = tint || [246 - hurt * 26, 236 - hurt * 70, 220 - hurt * 92];
+    const segs = [];
+    for (const [a, d, w, core] of LIMBS) {
+      const pa = proj(v, P[a].x, P[a].y, P[a].z), pb = proj(v, P[d].x, P[d].y, P[d].z);
+      if (pa.cz < NEAR || pb.cz < NEAR) continue;
+      segs.push({ z: (pa.cz + pb.cz) / 2, a: toScreen(v, pa), b: toScreen(v, pb), w, core });
+    }
+    segs.sort((p, q) => q.z - p.z);
+    ctx.lineCap = 'round';
+    // each part is outlined before it is filled, so overlapping limbs stay
+    // legible from behind instead of merging into one silhouette
+    for (const s of segs) {
+      const dark = clamp((s.z - 3) / 9, 0, 0.4);
+      const w = Math.max(1.4, s.w * 2 * s.a.s);
+      if (!tint) {
+        ctx.strokeStyle = 'rgba(9,8,14,' + (0.85 * alpha) + ')';
+        ctx.lineWidth = w + Math.max(1.6, w * 0.34);
+        ctx.beginPath(); ctx.moveTo(s.a.x, s.a.y); ctx.lineTo(s.b.x, s.b.y); ctx.stroke();
+      }
+      ctx.strokeStyle = css(mix(skin, [30, 26, 38], dark * 0.7 + (s.core ? 0 : 0.09)), alpha);
+      ctx.lineWidth = w;
+      ctx.beginPath(); ctx.moveTo(s.a.x, s.a.y); ctx.lineTo(s.b.x, s.b.y); ctx.stroke();
+    }
+    const hp = proj(v, P.head.x, P.head.y, P.head.z);
+    if (hp.cz > NEAR) {
+      const s = toScreen(v, hp);
+      const r = Math.max(2, 0.125 * s.s);
+      if (!tint) {
+        ctx.fillStyle = 'rgba(9,8,14,' + (0.85 * alpha) + ')';
+        ctx.beginPath(); ctx.arc(s.x, s.y, r + Math.max(1.6, r * 0.22), 0, 7); ctx.fill();
+      }
+      ctx.fillStyle = css(skin, alpha);
+      ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, 7); ctx.fill();
+      // a warm edge on the shoulders and skull picks the figure off the deck
+      if (!tint) {
+        ctx.strokeStyle = css(mix(rgb(g.district.accent), [255, 255, 255], 0.35), 0.5 * alpha);
+        ctx.lineWidth = Math.max(1, r * 0.22);
+        ctx.beginPath(); ctx.arc(s.x, s.y, r, -2.5, -0.4); ctx.stroke();
+      }
+    }
+  }
+
+  function bodyShadow(v, ctx, g) {
+    const b = g.body, lv = g.level;
+    const pel = b.parts.pelvis;
+    const gr = lv.groundAt(pel.x, pel.z, pel.y + 0.4);
+    if (!gr) return;
+    const p = proj(v, pel.x, gr.y + 0.02, pel.z);
+    if (p.cz < NEAR) return;
+    const s = toScreen(v, p);
+    const height = clamp(pel.y - gr.y, 0, 4);
+    const a = clamp(0.34 - height * 0.06, 0.04, 0.34);
+    const rx = (0.42 + height * 0.10) * s.s, ry = rx * 0.42;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.ellipse(s.x, s.y, rx, ry, 0, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+
+  /* --------------------------------------------------------------- frame */
+
+  function frame(v, g, t) {
+    const ctx = v.ctx;
+    ctx.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+    const D = g.district || K.world.DISTRICTS[0];
+    v.fog = rgb(D.sky[2]);
+
+    const shake = g.cam.shake;
+    setCamera(v, g.cam, (Math.random() - 0.5) * shake * 10, (Math.random() - 0.5) * shake * 10);
+
+    // sky, anchored to the horizon so pitching the camera feels right
+    const hy = clamp(v.horizonY, -v.h, v.h * 1.6);
+    const sky = ctx.createLinearGradient(0, hy - v.h * 1.1, 0, hy + v.h * 0.55);
+    sky.addColorStop(0, D.sky[0]);
+    sky.addColorStop(0.55, D.sky[1]);
+    sky.addColorStop(0.86, D.sky[2]);
+    sky.addColorStop(1, D.sky[3]);
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, v.w, v.h);
+
+    ctx.save();
+    for (let i = 0; i < 70; i++) {
+      const sx = hash(i * 7 + 1) * v.w;
+      const sy = hash(i * 13 + 3) * Math.max(10, hy) * 0.9;
+      const a = (1 - sy / Math.max(1, hy)) * 0.5 * hash(i * 3 + 9);
+      ctx.globalAlpha = clamp(a * (0.6 + 0.4 * Math.sin(t * 1.5 + i)), 0, 0.55);
+      ctx.fillStyle = '#dfe8ff';
+      ctx.fillRect(sx, sy, 1.4, 1.4);
+    }
+    ctx.restore();
+
+    // below the horizon is the city, not more sky: a tight glow band on the
+    // skyline, then everything under it falls away into the dark
+    const band = ctx.createLinearGradient(0, hy - v.h * 0.12, 0, hy + v.h * 0.10);
+    band.addColorStop(0, css(v.fog, 0));
+    band.addColorStop(0.55, css(rgb(D.sky[3]), 0.55));
+    band.addColorStop(1, css(v.fog, 0));
+    ctx.fillStyle = band;
+    ctx.fillRect(0, hy - v.h * 0.12, v.w, v.h * 0.22);
+    const deep = ctx.createLinearGradient(0, hy, 0, v.h);
+    deep.addColorStop(0, css(mix(v.fog, [4, 5, 10], 0.55), 0.9));
+    deep.addColorStop(0.45, css(mix(v.fog, [3, 4, 8], 0.86), 0.98));
+    deep.addColorStop(1, 'rgba(3,4,8,1)');
+    ctx.fillStyle = deep;
+    ctx.fillRect(0, hy, v.w, v.h - hy);
+
+    // ---- collect and paint the world
+    v.items.length = 0;
+    drawScene(v, g);
+
+    const pel = g.body.parts.pelvis;
+    const pd = proj(v, pel.x, pel.y, pel.z).cz;
+    v.items.push({
+      z: pd,
+      draw: (ctx2) => {
+        bodyShadow(v, ctx2, g);
+        for (const gh of g.ghosts) {
+          const a = (1 - gh.t / 0.28) * 0.16;
+          ctx2.globalAlpha = a;
+          ctx2.fillStyle = D.accent;
+          for (const pt of gh.pts) {
+            const p = proj(v, pt.x, pt.y, pt.z);
+            if (p.cz < NEAR) continue;
+            const s = toScreen(v, p);
+            ctx2.beginPath(); ctx2.arc(s.x, s.y, Math.max(1, pt.r * s.s), 0, 7); ctx2.fill();
+          }
+        }
+        ctx2.globalAlpha = 1;
+        drawBody(v, ctx2, g, 1, null);
+      }
+    });
+
+    for (const p of g.particles) {
+      const cp = proj(v, p.x, p.y, p.z);
+      if (cp.cz < NEAR) continue;
+      v.items.push({
+        z: cp.cz - 0.01,
+        draw: (ctx2) => {
+          const s = toScreen(v, cp);
+          const a = 1 - p.life / p.max;
+          ctx2.globalAlpha = p.kind === 'spark' ? a : a * 0.35;
+          ctx2.fillStyle = p.kind === 'spark' ? '#ffdba0' : '#d9cfc0';
+          const r = Math.max(0.8, p.r * s.s * (1 + p.life * 1.5));
+          ctx2.beginPath(); ctx2.arc(s.x, s.y, r, 0, 7); ctx2.fill();
+          ctx2.globalAlpha = 1;
+        }
+      });
+    }
+
+    v.items.sort((a, b) => b.z - a.z);
+    for (const it of v.items) it.draw(ctx);
+
+    // ---- in-world popups
+    ctx.textAlign = 'center';
+    for (const p of g.popups) {
+      const cp = proj(v, p.x, p.y, p.z);
+      if (cp.cz < NEAR) continue;
+      const s = toScreen(v, cp);
+      const a = clamp(1.6 - p.t, 0, 1) * clamp(p.t * 5, 0, 1);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.kind === 'gate' ? '#8affc0' : p.kind === 'good' ? D.accent : '#fff';
+      ctx.font = '600 ' + clamp(0.36 * s.s, 10, 26).toFixed(0) + 'px ui-monospace, Menlo, monospace';
+      ctx.fillText(p.text, s.x, s.y);
+      ctx.globalAlpha = 1;
+    }
+    ctx.textAlign = 'left';
+
+    weather(v, ctx, g, t);
+
+    const vg = ctx.createRadialGradient(v.w / 2, v.h * 0.5, v.h * 0.28, v.w / 2, v.h * 0.5, v.h * 0.95);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, v.w, v.h);
+
+    if (shake > 0.25) {
+      ctx.globalAlpha = clamp((shake - 0.25) * 0.45, 0, 0.3);
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, v.w, v.h); ctx.globalAlpha = 1;
+    }
+    if (g.gateFlash > 0) {
+      ctx.globalAlpha = g.gateFlash * 0.20;
+      ctx.fillStyle = D.accent; ctx.fillRect(0, 0, v.w, v.h); ctx.globalAlpha = 1;
+    }
+  }
+
+  function weather(v, ctx, g, t) {
+    const d = g.districtIndex;
+    ctx.save();
+    if (d === 3) {
+      ctx.strokeStyle = 'rgba(190,230,255,0.28)'; ctx.lineWidth = 1;
+      for (let i = 0; i < 80; i++) {
+        const sp = 420 + hash(i * 3) * 300;
+        const x = (hash(i * 11) * v.w * 1.3 - g.cam.x * 30) % (v.w * 1.3);
+        const y = (hash(i * 7) * v.h + t * sp) % v.h;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 2, y + 12); ctx.stroke();
+      }
+    } else if (d === 4) {
+      for (let i = 0; i < 14; i++) {
+        const z = Math.floor(g.cam.z / 9) * 9 + i * 9;
+        const ph = (t * 0.3 + hash(i * 5)) % 1;
+        const p = proj(v, (hash(i * 3) - 0.5) * 5, g.groundRef + ph * 3.4, z);
+        if (p.cz < NEAR) continue;
+        const s = toScreen(v, p);
+        ctx.globalAlpha = 0.14 * (1 - ph);
+        ctx.fillStyle = '#ffd9b0';
+        ctx.beginPath(); ctx.arc(s.x, s.y, Math.max(3, (0.4 + ph * 1.4) * s.s), 0, 7); ctx.fill();
+      }
+    } else if (d >= 5) {
+      ctx.strokeStyle = 'rgba(200,215,255,0.15)'; ctx.lineWidth = 1;
+      for (let i = 0; i < 22; i++) {
+        const y = hash(i * 17) * v.h;
+        const x = (hash(i * 23) * v.w * 1.6 + t * (260 + hash(i) * 380)) % (v.w * 1.6) - v.w * 0.3;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 30 + hash(i * 3) * 44, y + 2); ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  return { View, resize, frame };
+})();
+
+/* ---- 09-audio.js ---- */
+/* KINESIS — sound, synthesised on the fly. No files to load, nothing to
+   wait for. Off until the player asks for it, because a game that starts
+   making noise on a phone is a game that gets closed. */
+K.audio = (function () {
+  let ctx = null, master = null, on = false, last = {};
+
+  function init() {
+    if (ctx) return true;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return false;
+      ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = 0.32;
+      master.connect(ctx.destination);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function enable(v) {
+    on = v;
+    if (v) { if (init() && ctx.state === 'suspended') ctx.resume(); }
+  }
+
+  function noiseBuffer(dur) {
+    const n = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    return buf;
+  }
+
+  function throttle(key, ms) {
+    const t = performance.now();
+    if (last[key] && t - last[key] < ms) return false;
+    last[key] = t; return true;
+  }
+
+  function noise(dur, freq, q, gain, type) {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(dur);
+    const f = ctx.createBiquadFilter();
+    f.type = type || 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(gain, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+    src.connect(f); f.connect(g); g.connect(master);
+    src.start();
+  }
+
+  function tone(f0, f1, dur, gain, type) {
+    const o = ctx.createOscillator();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(f0, ctx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), ctx.currentTime + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(gain, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+    o.connect(g); g.connect(master);
+    o.start(); o.stop(ctx.currentTime + dur + 0.02);
+  }
+
+  const api = {
+    enable, isOn: () => on,
+    step(v) { if (!on || !ctx || !throttle('step', 90)) return; noise(0.09, 900 + Math.random() * 500, 1.2, 0.05 + v * 0.06); },
+    impact(v) {
+      if (!on || !ctx || !throttle('impact', 60)) return;
+      noise(0.22, 240, 0.8, 0.10 + v * 0.28, 'lowpass');
+      tone(120 + v * 60, 40, 0.20, 0.10 + v * 0.2, 'sine');
+    },
+    jump() { if (!on || !ctx) return; noise(0.16, 500, 0.9, 0.07, 'highpass'); },
+    grab() { if (!on || !ctx) return; noise(0.10, 2200, 4, 0.10); tone(420, 620, 0.10, 0.06, 'triangle'); },
+    gate() {
+      if (!on || !ctx) return;
+      [392, 523, 659].forEach((f, i) => setTimeout(() => on && tone(f, f, 0.5, 0.09, 'triangle'), i * 90));
+    },
+    buy() { if (!on || !ctx) return; tone(660, 880, 0.08, 0.05, 'square'); },
+    down() { if (!on || !ctx) return; tone(180, 60, 0.5, 0.12, 'sawtooth'); }
+  };
+  return api;
+})();
+
+/* ---- 10-ui.js ---- */
+/* KINESIS — DOM layer. Text stays out of the canvas so it stays sharp,
+   and so the whole panel scrolls like a normal page on a phone. */
+K.ui = (function () {
+  const U = K.util, prog = K.prog, E = K.euphoria;
+  const { clamp } = U;
+
+  const STATE_COL = {
+    RUN: '#8fe3a0', AIRBORNE: '#7ec8ff', CATCH: '#ffd166', VAULT: '#b3a4ff',
+    ROLL: '#ffb057', STAGGER: '#ffa14a', PROTECT: '#ff6b6b', DOWN: '#ff8fa3',
+    RISE: '#ffc9d1', WIPEOUT: '#ff4d5e'
+  };
+  const STATE_HINT = {
+    RUN: 'balance holding', AIRBORNE: 'reading the landing', CATCH: 'hanging on',
+    VAULT: 'hand planted', ROLL: 'bleeding off the drop', STAGGER: 'stepping under the fall',
+    PROTECT: 'arms out, head covered', DOWN: 'still', RISE: 'pushing up', WIPEOUT: 'done'
+  };
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  function $(id) { return document.getElementById(id); }
+
+  function build(app, game, state) {
+    const ui = { app, game, state, tab: 'train', buyMode: 1, dirty: true, rows: {}, acc: 0 };
+
+    /* ---------------- HUD (overlaid on the canvas) */
+    const hud = $('hud');
+    const top = el('div', 'hud-top');
+    const dl = el('div', 'district');
+    ui.districtName = el('div', 'district-name', 'THE FLATS');
+    ui.districtTag = el('div', 'district-tag', '');
+    dl.append(ui.districtName, ui.districtTag);
+    const dr = el('div', 'readout');
+    ui.distance = el('div', 'distance', '0.0 m');
+    ui.best = el('div', 'best', 'best 0 m');
+    dr.append(ui.distance, ui.best);
+    top.append(dl, dr);
+
+    const body = el('div', 'hud-body');
+    ui.chip = el('div', 'chip');
+    ui.chipState = el('span', 'chip-state', 'RUN');
+    ui.chipHint = el('span', 'chip-hint', '');
+    ui.chip.append(ui.chipState, ui.chipHint);
+
+    const bars = el('div', 'bars');
+    function bar(label) {
+      const w = el('div', 'bar');
+      const l = el('div', 'bar-label', label);
+      const t = el('div', 'bar-track');
+      const f = el('div', 'bar-fill');
+      t.append(f); w.append(l, t);
+      bars.append(w);
+      return f;
+    }
+    ui.barIntegrity = bar('FRAME');
+    ui.barConsc = bar('CONSC');
+    ui.barBalance = bar('BAL');
+    ui.notes = el('div', 'notes');
+    body.append(ui.chip, bars, ui.notes);
+
+    ui.banner = el('div', 'banner');
+    ui.bannerTitle = el('div', 'banner-title');
+    ui.bannerSub = el('div', 'banner-sub');
+    ui.banner.append(ui.bannerTitle, ui.bannerSub);
+
+    const wallet = el('div', 'wallet');
+    ui.momentum = el('div', 'momentum', '0');
+    ui.rate = el('div', 'rate', '0/s');
+    wallet.append(ui.momentum, ui.rate);
+
+    ui.sound = el('button', 'icon-btn', '♪');
+    ui.sound.title = 'sound';
+    ui.sound.onclick = () => {
+      state.muted = !state.muted;
+      K.audio.enable(!state.muted);
+      ui.sound.classList.toggle('off', state.muted);
+      prog.save(state);
+    };
+    ui.sound.classList.toggle('off', !!state.muted);
+
+    ui.camBtn = el('button', 'cam-btn', K.game.camName(game));
+    ui.camBtn.title = 'camera';
+    ui.camBtn.onclick = () => {
+      ui.camBtn.textContent = K.game.cycleCam(game);
+      prog.save(state);
+    };
+
+    hud.append(top, body, wallet, ui.banner, ui.sound, ui.camBtn);
+
+    /* ---------------- panel */
+    const panel = $('panel');
+    const tabs = el('nav', 'tabs');
+    ui.tabButtons = {};
+    for (const [key, label] of [['train', 'TRAIN'], ['route', 'ROUTE'], ['mind', 'MIND'], ['log', 'LOG']]) {
+      const b = el('button', 'tab', label);
+      b.onclick = () => { ui.tab = key; refreshTabs(ui); render(ui); };
+      ui.tabButtons[key] = b;
+      tabs.append(b);
+    }
+    ui.bodyEl = el('div', 'panel-body');
+    panel.append(tabs, ui.bodyEl);
+
+    refreshTabs(ui);
+    render(ui);
+    return ui;
+  }
+
+  function refreshTabs(ui) {
+    for (const k in ui.tabButtons) ui.tabButtons[k].classList.toggle('on', k === ui.tab);
+  }
+
+  /* ---------------- panel contents */
+
+  function buyCount(s, key, mode) {
+    if (mode === 1) return 1;
+    if (mode === 10) return 10;
+    let n = 0, spend = 0;
+    while (n < 500) {
+      const c = prog.cost(s, key, n + 1);
+      if (c > s.momentum) break;
+      spend = c; n++;
+    }
+    return Math.max(1, n);
+  }
+
+  function render(ui) {
+    const s = ui.state, g = ui.game;
+    const b = ui.bodyEl;
+    b.innerHTML = '';
+    ui.rows = {};
+    if (ui.tab === 'train') renderTrain(ui, b, s);
+    else if (ui.tab === 'route') renderRoute(ui, b, s);
+    else if (ui.tab === 'mind') renderMind(ui, b, s);
+    else renderLog(ui, b, s);
+  }
+
+  function renderTrain(ui, b, s) {
+    const head = el('div', 'row-head');
+    head.append(el('div', 'row-title', 'TRAIN THE BODY'));
+    const modes = el('div', 'modes');
+    for (const m of [1, 10, 'MAX']) {
+      const btn = el('button', 'mode' + (ui.buyMode === m ? ' on' : ''), m === 'MAX' ? 'MAX' : 'x' + m);
+      btn.onclick = () => { ui.buyMode = m; render(ui); };
+      modes.append(btn);
+    }
+    head.append(modes);
+    b.append(head);
+
+    for (const u of prog.UPGRADES) {
+      if (!prog.unlocked(s, u.key)) {
+        const lock = el('div', 'card locked');
+        lock.append(el('div', 'card-name', u.name));
+        lock.append(el('div', 'card-blurb', 'unlocks when a gate opens'));
+        b.append(lock);
+        continue;
+      }
+      const card = el('div', 'card');
+      const l1 = el('div', 'card-line');
+      l1.append(el('div', 'card-name', u.name));
+      const lvl = el('div', 'card-level', 'LV ' + prog.level(s, u.key));
+      l1.append(lvl);
+      const read = el('div', 'card-read', '');
+      const blurb = el('div', 'card-blurb', u.blurb);
+      const buy = el('button', 'buy');
+      const n = () => buyCount(s, u.key, ui.buyMode);
+      buy.onclick = () => {
+        const count = n();
+        let bought = 0;
+        for (let i = 0; i < count; i++) { if (!prog.buy(s, u.key)) break; bought++; }
+        if (bought) {
+          K.audio.buy();
+          K.game.restat(ui.game);
+          prog.save(s);
+          render(ui);
+        }
+      };
+      card.append(l1, read, blurb, buy);
+      b.append(card);
+      ui.rows[u.key] = { card, lvl, read, buy, u };
+    }
+    updateTrain(ui);
+  }
+
+  function updateTrain(ui) {
+    const s = ui.state;
+    const st = prog.physStats(s);
+    for (const key in ui.rows) {
+      const r = ui.rows[key];
+      const lv = prog.level(s, key);
+      r.lvl.textContent = 'LV ' + lv;
+      r.read.textContent = r.u.read(st[key]);
+      const count = buyCount(s, key, ui.buyMode);
+      const cost = prog.cost(s, key, ui.buyMode === 'MAX' ? count : ui.buyMode);
+      const can = s.momentum >= cost;
+      r.buy.textContent = (count > 1 ? '+' + count + '   ' : '') + U.num(cost) + ' M';
+      r.buy.classList.toggle('can', can);
+      r.buy.disabled = !can;
+    }
+  }
+
+  function renderRoute(ui, b, s) {
+    b.append(el('div', 'row-title', 'THE ROUTE'));
+    const cur = Math.max(s.best, s.bestRun);
+    for (let i = 0; i < K.world.GATES.length; i++) {
+      const gate = K.world.GATES[i];
+      const open = !!s.gates[gate.name];
+      const lvFn = prog.statLevelFn(s);
+      const have = lvFn(gate.stat);
+      const met = have >= gate.need;
+      const card = el('div', 'card gate' + (open ? ' open' : met ? ' ready' : ''));
+      const l1 = el('div', 'card-line');
+      l1.append(el('div', 'card-name', gate.name));
+      l1.append(el('div', 'card-level', U.dist(gate.at)));
+      card.append(l1);
+      card.append(el('div', 'card-blurb', gate.blurb));
+      const reqName = gate.stat === 'all' ? 'EVERY STAT' : prog.BY_KEY[gate.stat].name;
+      const req = el('div', 'req');
+      req.append(el('span', 'req-name', reqName));
+      const val = el('span', 'req-val' + (met ? ' met' : ''), have + ' / ' + gate.need);
+      req.append(val);
+      card.append(req);
+      card.append(el('div', 'card-state', open ? 'OPEN — cleared once, and every run since'
+        : met ? 'READY — the body can do this now' : 'SHORT — it will not go'));
+      b.append(card);
+    }
+    const d = el('div', 'card');
+    d.append(el('div', 'card-name', 'DISTRICTS'));
+    for (const D of K.world.DISTRICTS) {
+      const r = el('div', 'dline');
+      r.append(el('span', 'dname', D.name));
+      r.append(el('span', 'dmult', 'x' + D.mult + ' momentum'));
+      if (cur >= (D.end === Infinity ? 12600 : D.end) - 400) r.classList.add('seen');
+      d.append(r);
+    }
+    b.append(d);
+  }
+
+  function renderMind(ui, b, s) {
+    b.append(el('div', 'row-title', 'MUSCLE MEMORY'));
+    const gain = prog.prestigeGain(s);
+    const card = el('div', 'card');
+    card.append(el('div', 'card-blurb',
+      'Wipe the training and keep what the body learned. Instinct is permanent: '
+      + '+' + (prog.INSTINCT_ECON * 100).toFixed(0) + '% momentum and +'
+      + (prog.INSTINCT_BODY * 100).toFixed(1) + '% to every physical stat, each point.'));
+    const l = el('div', 'card-line');
+    l.append(el('div', 'card-name', 'INSTINCT'));
+    l.append(el('div', 'card-level', s.instinct + (gain > 0 ? '  →  ' + (s.instinct + gain) : '')));
+    card.append(l);
+    const btn = el('button', 'buy big' + (gain > 0 ? ' can' : ''));
+    btn.textContent = gain > 0 ? 'RESET FOR +' + gain + ' INSTINCT' : 'REACH 1.2 km IN ONE RUN';
+    btn.disabled = gain <= 0;
+    btn.onclick = () => {
+      if (!confirm('Reset every upgrade and gate for +' + gain + ' instinct?')) return;
+      prog.prestige(s);
+      K.game.restat(ui.game);
+      K.game.newRun(ui.game);
+      prog.save(s);
+      render(ui);
+    };
+    card.append(btn);
+    b.append(card);
+
+    if (s.instinct > 0) {
+      const auto = el('div', 'card');
+      const line = el('div', 'card-line');
+      line.append(el('div', 'card-name', 'INSTINCT BUYING'));
+      const t = el('button', 'toggle' + (s.auto ? ' on' : ''), s.auto ? 'ON' : 'OFF');
+      t.onclick = () => { s.auto = !s.auto; prog.save(s); render(ui); };
+      line.append(t);
+      auto.append(line, el('div', 'card-blurb', 'Spends momentum on the cheapest useful upgrade, forever, without you.'));
+      b.append(auto);
+    }
+
+    const stats = el('div', 'card');
+    stats.append(el('div', 'card-name', 'RECORD'));
+    const pairs = [
+      ['best run', U.dist(s.best)],
+      ['runs', s.runs],
+      ['ground covered', U.dist(s.totalDistance)],
+      ['momentum earned', U.num(s.lifetime)],
+      ['resets', s.resets],
+      ['gates open', prog.clearedGates(s) + ' / ' + K.world.GATES.length]
+    ];
+    for (const [k, val] of pairs) {
+      const r = el('div', 'dline');
+      r.append(el('span', 'dname', k)); r.append(el('span', 'dmult', String(val)));
+      stats.append(r);
+    }
+    b.append(stats);
+
+    const danger = el('div', 'card');
+    const wipe = el('button', 'toggle danger', 'ERASE SAVE');
+    wipe.onclick = () => {
+      if (!confirm('Erase everything, permanently?')) return;
+      prog.wipe(); location.reload();
+    };
+    danger.append(wipe);
+    b.append(danger);
+  }
+
+  function renderLog(ui, b, s) {
+    b.append(el('div', 'row-title', 'RUN LOG'));
+    if (!s.log.length) b.append(el('div', 'card-blurb', 'Nothing yet. Give it a minute.'));
+    for (const entry of s.log) {
+      const c = el('div', 'card log ' + entry.kind);
+      const l = el('div', 'card-line');
+      l.append(el('div', 'card-name', entry.kind === 'gate' ? 'GATE'
+        : entry.kind === 'reset' ? 'RESET' : 'RUN ' + (entry.run || '')));
+      l.append(el('div', 'card-level', U.dist(entry.d || 0)));
+      c.append(l);
+      c.append(el('div', 'card-blurb', entry.text + (entry.detail ? ' — ' + entry.detail : '')));
+      b.append(c);
+    }
+  }
+
+  /* ---------------- per-frame HUD */
+
+  function tick(ui, dt) {
+    const g = ui.game, s = ui.state, c = g.ctrl;
+    ui.distance.textContent = U.dist(g.distance);
+    ui.best.textContent = 'best ' + U.dist(Math.max(s.best, g.distance));
+    ui.districtName.textContent = g.district.name;
+    ui.districtTag.textContent = g.district.tag + '  ·  x' + g.district.mult;
+    ui.momentum.textContent = U.num(s.momentum) + ' M';
+    ui.rate.textContent = U.num(g.rateEMA) + ' /s';
+
+    const st = c.state;
+    ui.chipState.textContent = st;
+    ui.chipHint.textContent = STATE_HINT[st] || '';
+    const col = STATE_COL[st] || '#fff';
+    ui.chip.style.color = col;
+    ui.chip.style.borderColor = col + '55';
+    ui.chip.style.background = col + '14';
+
+    ui.barIntegrity.style.width = (c.integrity * 100).toFixed(1) + '%';
+    ui.barIntegrity.style.background = c.integrity > 0.5 ? '#8fe3a0' : c.integrity > 0.22 ? '#ffb057' : '#ff5d6c';
+    ui.barConsc.style.width = (c.consciousness * 100).toFixed(1) + '%';
+    const bal = clamp(1 - Math.abs(c.balanceErr) / Math.max(0.1, c.reach), 0, 1);
+    ui.barBalance.style.width = (bal * 100).toFixed(1) + '%';
+    ui.barBalance.style.background = bal > 0.4 ? '#7ec8ff' : '#ffa14a';
+
+    if (c.notes.length !== ui.noteCount || ui.noteT > 0.2) {
+      ui.noteCount = c.notes.length; ui.noteT = 0;
+      ui.notes.innerHTML = '';
+      for (const n of c.notes.slice(-3)) {
+        const e = el('div', 'note ' + n.kind, n.text);
+        e.style.opacity = clamp(1.2 - n.t / 3, 0, 1);
+        ui.notes.append(e);
+      }
+    }
+    ui.noteT = (ui.noteT || 0) + dt;
+
+    if (g.banner) {
+      ui.banner.classList.add('show');
+      ui.banner.classList.toggle('gate', !!g.banner.gate);
+      ui.banner.classList.toggle('record', !!g.banner.record);
+      ui.bannerTitle.textContent = g.banner.title;
+      ui.bannerSub.textContent = g.banner.sub;
+    } else ui.banner.classList.remove('show');
+
+    ui.acc += dt;
+    if (ui.acc > 0.2) {
+      ui.acc = 0;
+      if (ui.tab === 'train') updateTrain(ui);
+    }
+  }
+
+  return { build, render, tick, el, STATE_COL };
+})();
+
+/* ---- 11-main.js ---- */
+/* KINESIS — boot, loop, save. */
+(function () {
+  const U = K.util, prog = K.prog;
+
+  let state, game, view, ui, last = 0, saveT = 0, autoT = 0, splashUp = true;
+
+  function boot() {
+    state = prog.load() || prog.fresh();
+    const report = prog.offline(state, Date.now());
+
+    game = K.game.create(state);
+    view = K.render.View(document.getElementById('view'));
+    K.render.resize(view);
+    ui = K.ui.build(document.getElementById('app'), game, state);
+    K.audio.enable(!state.muted);
+
+    window.addEventListener('resize', () => K.render.resize(view));
+    window.addEventListener('orientationchange', () => setTimeout(() => K.render.resize(view), 250));
+
+    const splash = document.getElementById('splash');
+    const fresh = state.runs === 0 && state.lifetime < 1;
+    if (!fresh) {
+      splash.classList.add('gone');
+      splashUp = false;
+      if (report && report.gained > 1) ghostCard(report);
+    } else {
+      splash.classList.remove('gone');
+      document.getElementById('begin').onclick = () => start(true);
+      document.getElementById('begin-quiet').onclick = () => start(false);
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { prog.save(state); }
+      else {
+        const r = prog.offline(state, Date.now());
+        if (r && r.gained > 1) ghostCard(r);
+        last = performance.now();
+      }
+    });
+
+    window.__g = game; window.__ui = ui;   // deliberate: inspect the sim from a console
+    last = performance.now();
+    requestAnimationFrame(loop);
+  }
+
+  function start(sound) {
+    state.muted = !sound;
+    K.audio.enable(sound);
+    ui.sound.classList.toggle('off', !sound);
+    document.getElementById('splash').classList.add('gone');
+    splashUp = false;
+    prog.save(state);
+  }
+
+  function ghostCard(r) {
+    const box = document.getElementById('ghost');
+    document.getElementById('ghost-time').textContent = U.time(r.away);
+    document.getElementById('ghost-gain').textContent = '+' + U.num(r.gained) + ' M';
+    document.getElementById('ghost-note').textContent = r.capped
+      ? 'Your ghost ran out of road — GHOST banks longer.'
+      : 'It kept running at ' + (r.eff * 100).toFixed(0) + '% of your pace.';
+    box.classList.add('show');
+    document.getElementById('ghost-ok').onclick = () => box.classList.remove('show');
+    setTimeout(() => box.classList.remove('show'), 9000);
+  }
+
+  function autoBuy(dt) {
+    if (!state.auto || !state.instinct) return;
+    autoT += dt;
+    if (autoT < 0.6) return;
+    autoT = 0;
+    let best = null, bestCost = Infinity;
+    for (const u of prog.UPGRADES) {
+      if (!prog.unlocked(state, u.key)) continue;
+      const c = prog.cost(state, u.key);
+      if (c < bestCost && c <= state.momentum) { best = u.key; bestCost = c; }
+    }
+    if (best) {
+      prog.buy(state, best);
+      K.game.restat(game);
+      if (ui.tab === 'train') K.ui.render(ui);
+    }
+  }
+
+  function loop(t) {
+    requestAnimationFrame(loop);
+    const dt = Math.min(0.1, (t - last) / 1000) || 0;
+    last = t;
+    if (splashUp) { K.render.frame(view, game, t / 1000); return; }
+
+    K.game.update(game, dt);
+    K.render.frame(view, game, t / 1000);
+    K.ui.tick(ui, dt);
+    autoBuy(dt);
+
+    saveT += dt;
+    if (saveT > 10) { saveT = 0; prog.save(state); }
+  }
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') setTimeout(boot, 0);
+  else window.addEventListener('DOMContentLoaded', boot);
+})();
+
+</script>

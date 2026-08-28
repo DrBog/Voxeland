@@ -1,5 +1,12 @@
 # VOXELAND
 
+> **Also in this repo:** [`parkour/`](parkour/) — **KINESIS**, a 3D idle
+> parkour runner built on an active ragdoll. No animations: every stride,
+> stumble, ledge catch and collapse comes out of the physics. Open
+> `parkour/dist/kinesis.html` in a browser; `node --test parkour/test/` runs
+> its suite.
+
+
 *The city stopped breathing. You didn't.*
 
 A grim voxel zombie-survival game for Android, written in Kotlin on raw

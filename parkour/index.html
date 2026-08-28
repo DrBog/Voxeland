@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#06080e">
+<title>KINESIS</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <section id="stage">
+    <canvas id="view"></canvas>
+    <div id="hud"></div>
+  </section>
+  <section id="panel"></section>
+</div>
+
+<div id="ghost">
+  <div class="ghost-head">
+    <span class="ghost-title">GHOST RUN · <span id="ghost-time">0m</span></span>
+    <span id="ghost-gain">+0</span>
+  </div>
+  <div id="ghost-note"></div>
+  <button id="ghost-ok">GOOD</button>
+</div>
+
+<div id="splash">
+  <div class="title">KINESIS</div>
+  <div class="tagline">AN IDLE PARKOUR RUNNER WITH A REAL BODY</div>
+  <p class="blurb">
+    Nobody is driving. The runner is an <b>active ragdoll</b> — balance, stumbles,
+    catches and collapses all come out of the physics, never out of an animation.
+    You train the body; the body takes the route.
+    <br><br>It runs while you watch, and while you don't.
+  </p>
+  <div class="splash-btns">
+    <button class="start" id="begin">BEGIN</button>
+    <button class="start quiet" id="begin-quiet">BEGIN MUTED</button>
+  </div>
+</div>
+
+<script src="src/00-util.js"></script>
+<script src="src/01-physics.js"></script>
+<script src="src/02-ragdoll.js"></script>
+<script src="src/03-euphoria.js"></script>
+<script src="src/04-world.js"></script>
+<script src="src/05-ai.js"></script>
+<script src="src/06-progression.js"></script>
+<script src="src/07-game.js"></script>
+<script src="src/08-render.js"></script>
+<script src="src/09-audio.js"></script>
+<script src="src/10-ui.js"></script>
+<script src="src/11-main.js"></script>
+</body>
+</html>
