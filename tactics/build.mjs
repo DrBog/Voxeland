@@ -8,7 +8,14 @@ import fs from 'fs';
 import path from 'path';
 
 const dir = path.dirname(new URL(import.meta.url).pathname);
-const css = fs.readFileSync(path.join(dir, 'style.css'), 'utf8');
+/* The menu backdrop is a still of the game, inlined so the page stays one
+   file. It lives outside style.css as base64 because a 21 KB blob in the
+   middle of a stylesheet makes the stylesheet unreadable, and the source
+   being readable is the point of shipping it unminified. */
+const plate = (n) => fs.readFileSync(path.join(dir, 'assets', n), 'utf8').trim();
+const css = fs.readFileSync(path.join(dir, 'style.css'), 'utf8')
+  .replace('url(MENU_BACKDROP_WIDE)', 'url("' + plate('menu-wide.webp.b64') + '")')
+  .replace('url(MENU_BACKDROP)', 'url("' + plate('menu.webp.b64') + '")');
 const files = fs.readdirSync(path.join(dir, 'src')).filter(f => f.endsWith('.js')).sort();
 const js = files.map(f => '/* ---- ' + f + ' ---- */\n' + fs.readFileSync(path.join(dir, 'src', f), 'utf8')).join('\n');
 const shell = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');

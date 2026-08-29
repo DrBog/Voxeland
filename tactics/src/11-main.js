@@ -454,6 +454,11 @@
       g.running = true;
     },
     cycle: () => cycleYard(),
+    fresh: () => {
+      g.run = K.camp.fresh(); K.camp.save(g.run);
+      g.yard = null; K.ui.zonePill(null);
+      newBattle(); g.running = true;
+    },
     again: () => {
       if (g.offers && g.taken !== null) K.camp.take(g.run, g.offers[g.taken]);
       g.offers = null; g.taken = null;
@@ -472,6 +477,7 @@
   });
 
   g.run = K.camp.load();
+  K.ui.intro(g.run);
   newBattle();
   measure();
   window.addEventListener('resize', measure);

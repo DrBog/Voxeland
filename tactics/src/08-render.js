@@ -639,6 +639,12 @@ K.render = (function () {
   }
 
   function billboards(v, ctx, g) {
+    /* Portrait mode: the world and the bodies, none of the readout. Name
+       labels and health bars are the interface talking, and in a still of
+       the game — a menu background, a screenshot — they read as debris
+       hanging in the air. The rings stay: they are the only thing telling
+       you the figures are on two sides. */
+    if (g.portrait) return;
     const b = g.battle;
     const list = [];
     for (const u of b.units) {

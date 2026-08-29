@@ -170,15 +170,82 @@ html, body {
 #btnWipe { font-family: inherit; font-size: 9px; letter-spacing: 0.12em; color: var(--theirs);
   background: none; border: 1px solid rgba(255,125,107,0.35); border-radius: 6px; padding: 4px 8px; cursor: pointer; }
 
-#over, #intro {
+#over {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   background: rgba(5, 7, 12, 0.86); backdrop-filter: blur(4px); z-index: 6; padding: 16px;
 }
-.overbox, .introbox {
+.overbox {
   text-align: center; padding: 24px 22px; max-width: 340px;
   border: 1px solid var(--edge); border-radius: 16px; background: rgba(12,15,24,0.94);
   /* a long roster and three offers must never push the button off a phone */
   max-height: 88vh; overflow-y: auto;
+}
+
+/* ------------------------------------------------------------- title screen
+
+   A screen, not a dialog on a dark sheet. The backdrop is a still of the
+   game itself — the Ashfall at a low camera, which is the one angle where
+   the sky, the ridge line and the embers are all in frame; at the tactical
+   pitch the horizon sits above the top of the screen and none of them are.
+
+   Three layers over it, and each is doing a specific job. The vignette
+   pulls the corners down so the eye lands on the peak and the figures. The
+   scrim is two soft gradients, top and bottom, so the title and the buttons
+   have something to sit on that is darker than the sky behind them. The
+   grain is there because the sky is one long smooth gradient and a 21 KB
+   WebP will band it — noise at four per cent breaks the bands up and costs
+   nothing. */
+#intro {
+  position: absolute; inset: 0; z-index: 6; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  background: #14090a;
+}
+#introArt {
+  position: absolute; inset: -3% -3%;
+  background-image: url(MENU_BACKDROP);
+  background-size: cover; background-position: 50% 42%;
+  animation: drift 46s ease-in-out infinite alternate;
+}
+@keyframes drift {
+  from { transform: scale(1.00) translate3d(0, 0, 0); }
+  to   { transform: scale(1.07) translate3d(-1.2%, -1.6%, 0); }
+}
+@media (prefers-reduced-motion: reduce) { #introArt { animation: none; } }
+#introVig {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(118% 74% at 50% 44%, rgba(0,0,0,0) 34%, rgba(6,4,6,0.42) 72%, rgba(4,3,5,0.88) 100%),
+    linear-gradient(to bottom, rgba(10,5,6,0.34) 0%, rgba(10,5,6,0.05) 16%, rgba(8,5,8,0.00) 32%,
+      rgba(7,5,9,0.40) 56%, rgba(6,5,10,0.86) 78%, rgba(5,4,9,0.95) 100%);
+}
+#introGrain {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0.04; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/></filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
+}
+.introbox {
+  position: relative; z-index: 1; text-align: center;
+  padding: 0 20px calc(26px + var(--safe-b));
+  width: 100%; max-width: 400px; margin: 0 auto;
+  max-height: 100%; overflow-y: auto;
+}
+.titleblock { margin-bottom: 26px; }
+.menu { display: flex; flex-direction: column; gap: 9px; }
+
+/* The backdrop is a portrait plate, because the game is played in portrait.
+   On a landscape window `cover` crops it to a horizontal band and the menu,
+   anchored to the bottom, ends up marooned under a lot of empty sky. So on
+   a wide window the block centres and the type comes up a size — it is the
+   same screen, laid out for the shape it is actually in. */
+@media (min-aspect-ratio: 1/1) {
+  #intro { justify-content: center; }
+  /* and its own plate, not the portrait one cropped: `cover` on a wide
+     window threw away the mountain entirely and left the buttons sitting on
+     two figures' faces. This one is framed for the shape — the island whole,
+     both lines drawn up, the peak behind the title. */
+  #introArt { background-image: url(MENU_BACKDROP_WIDE); background-position: 50% 46%; }
+  .introbox { padding-bottom: 20px; max-width: 440px; }
+  .introbox h1 { font-size: 40px; }
+  .titleblock { margin-bottom: 30px; }
 }
 .overbox b { display: block; font-size: 21px; letter-spacing: 0.2em; }
 .overbox span { display: block; font-size: 11px; color: var(--dim); margin: 8px 0 12px; }
@@ -205,26 +272,81 @@ html, body {
 .spoil.recruit b { color: var(--mine); }
 .spoil.rally b, .spoil.drill b { color: var(--good); }
 .spoil.picked { background: rgba(138,255,192,0.12); border-color: var(--good); }
-.introbox h1 { margin: 0; font-size: 28px; letter-spacing: 0.32em; font-weight: 700; }
-.introbox .sub { color: var(--dim); font-size: 11px; margin: 8px 0 16px; letter-spacing: 0.04em; }
-.introbox ul { text-align: left; padding-left: 16px; margin: 0 0 18px; }
-.introbox li { font-size: 11px; color: var(--dim); line-height: 1.65; }
+/* The title carries its own darkness in its shadow rather than sitting on a
+   panel. How far up the frame it lands depends on how many buttons are
+   under it — with a run in progress there are four, which puts IRONWAKE
+   straight across the figures on the plateau — so it needs to hold against
+   anything. A scrim element was the first attempt and it drew a visible
+   band right across the sky: a gradient inside a full-width box has edges,
+   and you can see every one of them. Stacked shadows have no box. */
+.introbox h1 {
+  margin: 0; font-size: 33px; letter-spacing: 0.36em; font-weight: 700;
+  /* the last letter's tracking pushes the word off centre without this */
+  text-indent: 0.36em;
+  text-shadow:
+    0 0 4px rgba(4,3,6,0.95), 0 0 14px rgba(4,3,6,0.9),
+    0 0 34px rgba(4,3,6,0.85), 0 2px 3px rgba(0,0,0,0.95);
+}
+.introbox .sub {
+  color: #c9b3a6; font-size: 10px; margin: 9px 0 0; letter-spacing: 0.30em;
+  text-indent: 0.30em; text-transform: uppercase;
+  text-shadow: 0 0 3px rgba(4,3,6,0.95), 0 0 12px rgba(4,3,6,0.9), 0 1px 2px rgba(0,0,0,0.95);
+}
+#howto { margin-top: 14px; }
+#howto[hidden] { display: none; }
+.introbox ul {
+  text-align: left; padding: 12px 14px 12px 30px; margin: 0;
+  background: rgba(8,7,12,0.72); border: 1px solid rgba(150,170,210,0.14); border-radius: 12px;
+}
+.introbox li { font-size: 11px; color: #a9b2c4; line-height: 1.62; }
 .introbox li b { color: var(--ink); }
+
+/* One primary, the rest quiet. On a phone the primary has to be the thing
+   your thumb finds without reading anything. */
 #btnStart, #btnAgain {
-  font-family: inherit; font-size: 12px; letter-spacing: 0.16em; font-weight: 600;
-  padding: 12px 22px; border-radius: 10px; cursor: pointer;
+  font-family: inherit; font-size: 12.5px; letter-spacing: 0.16em; font-weight: 600;
+  padding: 14px 22px; border-radius: 12px; cursor: pointer;
   background: rgba(127,216,255,0.14); color: var(--mine); border: 1px solid rgba(127,216,255,0.5);
 }
+#btnStart {
+  width: 100%; display: flex; flex-direction: column; gap: 3px; align-items: center;
+  /* the tint over a dark base, not straight over the plate: a translucent
+     button sitting on the backdrop had two of the figures' heads showing
+     through it */
+  background:
+    linear-gradient(180deg, rgba(127,216,255,0.20), rgba(127,216,255,0.09)),
+    linear-gradient(180deg, rgba(17,26,40,0.86), rgba(11,17,28,0.90));
+  box-shadow: 0 6px 26px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.10);
+  backdrop-filter: blur(3px);
+}
+#btnStart b { font-weight: 600; letter-spacing: 0.16em; }
+#btnStart i {
+  font-style: normal; font-size: 9.5px; letter-spacing: 0.12em; color: #86a8bd; text-transform: uppercase;
+}
+#btnStart i:empty { display: none; }
+#btnStart:active { background: rgba(127,216,255,0.26); }
 
 /* The proving yard's own controls. Kept out of the campaign entirely: this
    button and this pill exist to exercise the game, not to play it. */
-#btnYard {
-  display: block; width: 100%; margin-top: 10px; padding: 11px;
-  background: transparent; color: #9aa6bd; border: 1px solid #2e3854;
-  border-radius: 10px; font: inherit; font-size: 12px; letter-spacing: 0.14em;
-  cursor: pointer;
+.ghostbtn {
+  display: block; width: 100%; padding: 12px;
+  background: rgba(10,11,18,0.74); color: #b3bccd; border: 1px solid rgba(150,170,210,0.20);
+  border-radius: 12px; font: inherit; font-size: 11.5px; letter-spacing: 0.14em;
+  cursor: pointer; backdrop-filter: blur(3px);
 }
-#btnYard:active { background: #161d2e; color: #d6deee; }
+.ghostbtn:active { background: rgba(24,28,42,0.85); color: #e2e9f6; }
+.ghostbtn[hidden] { display: none; }
+.ghostbtn.danger { color: #d79a92; border-color: rgba(255,125,107,0.26); }
+.linkbtn {
+  display: block; width: 100%; padding: 8px; margin-top: 2px;
+  background: none; border: 0; color: #8e97a9; font: inherit; font-size: 10px;
+  letter-spacing: 0.20em; cursor: pointer; text-shadow: 0 1px 6px rgba(0,0,0,0.9);
+}
+.linkbtn:active { color: var(--ink); }
+.introfoot {
+  margin-top: 16px; font-size: 9.5px; letter-spacing: 0.14em; color: #7e8798;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.9); min-height: 12px;
+}
 #zonePill {
   position: absolute; left: 50%; transform: translateX(-50%);
   top: calc(96px + var(--safe-t)); z-index: 4;

@@ -10,6 +10,27 @@ K.ui = (function () {
   const $ = (id) => document.getElementById(id);
   let el = {}, H = {};
 
+  /* The title screen, told what the save contains. A menu that says TAKE THE
+     FIELD to somebody four waves into a run is lying to them about what the
+     button does, and the one thing a main menu owes you is knowing whether
+     you are starting or continuing. */
+  function intro(run) {
+    const $ = (id) => document.getElementById(id);
+    const mid = run && run.wave > 1;
+    $('startLabel').textContent = mid ? 'RESUME THE RUN' : 'TAKE THE FIELD';
+    $('startNote').textContent = mid
+      ? 'wave ' + run.wave + ' of ' + K.camp.RUN + ' · ' + (run.roster || []).length + ' still standing'
+      : '';
+    $('btnFresh').hidden = !mid;
+    const bits = [];
+    if (run) {
+      if (run.runs) bits.push('run ' + (run.runs + 1));
+      if (run.best) bits.push('best wave ' + run.best);
+      if (run.wins) bits.push(run.wins + (run.wins === 1 ? ' field held' : ' fields held'));
+    }
+    $('introStat').textContent = bits.join('  ·  ');
+  }
+
   /* the yard's label, and the only thing that ever shows it */
   function zonePill(text) {
     const p = document.getElementById('zonePill');
@@ -38,6 +59,26 @@ K.ui = (function () {
     // the yard is a separate door into the same game: no run, no campaign
     $('btnYard').onclick = () => { el.intro.classList.add('hidden'); H.yard && H.yard(); };
     $('zonePill').onclick = () => { H.cycle && H.cycle(); };
+    $('btnFresh').onclick = () => {
+      if (!$('btnFresh').dataset.armed) {
+        // one tap arms it, the second does it: this throws away a run
+        $('btnFresh').dataset.armed = '1';
+        $('btnFresh').textContent = 'TAP AGAIN TO ABANDON';
+        setTimeout(() => {
+          const b = $('btnFresh');
+          if (b.dataset.armed) { delete b.dataset.armed; b.textContent = 'ABANDON & START OVER'; }
+        }, 3500);
+        return;
+      }
+      delete $('btnFresh').dataset.armed;
+      el.intro.classList.add('hidden');
+      H.fresh && H.fresh();
+    };
+    $('btnHow').onclick = () => {
+      const h = $('howto');
+      h.hidden = !h.hidden;
+      $('btnHow').textContent = h.hidden ? 'HOW IT WORKS' : 'HIDE';
+    };
     $('btnAgain').onclick = () => {
       // a field's spoils are not something to walk past by accident
       if (!el.spoils.classList.contains('hidden') && !el.spoilList.querySelector('.picked')) {
@@ -242,5 +283,5 @@ K.ui = (function () {
     }
   }
 
-  return { init, sync, band, zonePill };
+  return { init, sync, band, zonePill, intro };
 })();

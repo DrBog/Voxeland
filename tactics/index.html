@@ -85,18 +85,35 @@
   </div>
 
   <div id="intro">
+    <div id="introArt"></div>
+    <div id="introGrain"></div>
+    <div id="introVig"></div>
     <div class="introbox">
-      <h1>IRONWAKE</h1>
-      <p class="sub">a tactics arena where every blow is simulated</p>
-      <ul>
-        <li><b>Tap</b> one of yours, then a blue tile to move — or an enemy to line up a strike.</li>
-        <li><b>Drag</b> to move the camera, pinch to zoom, ⤢ for the whole board.</li>
-        <li>Height, terrain and the weapon triangle all count. So does the drop.</li>
-        <li>Eight fields to a run. Survivors carry their levels and their weapons; the
-            fallen do not come back, and the last field has somebody in charge of it.</li>
-      </ul>
-      <button id="btnStart">TAKE THE FIELD</button>
-      <button id="btnYard" class="ghostbtn">THE PROVING YARD</button>
+      <div class="titleblock">
+        <h1>IRONWAKE</h1>
+        <p class="sub">every blow is simulated</p>
+      </div>
+
+      <div class="menu">
+        <button id="btnStart" class="primary">
+          <b id="startLabel">TAKE THE FIELD</b><i id="startNote"></i>
+        </button>
+        <button id="btnFresh" class="ghostbtn danger" hidden>ABANDON &amp; START OVER</button>
+        <button id="btnYard" class="ghostbtn">THE PROVING YARD</button>
+        <button id="btnHow" class="linkbtn">HOW IT WORKS</button>
+      </div>
+
+      <div id="howto" hidden>
+        <ul>
+          <li><b>Tap</b> one of yours, then a blue tile to move — or an enemy to line up a strike.</li>
+          <li><b>Drag</b> to move the camera, pinch to zoom, ⤢ for the whole board.</li>
+          <li>Height, terrain and the weapon triangle all count. So does the drop.</li>
+          <li>Eight fields to a run. Survivors carry their levels and their weapons; the
+              fallen do not come back, and the last field has somebody in charge of it.</li>
+        </ul>
+      </div>
+
+      <div class="introfoot"><span id="introStat"></span></div>
     </div>
   </div>
 </div>
