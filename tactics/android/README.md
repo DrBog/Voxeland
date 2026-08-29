@@ -3,8 +3,10 @@
 A standalone Gradle project (deliberately *not* a module of Voxeland) that
 wraps `dist/ironwake.html` in a single WebView.
 
-**Status: written, not yet built or run on a device.** The build was parked
-before its first compile; treat it as unverified.
+**Status: builds and signs; never launched on a device.** The APK is verified
+as far as this environment allows — it packages, it signs, `apksigner verify`
+passes, it declares no permissions, and the bundled page is byte-identical to
+`dist/ironwake.html`. Nothing here has watched it start.
 
 Two details are load bearing:
 
