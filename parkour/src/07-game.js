@@ -17,6 +17,7 @@ K.game = (function () {
       timeScale: 1, slowT: 0, acc: 0,
       particles: [], ghosts: [], gateFlash: 0, banner: null,
       earnRate: 0, rateEMA: 0, sinceProgress: 0, runId: 0, popups: [],
+      progressMark: 0, markT: 0, stalled: 0,
       district: K.world.DISTRICTS[0], districtIndex: 0
     };
     newRun(g);
@@ -34,6 +35,7 @@ K.game = (function () {
     g.startZ = 4.0;
     g.distance = 0; g.runTime = 0; g.dead = false; g.deadT = 0; g.deadWhy = '';
     g.sinceProgress = 0;
+    g.progressMark = 0; g.markT = 0; g.stalled = 0;
     g.cam.x = 0; g.cam.y = top + 2.4; g.cam.z = 4 - 5;
     g.particles.length = 0; g.ghosts.length = 0;
     g.banner = null; g.groundRef = top;
@@ -122,6 +124,15 @@ K.game = (function () {
       g.earnRate = gain / dt;
       g.sinceProgress = 0;
     } else g.sinceProgress += dt;
+    // "progress" means ground gained, not millimetres: inching against a
+    // wall kept resetting the stall timer, so a stuck run never ended
+    g.markT += dt;
+    if (g.markT > 5) {
+      // ...but only once the run is properly under way: a standing start
+      // covers very little ground in its first seconds and that is not a stall
+      g.stalled = (g.runTime > 8 && g.distance - g.progressMark < 1.2) ? g.stalled + 1 : 0;
+      g.progressMark = g.distance; g.markT = 0;
+    }
     g.runTime += dt;
 
     for (const m of lv.gatesHit) {
@@ -167,7 +178,7 @@ K.game = (function () {
         const d2 = lv.deckAt(0, pel.z, g.groundRef + 1);
         const wide = d2 && (pel.x < d2.x0 - 0.2 || pel.x > d2.x1 + 0.2);
         endRun(g, wide ? 'over the side' : 'short of the far edge');
-      } else if (g.sinceProgress > 7) endRun(g, 'stopped moving');
+      } else if (g.sinceProgress > 5.5 || (g.stalled || 0) >= 2) endRun(g, 'stopped moving');
     }
   }
 

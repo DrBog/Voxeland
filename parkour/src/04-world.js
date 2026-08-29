@@ -325,6 +325,22 @@ K.world = (function () {
       return edge !== null ? { start: edge, end: z + range, width: z + range - edge, landing: null } : null;
     };
 
+    /* Where does the route step UP, and by how much? Decks are not obstacles
+       so they never appear in scan(), which meant the runner could not see a
+       raised deck at all: it would jog into the face of it, grab the lip,
+       fall off, and do that until the run timed out. */
+    lv.riseAhead = function (x, z, y, range) {
+      const here = lv.groundAt(x, z, y + 0.5);
+      const base = here ? here.y : y - 1;
+      for (let d = 0.4; d <= range; d += 0.35) {
+        const g = lv.groundAt(x, z + d, y + 3.5);
+        if (!g) continue;
+        const up = g.y - base;
+        if (up > 0.32) return { at: z + d, up, top: g.y, dist: d };
+      }
+      return null;
+    };
+
     /* how wide is the deck here, and where is its middle? */
     lv.deckAt = function (x, z, y) {
       const boxes = lv.solidsNear(z, 0.3);

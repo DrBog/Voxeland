@@ -136,6 +136,20 @@ K.ai = (function () {
       }
     }
 
+    // ---------- the route itself stepping up
+    const rise = level.riseAhead(x, z + 0.2, gy, look + 1.0);
+    if (rise && c.lastActionZ !== rise.at) {
+      const trigger = 0.75 + Math.abs(c.speed) * 0.12;
+      if (rise.dist < trigger) {
+        c.lastActionZ = rise.at;
+        const need = rise.up + 0.30;
+        const maxV = (2.7 + st.legPower * 1.5) * 1.25;
+        const vy = Math.sqrt(Math.max(0, 2 * G * need)) * 1.12;
+        E.requestJump(c, clamp(vy / maxV * 1.25, 0.55, 1.25));
+        return;
+      }
+    }
+
     // ---------- holes
     const gap = level.gapAhead(x, z + 0.35, gy, look + 2.5);
     if (gap) {

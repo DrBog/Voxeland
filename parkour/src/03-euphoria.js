@@ -19,7 +19,8 @@ K.euphoria = (function () {
     releaseFlat: 0.72,   // foot this far from the hip (as a fraction of leg) ends stance
     supportGain: 90,     // hip-height servo, proportional
     supportDamp: 10,
-    cadBase: 1.05, cadSlope: 0.20,   // slower turnover, longer swing, real stride
+    cadBase: 2.3, cadSlope: 0.30,    // turnover fast enough that the swing leg
+                                     // never lands early and waits on the deck
     stride: 0.95,        // fraction of the geometric reach the step aims for
     trunkGain: 0.34,
     swingSpeed: 2.2
@@ -72,6 +73,9 @@ K.euphoria = (function () {
       c.body.parts.handL.pinned = null;
       c.body.parts.handR.pinned = null;
       c.grabPoint = null; c.grabT = 0;
+      // do not immediately grab the same lip again: that loop is how the
+      // runner spent ten seconds catching, falling and catching one ledge
+      c.grabCool = 1.2;
     }
     c.prevState = c.state; c.state = s; c.stateT = 0; c.anchorSet = false;
   }
@@ -303,11 +307,12 @@ K.euphoria = (function () {
       // phase ping-pongs between legs and neither ever completes a swing:
       // both feet end up trailing and the body slides along on its heels.
       if (flat > R.L.leg * tune.releaseFlat && c.releaseCool <= 0) {
-        c.releaseCool = 0.12;
+        // Let the plant go — but do NOT restart the stride. Resetting the
+        // phase here meant the swing never got past its first third: the
+        // leg never came forward, both feet trailed, the hips sank, and the
+        // body slid along on its heels. The clock keeps its own time.
+        c.releaseCool = 0.25;
         c.anchorSet = false;
-        c.phase = (c.swing === 0 ? Math.PI : 0) + 0.02;
-        c.swing = 1 - c.swing;
-        c.swingFrom = { x: stanceLeg.foot.x, y: stanceLeg.foot.y, z: stanceLeg.foot.z };
       }
     }
     if (c.anchorSet) {
@@ -331,12 +336,17 @@ K.euphoria = (function () {
     const swingHip = swingLeg.hip;
     const gait4 = c.gaitAmp = clamp(0.55 + Math.abs(c.speed) * 0.085, 0.5, 1.15) * opts.stride;
     // keyframes: [thigh angle from vertical (+forward), knee fold (+heel back)]
+    // [thigh angle from vertical (+forward), knee fold (+heel back)].
+    // Chosen so the FOOT sweeps forward steadily — sin(th) + sin(th-tk) rising
+    // through the whole swing — rather than folding up and then having to
+    // cover 0.7 m in the last fifth of the cycle, which no muscle can do and
+    // which left the leg permanently trailing.
     const KEYS = [
-      [-0.62, 0.75],   // toe-off, heel lifting
-      [-0.10, 1.95],   // recovery, heel high under the hip
-      [0.52, 1.55],    // knee drives through, shin still folded
-      [0.70, 0.60],    // shin swings out
-      [0.40, 0.14]     // plant, leg long
+      [-0.60, 0.60],   // toe-off: foot behind, knee starting to fold
+      [-0.10, 1.45],   // recovery: heel high, foot still behind
+      [0.28, 1.35],    // knee comes through, shin folded
+      [0.52, 0.45],    // shin swings out, foot passes under the hip
+      [0.44, 0.10]     // plant: leg long, foot ahead
     ];
     const kf = clamp(sPhase, 0, 0.9999) * (KEYS.length - 1);
     const ki = Math.floor(kf), kt = kf - ki;
@@ -391,9 +401,15 @@ K.euphoria = (function () {
       y: lerp(footPose.y, landY, blend * 0.9),
       z: lerp(footPose.z, stepZ, blend)
     };
+    // The pose is drawn for a body standing at full height. Running with the
+    // hips lower than that, a "long leg" target lands under the deck, so the
+    // swing foot gets pressed into the surface and dragged instead of
+    // travelling — which is what kept the legs behind the body.
+    footT.y = Math.max(footT.y, groundY + R.L.plant * 0.6);
 
-    P.drive(swingLeg.knee, kneeT.x, kneeT.y, kneeT.z, sp * tune.swingSpeed * eff, dt, sp * 26);
-    P.drive(swingLeg.foot, footT.x, footT.y, footT.z, sp * (tune.swingSpeed + 0.2) * eff, dt, sp * 30);
+    // a swinging leg is the fastest thing on a runner: give it the authority
+    P.drive(swingLeg.knee, kneeT.x, kneeT.y, kneeT.z, sp * tune.swingSpeed * eff, dt, sp * 45);
+    P.drive(swingLeg.foot, footT.x, footT.y, footT.z, sp * (tune.swingSpeed + 0.8) * eff, dt, sp * 60);
     // the toe leads through the swing and drops for the plant
     const fl = R.L.foot;
     const toeAng = lerp(-0.35, 0.30, blend);
@@ -454,13 +470,27 @@ K.euphoria = (function () {
     // collapse, so the reading has to persist before it counts.
     c.grace = Math.max(0, (c.grace || 0) - dt);
     const onFeet = c.footContacts > 0;
+    // Height over its OWN FEET, never over whatever the centre of mass
+    // happens to be above. Approaching a step up, the ground under the CoM is
+    // the higher deck, so `stance` reads as though the runner were lying
+    // down — and it was being sent to get up while running perfectly well,
+    // which ended two thirds of all running spells after half a second.
     const overFeet = c.body.parts.pelvis.y
       - Math.min(c.body.parts.footL.y, c.body.parts.footR.y);
-    if (Math.min(c.stance, overFeet) < 0.50 && c.groundedAny && !(c.grace && onFeet)) {
+    // A landing compresses the hips hard for a moment; that is absorption,
+    // not a sprawl. Only count it as down if the body is also slow or badly
+    // pitched, and only after it has stayed that way for a third of a second.
+    // Below a third of standing height the body is on the deck, whatever
+    // speed it is doing — sliding along on your chest at 2.5 m/s is not
+    // running. Above that, only slow or pitched counts, so that the hard
+    // compression of a landing is read as absorption and not as a collapse.
+    const sprawl = overFeet < 0.30
+      || (overFeet < 0.42 && (Math.abs(c.speed) < 2.0 || c.tilt > 0.7));
+    if (sprawl && c.groundedAny && !(c.grace && onFeet)) {
       c.lowT = (c.lowT || 0) + dt;
     }
     else c.lowT = 0;
-    if (c.lowT > 0.16) {
+    if (c.lowT > 0.30) {
       c.lowT = 0;
       setState(c, S.GETUP);
       note(c, 'down low', 'warn');
@@ -496,7 +526,8 @@ K.euphoria = (function () {
       c.staggerT = 0; setState(c, S.RUN);
       note(c, 'recovered', 'good');
       c.flags.recovered = (c.flags.recovered || 0) + 1;
-    } else if (c.stance < 0.45 && c.groundedAny) {
+    } else if (c.body.parts.pelvis.y
+        - Math.min(c.body.parts.footL.y, c.body.parts.footR.y) < 0.42 && c.groundedAny) {
       c.staggerT = 0; setState(c, S.GETUP);
     } else if (c.staggerT > budget || c.tilt > 1.05) {
       c.staggerT = 0; setState(c, S.FALL); note(c, 'lost it', 'bad');
@@ -524,7 +555,7 @@ K.euphoria = (function () {
     const hintK = { x: 0, y: 0, z: 1 }, hintA = { x: 0, y: 0, z: -1 };
 
     // a lip in reach? go for it. the most-loved euphoria behaviour there is
-    if (c.comVel.y < 1.5 && !c.grabPoint) {
+    if (c.comVel.y < 1.5 && !c.grabPoint && !(c.grabCool > 0)) {
       const range = 0.45 + st.grip * 0.6;
       const led = level.ledgeNear(b.parts.chest.x, b.parts.chest.y, b.parts.chest.z, range + 0.9);
       if (led && led.y < b.parts.chest.y + 0.6 && led.y > b.parts.chest.y - 1.5) {
@@ -804,6 +835,7 @@ K.euphoria = (function () {
     c.dt = dt;                     // the true substep, for impulses
     c.jumpCool = Math.max(0, (c.jumpCool || 0) - dt);
     c.releaseCool = Math.max(0, (c.releaseCool || 0) - dt);
+    c.grabCool = Math.max(0, (c.grabCool || 0) - dt);
     if (c.state !== S.GRAB && (c.body.parts.handL.pinned || c.body.parts.handR.pinned)) {
       c.body.parts.handL.pinned = null;
       c.body.parts.handR.pinned = null;
