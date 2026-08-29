@@ -142,8 +142,23 @@ K.battle = (function () {
     return true;
   }
 
+  /* turn to face whoever is nearest — a line that all faces the same way
+     regardless of where the enemy is looks like scenery, not soldiers */
+  function faceThreat(b, u) {
+    const act = actorOf(b, u);
+    if (!act) return;
+    let near = null, nd = 1e9;
+    for (const f of living(b, u.side === 0 ? 1 : 0)) {
+      const d = b.arena.dist(u.surface, f.surface);
+      if (d < nd) { nd = d; near = f; }
+    }
+    const t = near && actorOf(b, near);
+    if (t) A.faceToward(act, t.pos.x, t.pos.z);
+  }
+
   function finishUnit(b, u) {
     u.acted = true;
+    faceThreat(b, u);
     clearSel(b);
     // level ups are earned in the field, as they should be
     while (u.exp >= 100 && !u.dead) {
@@ -366,5 +381,5 @@ K.battle = (function () {
   }
 
   return { create, step, select, clearSel, moveTo, attack, targetsFrom, finishUnit,
-           endPhase, living, actorOf, occupied, note, popup, aiTurn };
+           endPhase, living, actorOf, occupied, note, popup, aiTurn, faceThreat };
 })();

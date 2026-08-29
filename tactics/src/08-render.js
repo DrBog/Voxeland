@@ -385,13 +385,14 @@ K.render = (function () {
   ];
   const GIRTH = [0.115, 0.070, 0.044];
 
-  // the weapon lives in the right hand, whichever way the body is turned
-  function weaponHand(a) { return a.body.parts.handR; }
+  // an archer's bow is in the forward hand; everyone else's weapon is in the
+  // right — the actor knows which, because the stance decided it
+  function weaponHand(a) { return a.weaponSide < 0 ? a.body.parts.handL : a.body.parts.handR; }
 
   function drawWeapon(v, ctx, a, fogT, col) {
     const u = a.unit, kind = u.weapon.kind;
     const h = weaponHand(a), p = a.body.parts;
-    const el = p.elbowR;
+    const el = a.weaponSide < 0 ? p.elbowL : p.elbowR;
     /* A weapon is carried the way its shape is carried, and only points where
        the arm points when the arm is actually swinging it: a blade hangs from
        the fist, a polearm stands up out of it, a bow lies along the forearm.
@@ -403,9 +404,12 @@ K.render = (function () {
     const al = Math.hypot(ax, ay, az) || 1;
     ax /= al; ay /= al; az /= al;
     let cx, cy, cz;
-    if (kind === 'lance') { cx = fwd.x * 0.18; cy = 1; cz = fwd.z * 0.18; }
+    // out to the weapon side, so a carried blade clears the leg instead of
+    // hanging through the thigh
+    const ox = -fwd.z * (a.weaponSide || 1), oz = fwd.x * (a.weaponSide || 1);
+    if (kind === 'lance') { cx = fwd.x * 0.18 + ox * 0.10; cy = 1; cz = fwd.z * 0.18 + oz * 0.10; }
     else if (kind === 'bow') { cx = ax; cy = ay; cz = az; }
-    else { cx = -fwd.x * 0.30; cy = -1; cz = -fwd.z * 0.30; }   // blade hangs
+    else { cx = -fwd.x * 0.26 + ox * 0.34; cy = -1; cz = -fwd.z * 0.26 + oz * 0.34; }
     let dx = lerp(cx, ax, sw), dy = lerp(cy, ay, sw), dz = lerp(cz, az, sw);
     const d = Math.hypot(dx, dy, dz) || 1;
     dx /= d; dy /= d; dz /= d;

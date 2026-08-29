@@ -1693,10 +1693,43 @@ K.actor = (function () {
   const { clamp, lerp, angDiff } = U;
 
   const STANCE = 0.19;       // half the distance between the feet
+
+  /* How each trade stands, and which hand its weapon is in.
+
+     At the size a unit is drawn, joints are invisible and the silhouette is
+     everything: how wide the feet are, where the hands sit, whether the weapon
+     is up or down. Five classes that all stood identically were five identical
+     grey figures. Distances are metres from the shoulder — out to the side,
+     forward, and below. */
+  const STANCES = {
+    Blade:   { feet: 0.19, lead: 0.10, hip: 0.00, lean: 0.10, hand: 1,
+               main: { out: 0.30, fwd: 0.24, drop: 0.32 }, off: { out: 0.30, fwd: 0.04, drop: 0.40 } },
+    Halberd: { feet: 0.22, lead: 0.03, hip: 0.00, lean: 0.03, hand: 1,
+               main: { out: 0.19, fwd: 0.28, drop: 0.16 }, off: { out: 0.13, fwd: 0.31, drop: 0.36 } },
+    Reaver:  { feet: 0.25, lead: 0.05, hip: -0.03, lean: 0.15, hand: 1,
+               main: { out: 0.17, fwd: 0.30, drop: 0.40 }, off: { out: 0.07, fwd: 0.33, drop: 0.44 } },
+    Archer:  { feet: 0.16, lead: 0.13, hip: 0.00, lean: 0.05, hand: -1,
+               main: { out: 0.34, fwd: 0.30, drop: 0.20 }, off: { out: 0.11, fwd: 0.05, drop: 0.28 } },
+    Ember:   { feet: 0.15, lead: 0.04, hip: 0.01, lean: 0.02, hand: 1,
+               main: { out: 0.15, fwd: 0.33, drop: 0.12 }, off: { out: 0.27, fwd: 0.00, drop: 0.42 } }
+  };
+  const stanceOf = (a) => STANCES[a.unit.cls] || STANCES.Blade;
   /* Nearly straight, but not locked: at 0.74 the knees bent sixty degrees,
      which is a crouch, and from a camera looking down at it a knee that far
      forward projects BELOW its own foot. */
-  const HIP = 0.82;          // hip height over the deck when standing
+  /* Where the hips ride when a body is standing.
+
+     This is the pelvis, measured from the deck, and it is deliberately ONE
+     number. The hip servo and the pelvis drive used to hold two targets 6.7 cm
+     apart, because the servo measured from the ankle and the drive measured
+     from the floor. They spent every standing frame pulling against each other
+     and the servo lost: the legs locked out straight and the body stood on
+     stilts at whatever height the collision happened to allow. */
+  const FOOT = 0.075;        // where an ankle comes to rest on a surface
+  const RISE = 0.04;         // the pelvis sits this far above the hip joints
+  const HIP = 0.885;         // pelvis over the deck: 92% leg extension, a knee
+  // the same height in the hip servo's units: hip joint above the ankle
+  const hipOverFoot = (st) => HIP + (st ? st.hip : 0) - FOOT - RISE;
   const CAD = 4.3;           // steps per second on the march
   const SPEED = 2.80;        // metres per second
   /* The one number that decides whether a walk reads: how far the hips travel
@@ -1708,7 +1741,11 @@ K.actor = (function () {
     const w = arena.world(unit.surface);
     const body = R.build(w.x, w.y + 0.02, w.z);
     const fz = unit.side === 0 ? -1 : 1;
+    const st = STANCES[unit.cls] || STANCES.Blade;
     return {
+      // everybody breathes at their own rate, or a line of them pulses as one
+      breath: (unit.id * 0.37) % 1, weaponSide: st.hand,
+      step: st.hand > 0 ? 0 : 1, stepAt: 0,
       unit, body, arena,
       mode: 'pose', t: 0,
       dir: { x: 0, z: fz }, face: fz, aim: null,
@@ -1788,6 +1825,7 @@ K.actor = (function () {
     const sp = 5.0 * a.strength;
     const gy = surfaceTop(a);
     const { fx, fz, sx, sz } = axes(a);
+    const st = stanceOf(a);
     // a hint with a little height in it can never end up parallel to a leg,
     // which is the state that makes the knee flap instead of bend
     const hintK = { x: fx, y: 0.15, z: fz }, hintA = { x: -fx, y: 0, z: -fz };
@@ -1799,29 +1837,63 @@ K.actor = (function () {
       // A stance is not symmetrical. The weapon side stands back, the other
       // foot leads, and the difference between the two is most of what tells
       // you at a glance that this is a person facing that way.
-      const lead = L.side > 0 ? -0.09 : 0.07;
-      const hx = a.pos.x + sx * L.side * STANCE + fx * lead;
-      const hz = a.pos.z + sz * L.side * STANCE + fz * lead;
-      if (!a.foot[i]) a.foot[i] = { x: hx, z: hz };
+      // the weapon side stands back, the other foot leads, and the size of
+      // that difference is part of what tells one trade from another
+      const lead = (L.side === st.hand ? -st.lead : st.lead * 0.7)
+        + (i === a.step ? (a.stepAt || 0) : 0);
+      const hx = a.pos.x + sx * L.side * st.feet + fx * lead;
+      const hz = a.pos.z + sz * L.side * st.feet + fz * lead;
+      // Seed the plant from where the foot ACTUALLY is, not from where the
+      // stance wants it. A body that has just stopped walking has its feet
+      // mid-stride; snapping the pin to the stance home teleports them. The
+      // tracker below walks them in over the next few frames instead.
+      if (!a.foot[i]) a.foot[i] = { x: L.foot.x, z: L.foot.z };
       // A body that has been thrown leaves its old footprints behind, so the
       // plant walks itself home whenever it has drifted off the tile.
+      // and it tracks its stance closely enough that a trade's footing is
+      // actually the footing it was given, rather than whatever it inherited
       const off = Math.hypot(a.foot[i].x - hx, a.foot[i].z - hz);
-      if (off > 0.26) {
-        const k = clamp(dt * 6, 0, 1);
+      if (off > 0.07) {
+        const k = clamp(dt * (off > 0.26 ? 6 : 2.2), 0, 1);
         a.foot[i].x = lerp(a.foot[i].x, hx, k);
         a.foot[i].z = lerp(a.foot[i].z, hz, k);
       }
-      R.reachLeg(b, L, a.foot[i].x, gy + R.L.plant, a.foot[i].z, sp, dt, hintK);
+      /* A standing foot is ON the floor; it is not being asked to hover
+         there. Left to a muscle it loses the argument to the leg bone the
+         moment the hips twist, and the two feet walk into each other —
+         measured across one sword swing a stance closed from 0.32 m to
+         0.06 m, and the legs read on screen as a single column. So a standing
+         foot is pinned, exactly like a walking one, and the legs carry the
+         hips over it. The muscle stays in the loop only to steer the knee. */
+      const py = L.foot.pinned
+        ? lerp(L.foot.pinned.y, gy + FOOT, clamp(dt * 6, 0, 1))
+        : (Math.abs(L.foot.y - gy - FOOT) < 0.12 ? L.foot.y : gy + FOOT);
+      R.reachLeg(b, L, a.foot[i].x, py, a.foot[i].z, sp, dt, hintK);
+      L.foot.pinned = { x: a.foot[i].x, y: py, z: a.foot[i].z };
       // hold the hips at standing height above the foot — a fraction of the
       // leg's length is a different number, and it is the one that locks the
       // knees straight; the leg left standing carries the whole weight
       if (L.foot.grounded || L.toe.grounded || L.foot.y - gy < 0.14) {
-        R.support(b, L, HIP - R.L.plant, (34 + 26) * a.strength, dt, 0.5);
+        R.support(b, L, hipOverFoot(st), (34 + 26) * a.strength, dt, 0.5);
       }
       P.drive(L.toe, L.foot.x + fx * 0.14, L.foot.y - 0.05, L.foot.z + fz * 0.14, sp, dt, sp * 14);
     }
+    /* Idle life. A held pose is a statue, and a line of statues is what makes
+       a board look dead: the chest rises and falls, the weight drifts from one
+       foot to the other, and every unit does it on its own clock. It is two
+       centimetres of movement and it is the difference between a squad waiting
+       and a row of furniture. */
+    a.breath += dt * 0.23;
+    const air = Math.sin(a.breath * Math.PI * 2);
+    const shift = Math.sin(a.breath * Math.PI * 0.61);
+    // and when it is swinging, the body goes with the blow: the lead foot
+    // steps in, the hips follow it, and the weight arrives with the weapon.
+    // A body that swings from the shoulders alone is waving, not hitting.
+    const push = a.push || 0;
+    const bx = a.pos.x + sx * shift * 0.022 + fx * push;
+    const bz = a.pos.z + sz * shift * 0.022 + fz * push;
     // hips over the feet, chest up, a little weight forward
-    P.drive(p.pelvis, a.pos.x, gy + HIP, a.pos.z, sp * 0.8, dt, 40 * a.strength);
+    P.drive(p.pelvis, bx, gy + HIP + st.hip + air * 0.012, bz, sp * 0.8, dt, 40 * a.strength);
     /* If the body has strayed from the stance it is supposed to be holding —
        a leg folded the wrong way, an arm through the chest, a knee above a hip
        — put it back. The muscles hold a pose well and recover one badly, and a
@@ -1833,23 +1905,26 @@ K.actor = (function () {
       a.mend = (a.mend || 0) + dt;
       R.settle(b, a.pos.x, gy + HIP, a.pos.z, fx, fz, clamp(dt * (a.mend > 0.8 ? 9 : 3.5), 0, 1));
     } else a.mend = 0;
-    const l = lean === undefined ? 0.08 : lean;
+    const l = lean === undefined ? st.lean : lean;
     P.aim(p.pelvis, p.chest, fx * l, 1, fz * l, 0.30 * a.strength);
-    P.aim(p.chest, p.head, fx * 0.05, 1, fz * 0.05, 0.25 * a.strength);
+    // the head rides level whatever the shoulders are doing
+    P.aim(p.chest, p.head, fx * 0.04, 1, fz * 0.04, 0.34 * a.strength);
 
-    // arms: the weapon hand forward and across, the off hand low
+    /* Arms, by trade: a swordsman carries the blade out and low, a halberdier
+       has both hands on the shaft, an archer holds the bow arm out and keeps
+       the drawing hand at the chest, a mage keeps a palm forward. */
     const A = R.arms(b);
-    const guard = a.swing > 0 ? 1 - a.swing : 0;
+    const swing = a.swing || 0;
     for (const arm of A) {
-      const lead = arm.side > 0;                       // the right hand holds it
-      // hands away from the ribs: an arm tucked into the silhouette is not an
-      // arm, it is a wider chest
-      const out = lead ? 0.30 : 0.34;
-      const reach = lead ? 0.24 + guard * 0.18 : 0.02;
+      const main = arm.side === st.hand;
+      const g = main ? st.main : st.off;
+      // during a strike the weapon arm is driven separately; the off arm
+      // counterweights, which is what stops a swing looking like a wave
+      const counter = main ? 0 : -swing * 0.16;
       R.reachArm(b, arm,
-        arm.sh.x + sx * arm.side * out + fx * reach,
-        arm.sh.y - 0.36 + (lead ? guard * 0.28 : 0),
-        arm.sh.z + sz * arm.side * out + fz * reach, sp, dt, hintA);
+        arm.sh.x + sx * arm.side * g.out + fx * (g.fwd + counter),
+        arm.sh.y - g.drop + air * 0.008,
+        arm.sh.z + sz * arm.side * g.out + fz * (g.fwd + counter), sp, dt, hintA);
     }
   }
 
@@ -1972,6 +2047,10 @@ K.actor = (function () {
      units that are standing perfectly still. A body that has come to rest
      under its own pose is frozen until something happens to it. */
   function settled(a, dt) {
+    // Only the dead keep perfectly still. A living unit breathes and shifts
+    // its weight, and freezing that to save a fraction of a millisecond is
+    // what made a waiting line look like a row of furniture.
+    if (a.mode !== 'dead') { a.calm = 0; a.anchor = null; return false; }
     const still = a.mode === 'pose' || a.mode === 'dead';
     if (!still || a.limp > 0 || a.path || a.strength < 0.99) { a.calm = 0; a.anchor = null; return false; }
     // A held pose never stops buzzing — the muscles are a control loop, not a
@@ -2039,9 +2118,26 @@ K.actor = (function () {
       applyAim(a, dt, a.mode === 'strike' ? 12 : 7);
     }
 
+    /* A blow in four beats rather than one reach.
+
+       Wind: the weight goes back and the weapon comes up. Drive: the lead foot
+       steps in and the whole body goes with the swing — contact lands at the
+       end of this beat, which is when the battle applies it. Follow: the
+       weapon carries past the target instead of stopping dead on it. Recover:
+       back to a stance. A single interpolation toward the target reads as
+       pointing at somebody; this reads as hitting them. */
     if (a.mode === 'strike') {
-      a.swing = clamp(a.t / 0.42, 0, 1);
-      if (a.t > 0.5) { a.mode = 'pose'; a.swing = 0; }
+      const t = a.t;
+      if (t < 0.12) a.swing = (t / 0.12) * 0.28;              // wind, weapon back
+      else if (t < 0.24) a.swing = 0.28 + ((t - 0.12) / 0.12) * 0.62;   // drive
+      else if (t < 0.40) a.swing = 0.90 + ((t - 0.24) / 0.16) * 0.10;   // follow through
+      else a.swing = Math.max(0, 1 - (t - 0.40) / 0.22);      // recover
+      // the lead foot steps into it and comes back afterwards
+      a.stepAt = t < 0.12 ? -0.05 * (t / 0.12)
+        : t < 0.24 ? lerp(-0.05, 0.20, (t - 0.12) / 0.12)
+          : t < 0.44 ? 0.20 : Math.max(0, 0.20 * (1 - (t - 0.44) / 0.20));
+      a.push = a.stepAt * 0.8;
+      if (t > 0.66) { a.mode = 'pose'; a.swing = 0; a.stepAt = 0; a.push = 0; }
     }
 
     if (a.limp > 0) {
@@ -2074,13 +2170,26 @@ K.actor = (function () {
       a.strength = clamp(a.strength + dt * 2, 0, 1);
       stand(a, dt, a.mode === 'strike' ? 0.10 + Math.sin(a.swing * Math.PI) * 0.34 : 0.08);
       if (a.mode === 'strike' && a.swingAt) {
-        // the weapon arm drives through the target
-        const arm = R.arms(b)[1];
-        const th = Math.sin(a.swing * Math.PI);
-        const tx = lerp(arm.sh.x, a.swingAt.pos.x, th * 0.45);
-        const tz = lerp(arm.sh.z, a.swingAt.pos.z, th * 0.45);
-        R.reachArm(b, arm, tx, arm.sh.y - 0.18 + th * 0.2, tz, 9, dt,
-          { x: -a.dir.x, y: 0, z: -a.dir.z });
+        /* The weapon hand's path: back over the shoulder, then through where
+           the target IS and out the other side. Reaching to the target and
+           stopping there is a poke; going past it is a swing. */
+        const st2 = stanceOf(a);
+        const arm = R.arms(b)[st2.hand > 0 ? 1 : 0];
+        const { fx: dx, fz: dz, sx: rx, sz: rz } = axes(a);
+        const s = a.swing;
+        const wind = clamp(s / 0.28, 0, 1);              // 0..1 through the wind-up
+        const thru = clamp((s - 0.28) / 0.72, 0, 1);     // 0..1 through the blow
+        // how far along the line to the target the hand is: negative behind
+        const reach = lerp(-0.34, 1.22, thru);
+        const gx = lerp(arm.sh.x, a.swingAt.pos.x, 0.55), gz = lerp(arm.sh.z, a.swingAt.pos.z, 0.55);
+        const tx = arm.sh.x + (gx - arm.sh.x) * reach + rx * st2.hand * 0.22 * (1 - thru);
+        const tz = arm.sh.z + (gz - arm.sh.z) * reach + rz * st2.hand * 0.22 * (1 - thru);
+        const ty = arm.sh.y + wind * 0.30 - thru * 0.46;
+        R.reachArm(b, arm, tx, ty, tz, 11, dt, { x: -dx, y: 0.2, z: -dz });
+        // and the body goes with it: weight back on the wind, through on the blow
+        const twist = (thru - wind * 0.6) * 0.30;
+        P.aim(p.pelvis, p.chest, dx * twist + rx * st2.hand * 0.10 * (1 - thru), 1,
+          dz * twist + rz * st2.hand * 0.10 * (1 - thru), 0.42 * a.strength);
       }
     } else if (a.mode === 'walk') {
       walk(a, dt);
@@ -2093,8 +2202,9 @@ K.actor = (function () {
     P.collide(b, level, dt);
     P.holdPins(b);
 
-    // nothing but a walking body may hold on to the floor
-    if (a.mode !== 'walk') unplant(a);
+    // a body owns the floor while it stands on it or walks over it, and
+    // never while it is being thrown around
+    if (a.mode !== 'walk' && a.mode !== 'pose' && a.mode !== 'strike') unplant(a);
     // knocked off the edge: the arena kills, not the arithmetic
     if (!a.fell && p.pelvis.y < surfaceTop(a) - 3.0) {
       a.fell = true;
@@ -2265,8 +2375,23 @@ K.battle = (function () {
     return true;
   }
 
+  /* turn to face whoever is nearest — a line that all faces the same way
+     regardless of where the enemy is looks like scenery, not soldiers */
+  function faceThreat(b, u) {
+    const act = actorOf(b, u);
+    if (!act) return;
+    let near = null, nd = 1e9;
+    for (const f of living(b, u.side === 0 ? 1 : 0)) {
+      const d = b.arena.dist(u.surface, f.surface);
+      if (d < nd) { nd = d; near = f; }
+    }
+    const t = near && actorOf(b, near);
+    if (t) A.faceToward(act, t.pos.x, t.pos.z);
+  }
+
   function finishUnit(b, u) {
     u.acted = true;
+    faceThreat(b, u);
     clearSel(b);
     // level ups are earned in the field, as they should be
     while (u.exp >= 100 && !u.dead) {
@@ -2489,7 +2614,7 @@ K.battle = (function () {
   }
 
   return { create, step, select, clearSel, moveTo, attack, targetsFrom, finishUnit,
-           endPhase, living, actorOf, occupied, note, popup, aiTurn };
+           endPhase, living, actorOf, occupied, note, popup, aiTurn, faceThreat };
 })();
 
 /* ---- 07-campaign.js ---- */
@@ -3119,13 +3244,14 @@ K.render = (function () {
   ];
   const GIRTH = [0.115, 0.070, 0.044];
 
-  // the weapon lives in the right hand, whichever way the body is turned
-  function weaponHand(a) { return a.body.parts.handR; }
+  // an archer's bow is in the forward hand; everyone else's weapon is in the
+  // right — the actor knows which, because the stance decided it
+  function weaponHand(a) { return a.weaponSide < 0 ? a.body.parts.handL : a.body.parts.handR; }
 
   function drawWeapon(v, ctx, a, fogT, col) {
     const u = a.unit, kind = u.weapon.kind;
     const h = weaponHand(a), p = a.body.parts;
-    const el = p.elbowR;
+    const el = a.weaponSide < 0 ? p.elbowL : p.elbowR;
     /* A weapon is carried the way its shape is carried, and only points where
        the arm points when the arm is actually swinging it: a blade hangs from
        the fist, a polearm stands up out of it, a bow lies along the forearm.
@@ -3137,9 +3263,12 @@ K.render = (function () {
     const al = Math.hypot(ax, ay, az) || 1;
     ax /= al; ay /= al; az /= al;
     let cx, cy, cz;
-    if (kind === 'lance') { cx = fwd.x * 0.18; cy = 1; cz = fwd.z * 0.18; }
+    // out to the weapon side, so a carried blade clears the leg instead of
+    // hanging through the thigh
+    const ox = -fwd.z * (a.weaponSide || 1), oz = fwd.x * (a.weaponSide || 1);
+    if (kind === 'lance') { cx = fwd.x * 0.18 + ox * 0.10; cy = 1; cz = fwd.z * 0.18 + oz * 0.10; }
     else if (kind === 'bow') { cx = ax; cy = ay; cz = az; }
-    else { cx = -fwd.x * 0.30; cy = -1; cz = -fwd.z * 0.30; }   // blade hangs
+    else { cx = -fwd.x * 0.26 + ox * 0.34; cy = -1; cz = -fwd.z * 0.26 + oz * 0.34; }
     let dx = lerp(cx, ax, sw), dy = lerp(cy, ay, sw), dz = lerp(cz, az, sw);
     const d = Math.hypot(dx, dy, dz) || 1;
     dx /= d; dy /= d; dz /= d;
