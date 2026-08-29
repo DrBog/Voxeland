@@ -14,7 +14,7 @@ K.actor = (function () {
   const P = K.phys, R = K.rag, U = K.util;
   const { clamp, lerp, angDiff } = U;
 
-  const STANCE = 0.15;       // half the distance between the feet
+  const STANCE = 0.19;       // half the distance between the feet
   const HIP = 0.74;          // hip height over the deck when standing
   const CAD = 4.3;           // steps per second on the march
   const SPEED = 2.80;        // metres per second
@@ -107,19 +107,23 @@ K.actor = (function () {
     const sp = 5.0 * a.strength;
     const gy = surfaceTop(a);
     const { fx, fz, sx, sz } = axes(a);
-    const hintK = { x: fx, y: 0, z: fz }, hintA = { x: -fx, y: 0, z: -fz };
+    // a hint with a little height in it can never end up parallel to a leg,
+    // which is the state that makes the knee flap instead of bend
+    const hintK = { x: fx, y: 0.15, z: fz }, hintA = { x: -fx, y: 0, z: -fz };
 
     const legs = R.legs(b);
     for (let i = 0; i < 2; i++) {
       const L = legs[i];
       // feet planted either side of the tile centre, square to the heading
-      const hx = a.pos.x + sx * L.side * STANCE;
-      const hz = a.pos.z + sz * L.side * STANCE;
+      // A stance is not symmetrical. The weapon side stands back, the other
+      // foot leads, and the difference between the two is most of what tells
+      // you at a glance that this is a person facing that way.
+      const lead = L.side > 0 ? -0.09 : 0.07;
+      const hx = a.pos.x + sx * L.side * STANCE + fx * lead;
+      const hz = a.pos.z + sz * L.side * STANCE + fz * lead;
       if (!a.foot[i]) a.foot[i] = { x: hx, z: hz };
-      // A body that has been thrown leaves its old footprints behind. Left
-      // alone the stance tries to stand on them, the legs trail out behind the
-      // hips and the unit quietly sinks to a kneel — so the plant walks itself
-      // home whenever it has drifted off the tile.
+      // A body that has been thrown leaves its old footprints behind, so the
+      // plant walks itself home whenever it has drifted off the tile.
       const off = Math.hypot(a.foot[i].x - hx, a.foot[i].z - hz);
       if (off > 0.26) {
         const k = clamp(dt * 6, 0, 1);
@@ -127,13 +131,27 @@ K.actor = (function () {
         a.foot[i].z = lerp(a.foot[i].z, hz, k);
       }
       R.reachLeg(b, L, a.foot[i].x, gy + R.L.plant, a.foot[i].z, sp, dt, hintK);
-      if (L.foot.grounded || L.toe.grounded) {
-        R.support(b, L, R.L.leg * 0.88, (34 + 26) * a.strength, dt, 0.5);
+      // hold the hips at standing height above the foot — a fraction of the
+      // leg's length is a different number, and it is the one that locks the
+      // knees straight; the leg left standing carries the whole weight
+      if (L.foot.grounded || L.toe.grounded || L.foot.y - gy < 0.14) {
+        R.support(b, L, HIP - R.L.plant, (34 + 26) * a.strength, dt, 0.5);
       }
       P.drive(L.toe, L.foot.x + fx * 0.14, L.foot.y - 0.05, L.foot.z + fz * 0.14, sp, dt, sp * 14);
     }
     // hips over the feet, chest up, a little weight forward
     P.drive(p.pelvis, a.pos.x, gy + HIP, a.pos.z, sp * 0.8, dt, 40 * a.strength);
+    /* If the body has strayed from the stance it is supposed to be holding —
+       a leg folded the wrong way, an arm through the chest, a knee above a hip
+       — put it back. The muscles hold a pose well and recover one badly, and a
+       unit standing on its own tile under its own control has no business in a
+       shape the solver cannot read its way out of. Blended, so it reads as
+       picking yourself up rather than as a pop. */
+    const stray = a.swing > 0 ? 0 : R.strayed(b, a.pos.x, gy + HIP, a.pos.z, fx, fz);
+    if (stray > 0.34) {
+      a.mend = (a.mend || 0) + dt;
+      R.settle(b, a.pos.x, gy + HIP, a.pos.z, fx, fz, clamp(dt * (a.mend > 0.8 ? 9 : 3.5), 0, 1));
+    } else a.mend = 0;
     const l = lean === undefined ? 0.08 : lean;
     P.aim(p.pelvis, p.chest, fx * l, 1, fz * l, 0.30 * a.strength);
     P.aim(p.chest, p.head, fx * 0.05, 1, fz * 0.05, 0.25 * a.strength);
@@ -143,11 +161,13 @@ K.actor = (function () {
     const guard = a.swing > 0 ? 1 - a.swing : 0;
     for (const arm of A) {
       const lead = arm.side > 0;                       // the right hand holds it
-      const out = lead ? 0.15 : 0.23;
-      const reach = lead ? 0.30 + guard * 0.16 : 0.10;
+      // hands away from the ribs: an arm tucked into the silhouette is not an
+      // arm, it is a wider chest
+      const out = lead ? 0.30 : 0.34;
+      const reach = lead ? 0.24 + guard * 0.18 : 0.02;
       R.reachArm(b, arm,
         arm.sh.x + sx * arm.side * out + fx * reach,
-        arm.sh.y - 0.34 + (lead ? guard * 0.28 : 0),
+        arm.sh.y - 0.36 + (lead ? guard * 0.28 : 0),
         arm.sh.z + sz * arm.side * out + fz * reach, sp, dt, hintA);
     }
   }
@@ -196,7 +216,7 @@ K.actor = (function () {
         // the knee still has to be steered, and the hip still has to be held
         // up — a pin is not a contact, so the support is unconditional here
         R.reachLeg(b, L, a.foot[i].x, gy + R.L.plant, a.foot[i].z, sp, dt, hintK);
-        R.support(b, L, R.L.leg * 0.86, 60 * a.strength, dt, 1);
+        R.support(b, L, HIP - R.L.plant - 0.02, 60 * a.strength, dt, 1);
         P.drive(L.toe, L.foot.x + fx * 0.13, L.foot.y - 0.04, L.foot.z + fz * 0.13, sp, dt, sp * 14);
       }
     }
@@ -260,6 +280,7 @@ K.actor = (function () {
     a.mode = lethal ? 'dead' : 'hit';
     a.restT = 0;
     a.foot = [null, null];
+    a.fix = [0, 0];
     unplant(a);            // a body taking a blow owns nothing, least of all the floor
     wake(a);
   }
@@ -275,7 +296,21 @@ K.actor = (function () {
     // A held pose never stops buzzing — the muscles are a control loop, not a
     // pose, and they hunt around the target for ever. So rest is judged by
     // whether the body has actually GONE anywhere.
+    /* Never freeze a body that is standing badly. Rest is a promise that this
+       pose is the one it meant to hold, and a frozen body has no way back —
+       whatever shape it was in when the clock ran out is the shape it keeps
+       for the rest of the battle. Checking the hips alone is not enough: a
+       unit can carry the right hip height with one leg folded up in the air,
+       and that is exactly the shape that kept turning up on the field. */
     const p = a.body.parts.pelvis;
+    if (a.mode === 'pose') {
+      const gy = surfaceTop(a);
+      if (Math.abs(p.y - gy - HIP) > 0.10) { a.calm = 0; a.anchor = null; return false; }
+      if (a.body.parts.head.y < a.body.parts.chest.y + 0.15) { a.calm = 0; a.anchor = null; return false; }
+      for (const L of R.legs(a.body)) {
+        if (L.foot.y - gy > 0.13) { a.calm = 0; a.anchor = null; return false; }
+      }
+    }
     if (!a.anchor) { a.anchor = { x: p.x, y: p.y, z: p.z }; a.calm = 0; return false; }
     if (Math.abs(p.x - a.anchor.x) + Math.abs(p.y - a.anchor.y) + Math.abs(p.z - a.anchor.z) > 0.05) {
       a.anchor = { x: p.x, y: p.y, z: p.z }; a.calm = 0; return false;
@@ -347,6 +382,8 @@ K.actor = (function () {
         const acc = clamp(err * 80, 0, 54) * a.strength;
         for (const t of b.trunk) P.addVel(t, 0, acc * dt, 0, dt);
       }
+      // hand back to the stance once it is upright enough for the stance to
+      // finish the job — the stance can now stand itself up either way
       if ((a.restT > 0.5 && p.pelvis.y - gy > 0.55) || a.restT > 1.8) {
         a.mode = 'pose'; a.strength = 1; a.foot = [null, null];
       }

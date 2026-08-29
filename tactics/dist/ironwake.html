@@ -720,7 +720,15 @@ K.phys = (function () {
     const hd = hx * ux + hy * uy + hz * uz;
     let px = hx - ux * hd, py = hy - uy * hd, pz = hz - uz * hd;
     let pl = Math.hypot(px, py, pz);
-    if (pl < 1e-5) { px = -uy; py = ux; pz = 0; pl = Math.hypot(px, py, pz) || 1; }
+    if (pl < 1e-5) {
+      // The hint was parallel to the limb, so it says nothing about which way
+      // the joint should break. Fall back to something stable — up crossed
+      // with the limb — rather than an arbitrary perpendicular that flips sign
+      // as the limb swings, which makes a knee flap instead of bend.
+      px = uz * 1 - uy * 0; py = 0; pz = -ux * 1;
+      pl = Math.hypot(px, py, pz);
+      if (pl < 1e-5) { px = 1; py = 0; pz = 0; pl = 1; }
+    }
     px /= pl; py /= pl; pz /= pl;
     return {
       jx: rx + ux * a + px * h, jy: ry + uy * a + py * h, jz: rz + uz * a + pz * h,
@@ -850,7 +858,10 @@ K.rag = (function () {
      what this regulates, with a hard ceiling on the acceleration it can
      produce. The ceiling is what LEG DRIVE buys, and what a hurt or
      unconscious runner loses. */
-  const HOLD = 16.6;      // m/s^2 on the sprung mass to merely not sink
+  /* Exactly enough to carry the body's own weight and no more. Set above
+     gravity it does not hold a stance, it presses the body up until the knees
+     lock and the unit stands like a post. */
+  const HOLD = 11.2;      // m/s^2 on the sprung mass to merely not sink
   function support(b, leg, targetH, maxAcc, dt, share) {
     const hip = leg.hip, f = leg.foot;
     const err = (f.y + targetH) - hip.y;
@@ -859,7 +870,11 @@ K.rag = (function () {
     // servo sags by exactly however much weight it forgot to carry
     const t = K.tune || { supportGain: 90, supportDamp: 10 };
     let a = HOLD * (share === undefined ? 1 : share) + err * t.supportGain - rate * t.supportDamp;
-    a = U.clamp(a, 0, maxAcc);
+    // A leg yields as well as pushes. Clamped to positive it can only ever
+    // hold the body UP, so the knees straighten until the skeleton is a pair
+    // of struts and the unit stands like a fence post at whatever height it
+    // happened to reach — nothing in the system asks it to come back down.
+    a = U.clamp(a, -maxAcc * 0.6, maxAcc);
     for (const t of b.trunk) P.addVel(t, 0, a * dt, 0, dt);
     P.addVel(f, 0, -a * dt * 0.5, 0, dt);
     P.addVel(leg.toe, 0, -a * dt * 0.2, 0, dt);
@@ -893,6 +908,52 @@ K.rag = (function () {
     P.drive(leg.knee, s.jx, s.jy, s.jz, speed, dt, speed * 22);
   }
 
+  /* The neutral stance, measured once off a freshly built body: every point's
+     offset from the pelvis, in a frame facing +z. */
+  const NEUTRAL = (function () {
+    const b = build(0, 0, 0), o = {}, p = b.parts.pelvis;
+    for (const q of b.list) o[q.name] = { x: q.x - p.x, y: q.y - p.y, z: q.z - p.z };
+    return o;
+  })();
+
+  /* Put a body back into a clean stance at a place, facing a way.
+
+     Muscles are good at HOLDING a pose and bad at recovering one: from a
+     tangle, a leg can end up folded with the foot above the knee, where the
+     knee hint is parallel to the limb and the joint flaps instead of bending.
+     No amount of servo tuning fixes a shape the solver cannot read. A unit
+     under its own control on its own tile has no business being in that shape,
+     so it is simply put back — blended over a few frames, which reads as
+     picking yourself up rather than as a pop. */
+  function settle(b, x, y, z, fx, fz, k) {
+    const rx = -fz, rz = fx;                       // right, on the ground
+    for (const q of b.list) {
+      const o = NEUTRAL[q.name];
+      if (!o) continue;
+      const tx = x + o.x * rx + o.z * fx;
+      const ty = y + o.y;
+      const tz = z + o.x * rz + o.z * fz;
+      q.x += (tx - q.x) * k; q.y += (ty - q.y) * k; q.z += (tz - q.z) * k;
+      q.px = q.x; q.py = q.y; q.pz = q.z;          // and no inherited motion
+    }
+  }
+
+  /* How far this body is from that clean stance. Arms are excluded: they are
+     supposed to move — reaching, swinging, guarding — and a body is not
+     tangled because its hand is out in front of it. */
+  const CORE = /^(pelvis|chest|head|hip|sh|knee|foot|toe)/;
+  function strayed(b, x, y, z, fx, fz) {
+    const rx = -fz, rz = fx;
+    let worst = 0;
+    for (const q of b.list) {
+      const o = NEUTRAL[q.name];
+      if (!o || !CORE.test(q.name)) continue;
+      const d = Math.hypot(q.x - (x + o.x * rx + o.z * fx), q.y - (y + o.y), q.z - (z + o.x * rz + o.z * fz));
+      if (d > worst) worst = d;
+    }
+    return worst;
+  }
+
   function uprightness(b) {
     const p = b.parts.pelvis, c = b.parts.chest;
     const dx = c.x - p.x, dy = c.y - p.y, dz = c.z - p.z;
@@ -900,7 +961,8 @@ K.rag = (function () {
     return { tilt: Math.acos(U.clamp(dy / l, -1, 1)) };
   }
 
-  return { L, build, legs, arms, frame, reachLeg, reachArm, support, legSpring, poseLeg, uprightness };
+  return { L, build, legs, arms, frame, reachLeg, reachArm, support, legSpring, poseLeg,
+           uprightness, settle, strayed, NEUTRAL };
 })();
 
 /* ---- 03-grid.js ---- */
@@ -1630,7 +1692,7 @@ K.actor = (function () {
   const P = K.phys, R = K.rag, U = K.util;
   const { clamp, lerp, angDiff } = U;
 
-  const STANCE = 0.15;       // half the distance between the feet
+  const STANCE = 0.19;       // half the distance between the feet
   const HIP = 0.74;          // hip height over the deck when standing
   const CAD = 4.3;           // steps per second on the march
   const SPEED = 2.80;        // metres per second
@@ -1723,19 +1785,23 @@ K.actor = (function () {
     const sp = 5.0 * a.strength;
     const gy = surfaceTop(a);
     const { fx, fz, sx, sz } = axes(a);
-    const hintK = { x: fx, y: 0, z: fz }, hintA = { x: -fx, y: 0, z: -fz };
+    // a hint with a little height in it can never end up parallel to a leg,
+    // which is the state that makes the knee flap instead of bend
+    const hintK = { x: fx, y: 0.15, z: fz }, hintA = { x: -fx, y: 0, z: -fz };
 
     const legs = R.legs(b);
     for (let i = 0; i < 2; i++) {
       const L = legs[i];
       // feet planted either side of the tile centre, square to the heading
-      const hx = a.pos.x + sx * L.side * STANCE;
-      const hz = a.pos.z + sz * L.side * STANCE;
+      // A stance is not symmetrical. The weapon side stands back, the other
+      // foot leads, and the difference between the two is most of what tells
+      // you at a glance that this is a person facing that way.
+      const lead = L.side > 0 ? -0.09 : 0.07;
+      const hx = a.pos.x + sx * L.side * STANCE + fx * lead;
+      const hz = a.pos.z + sz * L.side * STANCE + fz * lead;
       if (!a.foot[i]) a.foot[i] = { x: hx, z: hz };
-      // A body that has been thrown leaves its old footprints behind. Left
-      // alone the stance tries to stand on them, the legs trail out behind the
-      // hips and the unit quietly sinks to a kneel — so the plant walks itself
-      // home whenever it has drifted off the tile.
+      // A body that has been thrown leaves its old footprints behind, so the
+      // plant walks itself home whenever it has drifted off the tile.
       const off = Math.hypot(a.foot[i].x - hx, a.foot[i].z - hz);
       if (off > 0.26) {
         const k = clamp(dt * 6, 0, 1);
@@ -1743,13 +1809,27 @@ K.actor = (function () {
         a.foot[i].z = lerp(a.foot[i].z, hz, k);
       }
       R.reachLeg(b, L, a.foot[i].x, gy + R.L.plant, a.foot[i].z, sp, dt, hintK);
-      if (L.foot.grounded || L.toe.grounded) {
-        R.support(b, L, R.L.leg * 0.88, (34 + 26) * a.strength, dt, 0.5);
+      // hold the hips at standing height above the foot — a fraction of the
+      // leg's length is a different number, and it is the one that locks the
+      // knees straight; the leg left standing carries the whole weight
+      if (L.foot.grounded || L.toe.grounded || L.foot.y - gy < 0.14) {
+        R.support(b, L, HIP - R.L.plant, (34 + 26) * a.strength, dt, 0.5);
       }
       P.drive(L.toe, L.foot.x + fx * 0.14, L.foot.y - 0.05, L.foot.z + fz * 0.14, sp, dt, sp * 14);
     }
     // hips over the feet, chest up, a little weight forward
     P.drive(p.pelvis, a.pos.x, gy + HIP, a.pos.z, sp * 0.8, dt, 40 * a.strength);
+    /* If the body has strayed from the stance it is supposed to be holding —
+       a leg folded the wrong way, an arm through the chest, a knee above a hip
+       — put it back. The muscles hold a pose well and recover one badly, and a
+       unit standing on its own tile under its own control has no business in a
+       shape the solver cannot read its way out of. Blended, so it reads as
+       picking yourself up rather than as a pop. */
+    const stray = a.swing > 0 ? 0 : R.strayed(b, a.pos.x, gy + HIP, a.pos.z, fx, fz);
+    if (stray > 0.34) {
+      a.mend = (a.mend || 0) + dt;
+      R.settle(b, a.pos.x, gy + HIP, a.pos.z, fx, fz, clamp(dt * (a.mend > 0.8 ? 9 : 3.5), 0, 1));
+    } else a.mend = 0;
     const l = lean === undefined ? 0.08 : lean;
     P.aim(p.pelvis, p.chest, fx * l, 1, fz * l, 0.30 * a.strength);
     P.aim(p.chest, p.head, fx * 0.05, 1, fz * 0.05, 0.25 * a.strength);
@@ -1759,11 +1839,13 @@ K.actor = (function () {
     const guard = a.swing > 0 ? 1 - a.swing : 0;
     for (const arm of A) {
       const lead = arm.side > 0;                       // the right hand holds it
-      const out = lead ? 0.15 : 0.23;
-      const reach = lead ? 0.30 + guard * 0.16 : 0.10;
+      // hands away from the ribs: an arm tucked into the silhouette is not an
+      // arm, it is a wider chest
+      const out = lead ? 0.30 : 0.34;
+      const reach = lead ? 0.24 + guard * 0.18 : 0.02;
       R.reachArm(b, arm,
         arm.sh.x + sx * arm.side * out + fx * reach,
-        arm.sh.y - 0.34 + (lead ? guard * 0.28 : 0),
+        arm.sh.y - 0.36 + (lead ? guard * 0.28 : 0),
         arm.sh.z + sz * arm.side * out + fz * reach, sp, dt, hintA);
     }
   }
@@ -1812,7 +1894,7 @@ K.actor = (function () {
         // the knee still has to be steered, and the hip still has to be held
         // up — a pin is not a contact, so the support is unconditional here
         R.reachLeg(b, L, a.foot[i].x, gy + R.L.plant, a.foot[i].z, sp, dt, hintK);
-        R.support(b, L, R.L.leg * 0.86, 60 * a.strength, dt, 1);
+        R.support(b, L, HIP - R.L.plant - 0.02, 60 * a.strength, dt, 1);
         P.drive(L.toe, L.foot.x + fx * 0.13, L.foot.y - 0.04, L.foot.z + fz * 0.13, sp, dt, sp * 14);
       }
     }
@@ -1876,6 +1958,7 @@ K.actor = (function () {
     a.mode = lethal ? 'dead' : 'hit';
     a.restT = 0;
     a.foot = [null, null];
+    a.fix = [0, 0];
     unplant(a);            // a body taking a blow owns nothing, least of all the floor
     wake(a);
   }
@@ -1891,7 +1974,21 @@ K.actor = (function () {
     // A held pose never stops buzzing — the muscles are a control loop, not a
     // pose, and they hunt around the target for ever. So rest is judged by
     // whether the body has actually GONE anywhere.
+    /* Never freeze a body that is standing badly. Rest is a promise that this
+       pose is the one it meant to hold, and a frozen body has no way back —
+       whatever shape it was in when the clock ran out is the shape it keeps
+       for the rest of the battle. Checking the hips alone is not enough: a
+       unit can carry the right hip height with one leg folded up in the air,
+       and that is exactly the shape that kept turning up on the field. */
     const p = a.body.parts.pelvis;
+    if (a.mode === 'pose') {
+      const gy = surfaceTop(a);
+      if (Math.abs(p.y - gy - HIP) > 0.10) { a.calm = 0; a.anchor = null; return false; }
+      if (a.body.parts.head.y < a.body.parts.chest.y + 0.15) { a.calm = 0; a.anchor = null; return false; }
+      for (const L of R.legs(a.body)) {
+        if (L.foot.y - gy > 0.13) { a.calm = 0; a.anchor = null; return false; }
+      }
+    }
     if (!a.anchor) { a.anchor = { x: p.x, y: p.y, z: p.z }; a.calm = 0; return false; }
     if (Math.abs(p.x - a.anchor.x) + Math.abs(p.y - a.anchor.y) + Math.abs(p.z - a.anchor.z) > 0.05) {
       a.anchor = { x: p.x, y: p.y, z: p.z }; a.calm = 0; return false;
@@ -1963,6 +2060,8 @@ K.actor = (function () {
         const acc = clamp(err * 80, 0, 54) * a.strength;
         for (const t of b.trunk) P.addVel(t, 0, acc * dt, 0, dt);
       }
+      // hand back to the stance once it is upright enough for the stance to
+      // finish the job — the stance can now stand itself up either way
       if ((a.restT > 0.5 && p.pelvis.y - gy > 0.55) || a.restT > 1.8) {
         a.mode = 'pose'; a.strength = 1; a.foot = [null, null];
       }
@@ -2991,14 +3090,21 @@ K.render = (function () {
 
   /* ---------------------------------------------------------------- bodies */
 
+  /* Three groups, each with its own real thickness. Batching every limb into
+     one stroke width was cheap and turned a body into a lump: a thigh drawn as
+     wide as a torso does not read as a leg, it reads as more torso. The group
+     is the unit of batching AND the unit of thickness, so a body still costs
+     six strokes instead of twenty-eight but a leg is a leg. */
+  const TORSO = 0, LIMB = 1, THIN = 2;
   const LIMBS = [
-    ['hipL', 'kneeL', 0.090], ['kneeL', 'footL', 0.074], ['footL', 'toeL', 0.060],
-    ['hipR', 'kneeR', 0.090], ['kneeR', 'footR', 0.074], ['footR', 'toeR', 0.060],
-    ['shL', 'elbowL', 0.061], ['elbowL', 'handL', 0.051],
-    ['shR', 'elbowR', 0.061], ['elbowR', 'handR', 0.051],
-    ['hipL', 'hipR', 0.084], ['shL', 'shR', 0.094],
-    ['pelvis', 'chest', 0.124], ['chest', 'head', 0.067]
+    ['pelvis', 'chest', TORSO], ['shL', 'shR', TORSO],
+    ['hipL', 'kneeL', LIMB], ['kneeL', 'footL', LIMB],
+    ['hipR', 'kneeR', LIMB], ['kneeR', 'footR', LIMB], ['hipL', 'hipR', LIMB],
+    ['shL', 'elbowL', THIN], ['elbowL', 'handL', THIN],
+    ['shR', 'elbowR', THIN], ['elbowR', 'handR', THIN],
+    ['footL', 'toeL', THIN], ['footR', 'toeR', THIN], ['chest', 'head', THIN]
   ];
+  const GIRTH = [0.115, 0.070, 0.044];
 
   // the weapon lives in the right hand, whichever way the body is turned
   function weaponHand(a) { return a.body.parts.handR; }
@@ -3113,35 +3219,36 @@ K.render = (function () {
         // twenty-eight of them. The segments are bucketed into a heavy group
         // and a light one and each is stroked twice — four strokes a body, and
         // the silhouette still reads.
-        const heavy = [], light = [];
-        let hz = 0, lz = 0;
-        for (const [p0, p1, w] of LIMBS) {
+        const groups = [[], [], []], depths = [0, 0, 0];
+        for (const [p0, p1, g] of LIMBS) {
           const pa = proj(v, P[p0].x, P[p0].y, P[p0].z), pb = proj(v, P[p1].x, P[p1].y, P[p1].z);
           if (pa.cz < NEAR || pb.cz < NEAR) continue;
-          const seg = { z: (pa.cz + pb.cz) / 2, a: toScreen(v, pa), b: toScreen(v, pb), w };
-          if (w >= 0.08) { heavy.push(seg); hz += seg.z; } else { light.push(seg); lz += seg.z; }
+          const seg = { z: (pa.cz + pb.cz) / 2, a: toScreen(v, pa), b: toScreen(v, pb) };
+          groups[g].push(seg); depths[g] += seg.z;
         }
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         const alpha = dead ? 0.72 : spent ? 0.8 : 1;
         const ink = 'rgba(8,8,13,' + (0.85 * alpha) + ')';
         const flesh = css(mix(mix(skin, [26, 24, 34], clamp((depth - 6) / 22, 0, 0.35)), v.fog, fogT * 0.7), alpha);
-        const scale = P.pelvis ? (v.f / Math.max(NEAR, depth)) : 1;
-        const bucket = (list, wide) => {
+        const scale = v.f / Math.max(NEAR, depth);
+        const draw = (gi) => {
+          const list = groups[gi];
           if (!list.length) return;
-          const w = Math.max(1.3, wide * 2 * scale);
+          const w = Math.max(1.2, GIRTH[gi] * 2 * scale);
           ctx.beginPath();
           for (const s of list) { ctx.moveTo(s.a.x, s.a.y); ctx.lineTo(s.b.x, s.b.y); }
-          ctx.strokeStyle = ink; ctx.lineWidth = w + Math.max(1.5, w * 0.30); ctx.stroke();
+          ctx.strokeStyle = ink; ctx.lineWidth = w + Math.max(1.4, w * 0.24); ctx.stroke();
           ctx.strokeStyle = flesh; ctx.lineWidth = w; ctx.stroke();
         };
-        // whichever group is further away is laid down first
-        const heavyFirst = (heavy.length ? hz / heavy.length : 0) >= (light.length ? lz / light.length : 0);
-        if (heavyFirst) { bucket(heavy, 0.098); bucket(light, 0.060); }
-        else { bucket(light, 0.060); bucket(heavy, 0.098); }
+        // the group furthest away goes down first, so limbs read in front of
+        // and behind the trunk rather than always on top of it
+        const order = [0, 1, 2].filter(i => groups[i].length)
+          .sort((p, q) => (depths[q] / groups[q].length) - (depths[p] / groups[p].length));
+        for (const gi of order) draw(gi);
         const hp = screenOf(v, P.head.x, P.head.y, P.head.z);
         if (hp) {
-          const r = Math.max(2, 0.125 * hp.s);
+          const r = Math.max(2, 0.104 * hp.s);
           ctx.fillStyle = 'rgba(8,8,13,' + (0.85 * alpha) + ')';
           ctx.beginPath(); ctx.arc(hp.x, hp.y, r + Math.max(1.5, r * 0.24), 0, 7); ctx.fill();
           ctx.fillStyle = css(mix(skin, v.fog, fogT * 0.7), alpha);

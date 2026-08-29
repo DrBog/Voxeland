@@ -333,7 +333,15 @@ K.phys = (function () {
     const hd = hx * ux + hy * uy + hz * uz;
     let px = hx - ux * hd, py = hy - uy * hd, pz = hz - uz * hd;
     let pl = Math.hypot(px, py, pz);
-    if (pl < 1e-5) { px = -uy; py = ux; pz = 0; pl = Math.hypot(px, py, pz) || 1; }
+    if (pl < 1e-5) {
+      // The hint was parallel to the limb, so it says nothing about which way
+      // the joint should break. Fall back to something stable — up crossed
+      // with the limb — rather than an arbitrary perpendicular that flips sign
+      // as the limb swings, which makes a knee flap instead of bend.
+      px = uz * 1 - uy * 0; py = 0; pz = -ux * 1;
+      pl = Math.hypot(px, py, pz);
+      if (pl < 1e-5) { px = 1; py = 0; pz = 0; pl = 1; }
+    }
     px /= pl; py /= pl; pz /= pl;
     return {
       jx: rx + ux * a + px * h, jy: ry + uy * a + py * h, jz: rz + uz * a + pz * h,

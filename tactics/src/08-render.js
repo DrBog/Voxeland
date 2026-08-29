@@ -359,14 +359,21 @@ K.render = (function () {
 
   /* ---------------------------------------------------------------- bodies */
 
+  /* Three groups, each with its own real thickness. Batching every limb into
+     one stroke width was cheap and turned a body into a lump: a thigh drawn as
+     wide as a torso does not read as a leg, it reads as more torso. The group
+     is the unit of batching AND the unit of thickness, so a body still costs
+     six strokes instead of twenty-eight but a leg is a leg. */
+  const TORSO = 0, LIMB = 1, THIN = 2;
   const LIMBS = [
-    ['hipL', 'kneeL', 0.090], ['kneeL', 'footL', 0.074], ['footL', 'toeL', 0.060],
-    ['hipR', 'kneeR', 0.090], ['kneeR', 'footR', 0.074], ['footR', 'toeR', 0.060],
-    ['shL', 'elbowL', 0.061], ['elbowL', 'handL', 0.051],
-    ['shR', 'elbowR', 0.061], ['elbowR', 'handR', 0.051],
-    ['hipL', 'hipR', 0.084], ['shL', 'shR', 0.094],
-    ['pelvis', 'chest', 0.124], ['chest', 'head', 0.067]
+    ['pelvis', 'chest', TORSO], ['shL', 'shR', TORSO],
+    ['hipL', 'kneeL', LIMB], ['kneeL', 'footL', LIMB],
+    ['hipR', 'kneeR', LIMB], ['kneeR', 'footR', LIMB], ['hipL', 'hipR', LIMB],
+    ['shL', 'elbowL', THIN], ['elbowL', 'handL', THIN],
+    ['shR', 'elbowR', THIN], ['elbowR', 'handR', THIN],
+    ['footL', 'toeL', THIN], ['footR', 'toeR', THIN], ['chest', 'head', THIN]
   ];
+  const GIRTH = [0.115, 0.070, 0.044];
 
   // the weapon lives in the right hand, whichever way the body is turned
   function weaponHand(a) { return a.body.parts.handR; }
@@ -481,35 +488,36 @@ K.render = (function () {
         // twenty-eight of them. The segments are bucketed into a heavy group
         // and a light one and each is stroked twice — four strokes a body, and
         // the silhouette still reads.
-        const heavy = [], light = [];
-        let hz = 0, lz = 0;
-        for (const [p0, p1, w] of LIMBS) {
+        const groups = [[], [], []], depths = [0, 0, 0];
+        for (const [p0, p1, g] of LIMBS) {
           const pa = proj(v, P[p0].x, P[p0].y, P[p0].z), pb = proj(v, P[p1].x, P[p1].y, P[p1].z);
           if (pa.cz < NEAR || pb.cz < NEAR) continue;
-          const seg = { z: (pa.cz + pb.cz) / 2, a: toScreen(v, pa), b: toScreen(v, pb), w };
-          if (w >= 0.08) { heavy.push(seg); hz += seg.z; } else { light.push(seg); lz += seg.z; }
+          const seg = { z: (pa.cz + pb.cz) / 2, a: toScreen(v, pa), b: toScreen(v, pb) };
+          groups[g].push(seg); depths[g] += seg.z;
         }
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         const alpha = dead ? 0.72 : spent ? 0.8 : 1;
         const ink = 'rgba(8,8,13,' + (0.85 * alpha) + ')';
         const flesh = css(mix(mix(skin, [26, 24, 34], clamp((depth - 6) / 22, 0, 0.35)), v.fog, fogT * 0.7), alpha);
-        const scale = P.pelvis ? (v.f / Math.max(NEAR, depth)) : 1;
-        const bucket = (list, wide) => {
+        const scale = v.f / Math.max(NEAR, depth);
+        const draw = (gi) => {
+          const list = groups[gi];
           if (!list.length) return;
-          const w = Math.max(1.3, wide * 2 * scale);
+          const w = Math.max(1.2, GIRTH[gi] * 2 * scale);
           ctx.beginPath();
           for (const s of list) { ctx.moveTo(s.a.x, s.a.y); ctx.lineTo(s.b.x, s.b.y); }
-          ctx.strokeStyle = ink; ctx.lineWidth = w + Math.max(1.5, w * 0.30); ctx.stroke();
+          ctx.strokeStyle = ink; ctx.lineWidth = w + Math.max(1.4, w * 0.24); ctx.stroke();
           ctx.strokeStyle = flesh; ctx.lineWidth = w; ctx.stroke();
         };
-        // whichever group is further away is laid down first
-        const heavyFirst = (heavy.length ? hz / heavy.length : 0) >= (light.length ? lz / light.length : 0);
-        if (heavyFirst) { bucket(heavy, 0.098); bucket(light, 0.060); }
-        else { bucket(light, 0.060); bucket(heavy, 0.098); }
+        // the group furthest away goes down first, so limbs read in front of
+        // and behind the trunk rather than always on top of it
+        const order = [0, 1, 2].filter(i => groups[i].length)
+          .sort((p, q) => (depths[q] / groups[q].length) - (depths[p] / groups[p].length));
+        for (const gi of order) draw(gi);
         const hp = screenOf(v, P.head.x, P.head.y, P.head.z);
         if (hp) {
-          const r = Math.max(2, 0.125 * hp.s);
+          const r = Math.max(2, 0.104 * hp.s);
           ctx.fillStyle = 'rgba(8,8,13,' + (0.85 * alpha) + ')';
           ctx.beginPath(); ctx.arc(hp.x, hp.y, r + Math.max(1.5, r * 0.24), 0, 7); ctx.fill();
           ctx.fillStyle = css(mix(skin, v.fog, fogT * 0.7), alpha);

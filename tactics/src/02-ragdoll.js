@@ -113,7 +113,10 @@ K.rag = (function () {
      what this regulates, with a hard ceiling on the acceleration it can
      produce. The ceiling is what LEG DRIVE buys, and what a hurt or
      unconscious runner loses. */
-  const HOLD = 16.6;      // m/s^2 on the sprung mass to merely not sink
+  /* Exactly enough to carry the body's own weight and no more. Set above
+     gravity it does not hold a stance, it presses the body up until the knees
+     lock and the unit stands like a post. */
+  const HOLD = 11.2;      // m/s^2 on the sprung mass to merely not sink
   function support(b, leg, targetH, maxAcc, dt, share) {
     const hip = leg.hip, f = leg.foot;
     const err = (f.y + targetH) - hip.y;
@@ -122,7 +125,11 @@ K.rag = (function () {
     // servo sags by exactly however much weight it forgot to carry
     const t = K.tune || { supportGain: 90, supportDamp: 10 };
     let a = HOLD * (share === undefined ? 1 : share) + err * t.supportGain - rate * t.supportDamp;
-    a = U.clamp(a, 0, maxAcc);
+    // A leg yields as well as pushes. Clamped to positive it can only ever
+    // hold the body UP, so the knees straighten until the skeleton is a pair
+    // of struts and the unit stands like a fence post at whatever height it
+    // happened to reach — nothing in the system asks it to come back down.
+    a = U.clamp(a, -maxAcc * 0.6, maxAcc);
     for (const t of b.trunk) P.addVel(t, 0, a * dt, 0, dt);
     P.addVel(f, 0, -a * dt * 0.5, 0, dt);
     P.addVel(leg.toe, 0, -a * dt * 0.2, 0, dt);
@@ -156,6 +163,52 @@ K.rag = (function () {
     P.drive(leg.knee, s.jx, s.jy, s.jz, speed, dt, speed * 22);
   }
 
+  /* The neutral stance, measured once off a freshly built body: every point's
+     offset from the pelvis, in a frame facing +z. */
+  const NEUTRAL = (function () {
+    const b = build(0, 0, 0), o = {}, p = b.parts.pelvis;
+    for (const q of b.list) o[q.name] = { x: q.x - p.x, y: q.y - p.y, z: q.z - p.z };
+    return o;
+  })();
+
+  /* Put a body back into a clean stance at a place, facing a way.
+
+     Muscles are good at HOLDING a pose and bad at recovering one: from a
+     tangle, a leg can end up folded with the foot above the knee, where the
+     knee hint is parallel to the limb and the joint flaps instead of bending.
+     No amount of servo tuning fixes a shape the solver cannot read. A unit
+     under its own control on its own tile has no business being in that shape,
+     so it is simply put back — blended over a few frames, which reads as
+     picking yourself up rather than as a pop. */
+  function settle(b, x, y, z, fx, fz, k) {
+    const rx = -fz, rz = fx;                       // right, on the ground
+    for (const q of b.list) {
+      const o = NEUTRAL[q.name];
+      if (!o) continue;
+      const tx = x + o.x * rx + o.z * fx;
+      const ty = y + o.y;
+      const tz = z + o.x * rz + o.z * fz;
+      q.x += (tx - q.x) * k; q.y += (ty - q.y) * k; q.z += (tz - q.z) * k;
+      q.px = q.x; q.py = q.y; q.pz = q.z;          // and no inherited motion
+    }
+  }
+
+  /* How far this body is from that clean stance. Arms are excluded: they are
+     supposed to move — reaching, swinging, guarding — and a body is not
+     tangled because its hand is out in front of it. */
+  const CORE = /^(pelvis|chest|head|hip|sh|knee|foot|toe)/;
+  function strayed(b, x, y, z, fx, fz) {
+    const rx = -fz, rz = fx;
+    let worst = 0;
+    for (const q of b.list) {
+      const o = NEUTRAL[q.name];
+      if (!o || !CORE.test(q.name)) continue;
+      const d = Math.hypot(q.x - (x + o.x * rx + o.z * fx), q.y - (y + o.y), q.z - (z + o.x * rz + o.z * fz));
+      if (d > worst) worst = d;
+    }
+    return worst;
+  }
+
   function uprightness(b) {
     const p = b.parts.pelvis, c = b.parts.chest;
     const dx = c.x - p.x, dy = c.y - p.y, dz = c.z - p.z;
@@ -163,5 +216,6 @@ K.rag = (function () {
     return { tilt: Math.acos(U.clamp(dy / l, -1, 1)) };
   }
 
-  return { L, build, legs, arms, frame, reachLeg, reachArm, support, legSpring, poseLeg, uprightness };
+  return { L, build, legs, arms, frame, reachLeg, reachArm, support, legSpring, poseLeg,
+           uprightness, settle, strayed, NEUTRAL };
 })();
