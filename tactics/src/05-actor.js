@@ -15,7 +15,10 @@ K.actor = (function () {
   const { clamp, lerp, angDiff } = U;
 
   const STANCE = 0.19;       // half the distance between the feet
-  const HIP = 0.74;          // hip height over the deck when standing
+  /* Nearly straight, but not locked: at 0.74 the knees bent sixty degrees,
+     which is a crouch, and from a camera looking down at it a knee that far
+     forward projects BELOW its own foot. */
+  const HIP = 0.82;          // hip height over the deck when standing
   const CAD = 4.3;           // steps per second on the march
   const SPEED = 2.80;        // metres per second
   /* The one number that decides whether a walk reads: how far the hips travel

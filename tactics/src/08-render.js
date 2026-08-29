@@ -46,8 +46,8 @@ K.render = (function () {
       // diamond spends the width of a portrait screen on its own diagonal and
       // leaves two triangles of void along the bottom edge; square on, the
       // near rank is a full-width line and the arena fills the frame.
-      yaw: Math.PI + 0.10, pitch: 0.74, dist: 24,
-      wantYaw: Math.PI + 0.10, wantPitch: 0.74, wantDist: 24,
+      yaw: Math.PI + 0.10, pitch: 0.66, dist: 24,
+      wantYaw: Math.PI + 0.10, wantPitch: 0.66, wantDist: 24,
       shake: 0, fov: 1
     };
   }
@@ -105,7 +105,17 @@ K.render = (function () {
     // scale is set by the SHORTER axis of the space the board actually has, so
     // a unit is the same size in your hand whatever the phone
     const ref = Math.min(v.w * 1.42, band);
-    const fovY = 1.02 / (cam.fov || 1);
+    /* A narrow lens, and a camera further back to make up for it.
+
+       At 58 degrees the board sheared across the frame: a unit near the bottom
+       was being looked at from almost directly overhead — measured, its hips
+       projected three pixels above its feet and its knees projected BELOW
+       them, so the legs collapsed into the tile and the body looked cut off at
+       the waist — while a unit at the top of the same frame was seen almost
+       side on. Tiles at the edges sheared hard enough to read as billboards.
+       A long lens costs a little depth and buys a board that looks the same
+       everywhere on it. */
+    const fovY = 0.72 / (cam.fov || 1);
     v.f = (ref * 0.5) / Math.tan(fovY * 0.5);
     v.cam = { x: cam.x, y: cam.y, z: cam.z, fx, fy, fz, rx, ry, rz, ux, uy, uz, sx: sx || 0, sy: sy || 0 };
     v.my = midY(v);
@@ -438,6 +448,13 @@ K.render = (function () {
     const pel = P.pelvis;
     const depth = (pel.x - c.x) * c.fx + (pel.y - c.y) * c.fy + (pel.z - c.z) * c.fz;
     if (depth < NEAR) return;
+    /* A slab sorts by its nearest corner and a body by its hips, so the tile a
+       unit is standing on always counts as nearer than the unit standing on it
+       — and paints over its legs. Everyone was cut off at the waist. A body
+       therefore sorts in front of the ground under its own feet, and against
+       everything else on its own merits. */
+    const under = g.battle.level.groundAt(pel.x, pel.z, pel.y + 0.3);
+    const floor = under ? boxDepth(v, under.box) - 0.08 : 1e9;
     const fogT = clamp((depth - FOG_NEAR) / (FOG_FAR - FOG_NEAR), 0, 1);
     const S = SIDE[a.unit.side];
     const dead = a.unit.dead;
@@ -448,10 +465,10 @@ K.render = (function () {
       : spent ? mix(S.body, [86, 92, 108], 0.62) : S.body;
     const acc = rgb(S.accent);
     v.items.push({
-      z: depth - 0.35,
+      z: Math.min(depth - 0.35, floor),
       draw: (ctx) => {
         // shadow first, on whatever surface is under the hips
-        const gr = g.battle.level.groundAt(pel.x, pel.z, pel.y + 0.3);
+        const gr = under;
         if (gr) {
           const s = screenOf(v, pel.x, gr.y + 0.03, pel.z);
           if (s) {
