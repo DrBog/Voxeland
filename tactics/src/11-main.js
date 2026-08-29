@@ -32,6 +32,8 @@
       enemy: run.wave === 1 && (run.runs || 0) === 0 ? null : K.camp.enemyPlan(run.wave, rnd)
     });
     g.summary = null;
+    // the renderer asks g for the zone, so the shell is what decides it
+    g.zone = g.battle.zone;
     g.cam = R.Camera(g.battle.arena);
     g.hover = null; g.pathPreview = null; g.cardUnit = null; g.pair = null; g.threat = [];
     g.manual = false; g.look = null; g.zoomT = 0.85; g.zoomAuto = true;

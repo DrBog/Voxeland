@@ -60,7 +60,16 @@ html, body {
   display: block; font-size: 17px; letter-spacing: 0.2em; font-weight: 700;
   text-shadow: 0 2px 22px rgba(0,0,0,0.85);
 }
-#banner span { display: block; font-size: 10px; color: var(--dim); margin-top: 4px; letter-spacing: 0.06em; }
+/* The banner sits straight on the board, so its contrast is at the mercy of
+   whatever zone is underneath. On the Glasswaste and the Drowned March — pale
+   ground, bright fog — the subtitle was dim grey on near-white and could not
+   be read at all. A dark halo carries it on light ground and costs nothing on
+   dark. */
+#banner span {
+  display: block; font-size: 10px; color: #e6ebf5; margin-top: 4px; letter-spacing: 0.06em;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 12px rgba(0,0,0,0.8);
+}
+#banner b { text-shadow: 0 2px 22px rgba(0,0,0,0.9), 0 1px 4px rgba(0,0,0,0.95); }
 #banner.enemy b { color: var(--theirs); }
 #banner.mine b { color: var(--mine); }
 

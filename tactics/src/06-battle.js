@@ -12,11 +12,17 @@ K.battle = (function () {
     // the first field is the one everybody sees first, so it is the built one;
     // after that the generator picks, and every map it hands over has been
     // checked for connection, height, a drop and room to form up
-    const arena = K.grid.make(seed || ((Math.random() * 1e9) | 0),
-      wave === 1 && !(plan && plan.layout) ? { layout: 'courtyard' }
-        : { layout: plan && plan.layout, avoid: plan && plan.avoid });
+    /* Which PLACE this fight is in comes first, because the place decides
+       which board shapes are even possible in it: you do not get a citadel in
+       the middle of the Glasswaste. The zone names its layouts, the seed
+       picks between them, and only then is an arena built. */
+    const sd = seed || ((Math.random() * 1e9) | 0);
+    const zone = (plan && plan.zone) || (K.zones ? K.zones.forWave(wave) : null);
+    const want = (plan && plan.layout)
+      || (wave === 1 ? 'courtyard' : (zone ? K.zones.layoutFor(zone, sd) : null));
+    const arena = K.grid.make(sd, { layout: want, avoid: plan && plan.avoid });
     const b = {
-      arena, level: arena.collider(),
+      arena, zone, level: arena.collider(),
       units: [], actors: new Map(), turn: 1, phase: 'player',
       sel: null, reach: null, targets: [], hover: null,
       busy: null, log: [], banner: null, over: null, focus: null,

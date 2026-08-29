@@ -117,10 +117,21 @@ K.render = (function () {
        everywhere on it. */
     const fovY = 0.72 / (cam.fov || 1);
     v.f = (ref * 0.5) / Math.tan(fovY * 0.5);
-    v.cam = { x: cam.x, y: cam.y, z: cam.z, fx, fy, fz, rx, ry, rz, ux, uy, uz, sx: sx || 0, sy: sy || 0 };
+    v.cam = { x: cam.x, y: cam.y, z: cam.z, yaw: cam.yaw, fx, fy, fz, rx, ry, rz, ux, uy, uz, sx: sx || 0, sy: sy || 0 };
     v.my = midY(v);
-    const dfwd = fz, dup = uz;
-    v.horizonY = dfwd > 0.01 ? v.my - v.f * (dup / dfwd) : -v.h;
+    /* The horizon, properly. This used to be uz/fz, which is the right answer
+       only when the camera looks straight down world z — and this camera never
+       does, it sits at yaw PI+0.1, so fz was negative, the guard failed every
+       frame and the horizon was pinned to its fallback off the top of the
+       screen for every pitch. Nothing that hangs off the horizon has ever been
+       in the right place.
+
+       A horizontal direction d projects to cy/cz = (d.u)/(d.f). Take d as the
+       camera's own forward flattened onto the ground plane and it reduces to
+       the dot products below — which is just tan(pitch), but computed from the
+       basis rather than assuming one. */
+    const hl = fx * fx + fz * fz;
+    v.horizonY = hl > 1e-6 ? v.my - v.f * ((fx * ux + fz * uz) / hl) : -v.h * 4;
   }
 
   function proj(v, x, y, z) {
@@ -217,7 +228,7 @@ K.render = (function () {
     opts = opts || {};
     const c = v.cam;
     const depth = boxDepth(v, b);
-    if (depth > FOG_FAR + 40) return;
+    if (depth > (v.fogFar || FOG_FAR) + 40) return;
     const cy = (b.y0 + b.y1) / 2;
     const centre = ((b.x0 + b.x1) / 2 - c.x) * c.fx + (cy - c.y) * c.fy + ((b.z0 + b.z1) / 2 - c.z) * c.fz;
     if (centre < -6) return;
@@ -237,7 +248,8 @@ K.render = (function () {
     if (!near) {
       if (x1 < -24 || x0 > v.w + 24 || y1 < -24 || y0 > v.h + 24) return;
     }
-    const fogT = clamp((centre - FOG_NEAR) / (FOG_FAR - FOG_NEAR), 0, 1);
+    const fn = v.fogNear || FOG_NEAR, ff = v.fogFar || FOG_FAR;
+    const fogT = clamp((centre - fn) / (ff - fn), 0, 1);
     v.items.push({
       z: depth,
       draw: (ctx) => {
@@ -277,10 +289,18 @@ K.render = (function () {
         y0: s.y - Math.max(0.18, s.solid), y1: s.y,
         z0: w.z - T / 2, z1: w.z + T / 2
       };
-      const tint = rgb(s.t.col);
+      /* The terrain table says what a surface IS; the zone says what light
+         is falling on it. Tinting here rather than in the grid keeps one
+         rubble tile one rubble tile in every zone, and still means the
+         Glasswaste is bleached and the Ashfall is rusted. */
+      const zg = g.zone && g.zone.ground;
+      const tint = zg ? mix(rgb(s.t.col), rgb(zg.col), zg.mix) : rgb(s.t.col);
+      // the shade cache is keyed by terrain, so the zone has to be part of
+      // that key or the first zone drawn paints every zone after it
+      const zk = g.zone ? g.zone.id : '-';
       const n = hash(s.id * 977);
       boxItem(v, box, mix(tint, [255, 255, 255], 0.03 + Math.round(n * 3) * 0.017), {
-        open: s.open, key: s.terrain + (Math.round(n * 3)),
+        open: s.open, key: zk + s.terrain + (Math.round(n * 3)),
         edge: s.terrain === 'bridge' || s.terrain === 'fort' || s.terrain === 'roof' ? '#8d9ab5' : '#6d7791',
         edgeA: 0.22
       });
@@ -385,6 +405,49 @@ K.render = (function () {
   ];
   const GIRTH = [0.115, 0.070, 0.044];
 
+  /* --------------------------------------------------------- what they wear
+
+     Ported from DelveCraft, which builds a figure out of named materials —
+     SKIN, TUNIC, LEATHER, PLATE, BOOT, CAPE — rather than painting the whole
+     body one colour. That app ships no art at all: the materials ARE the
+     characters, and this is the part of it worth having.
+
+     It costs nothing here because the renderer already batches the body into
+     three girth groups, and those groups happen to be exactly the right
+     divisions: the trunk is the tunic, the legs are the armour, the arms and
+     neck are skin. Three materials, still four strokes a body.
+
+     The side's colour stays on the trunk, which is the largest block on the
+     figure and therefore the thing that answers "whose is that" at a glance.
+     Skin is pulled a little way toward it for the same reason — at twenty-odd
+     pixels a unit, two identical flesh-coloured heads across a board would
+     cost more than the material variety buys. */
+  const MATS = {
+    skin:    [223, 186, 158],
+    leather: [104, 74, 54],
+    plate:   [138, 146, 162],
+    boot:    [58, 46, 42],
+    cape:    [86, 62, 96],
+    steel:   [166, 174, 188]
+  };
+  // what each trade has on its legs; everything else is common
+  const KIT = {
+    Blade:   { armour: 'leather' },
+    Halberd: { armour: 'plate' },
+    Reaver:  { armour: 'boot' },
+    Archer:  { armour: 'leather' },
+    Ember:   { armour: 'cape' }
+  };
+  function kitOf(unit, tunic) {
+    const k = KIT[unit.cls] || KIT.Blade;
+    return {
+      tunic,
+      armour: mix(MATS[k.armour], tunic, 0.16),
+      skin: mix(MATS.skin, tunic, 0.34)
+    };
+  }
+
+
   // an archer's bow is in the forward hand; everyone else's weapon is in the
   // right — the actor knows which, because the stance decided it
   function weaponHand(a) { return a.weaponSide < 0 ? a.body.parts.handL : a.body.parts.handR; }
@@ -459,7 +522,7 @@ K.render = (function () {
        everything else on its own merits. */
     const under = g.battle.level.groundAt(pel.x, pel.z, pel.y + 0.3);
     const floor = under ? boxDepth(v, under.box) - 0.08 : 1e9;
-    const fogT = clamp((depth - FOG_NEAR) / (FOG_FAR - FOG_NEAR), 0, 1);
+    const fogT = clamp((depth - (v.fogNear || FOG_NEAR)) / ((v.fogFar || FOG_FAR) - (v.fogNear || FOG_NEAR)), 0, 1);
     const S = SIDE[a.unit.side];
     const dead = a.unit.dead;
     // a unit that has had its turn should look like it: on a board of eleven
@@ -520,7 +583,13 @@ K.render = (function () {
         ctx.lineJoin = 'round';
         const alpha = dead ? 0.72 : spent ? 0.8 : 1;
         const ink = 'rgba(8,8,13,' + (0.85 * alpha) + ')';
-        const flesh = css(mix(mix(skin, [26, 24, 34], clamp((depth - 6) / 22, 0, 0.35)), v.fog, fogT * 0.7), alpha);
+        // one shading pass, applied to each material: distance darkening then
+        // the zone's own fog, so a unit sits in its place rather than on it
+        const shade = (c) => css(mix(mix(c, [26, 24, 34], clamp((depth - 6) / 22, 0, 0.35)),
+          v.fog, fogT * 0.7), alpha);
+        const kit = kitOf(a.unit, skin);
+        // group order is trunk, legs, arms — which is tunic, armour, skin
+        const coats = [shade(kit.tunic), shade(kit.armour), shade(kit.skin)];
         const scale = v.f / Math.max(NEAR, depth);
         const draw = (gi) => {
           const list = groups[gi];
@@ -529,7 +598,7 @@ K.render = (function () {
           ctx.beginPath();
           for (const s of list) { ctx.moveTo(s.a.x, s.a.y); ctx.lineTo(s.b.x, s.b.y); }
           ctx.strokeStyle = ink; ctx.lineWidth = w + Math.max(1.4, w * 0.24); ctx.stroke();
-          ctx.strokeStyle = flesh; ctx.lineWidth = w; ctx.stroke();
+          ctx.strokeStyle = coats[gi]; ctx.lineWidth = w; ctx.stroke();
         };
         // the group furthest away goes down first, so limbs read in front of
         // and behind the trunk rather than always on top of it
@@ -541,7 +610,7 @@ K.render = (function () {
           const r = Math.max(2, 0.104 * hp.s);
           ctx.fillStyle = 'rgba(8,8,13,' + (0.85 * alpha) + ')';
           ctx.beginPath(); ctx.arc(hp.x, hp.y, r + Math.max(1.5, r * 0.24), 0, 7); ctx.fill();
-          ctx.fillStyle = css(mix(skin, v.fog, fogT * 0.7), alpha);
+          ctx.fillStyle = css(mix(kit.skin, v.fog, fogT * 0.7), alpha);
           ctx.beginPath(); ctx.arc(hp.x, hp.y, r, 0, 7); ctx.fill();
           if (!dead) {
             ctx.strokeStyle = css(mix(acc, [255, 255, 255], 0.3), 0.6);
@@ -650,41 +719,247 @@ K.render = (function () {
     ctx.textAlign = 'left';
   }
 
+
+  /* ------------------------------------------------------------------ sky
+
+     A skybox in a software renderer is not a cube of textures; it is whatever
+     you can draw before the board that behaves as though it were infinitely
+     far away. Which is the whole trick here: put a point 900 m along a
+     direction from the CAMERA and hand it to the same projection everything
+     else uses, and it parallaxes correctly for free — it swings with yaw,
+     rises and falls with pitch, and never moves when the camera dollies,
+     because 900 m is far enough that a few metres of travel is nothing.
+     No new maths, no second pipeline, and the horizon lands exactly where
+     the ground plane says it should.
+
+     Everything below is drawn in one order: gradient, stars, sun, ridge,
+     haze, motes. Each layer is optional and each is driven entirely by the
+     zone's data, so a new zone is a new object and not a new code path. */
+
+  const SKY_R = 900;
+
+  // a direction on the celestial sphere, as a point the projector will accept
+  function skyPoint(v, az, alt) {
+    const ca = Math.cos(alt);
+    return screenOf(v,
+      v.cam.x + Math.sin(az) * ca * SKY_R,
+      v.cam.y + Math.sin(alt) * SKY_R,
+      v.cam.z + Math.cos(az) * ca * SKY_R);
+  }
+
+  // cheap value noise on a ring, so a ridge line is stable frame to frame
+  function ridgeAt(r, az) {
+    const f = az * r.freq / (Math.PI * 2) * 8;
+    let sum = 0, amp = 1, tot = 0;
+    for (let o = 0; o < 3; o++) {
+      const k = f * (1 << o), i = Math.floor(k), t = k - i;
+      const a = hash((i + r.seed * 131 + o * 977) & 8191);
+      const b = hash((i + 1 + r.seed * 131 + o * 977) & 8191);
+      const sm = t * t * (3 - 2 * t);
+      sum += (a + (b - a) * sm) * amp; tot += amp; amp *= 0.5;
+    }
+    let n = sum / tot;
+    // teeth pushes the profile from rolling hills toward broken silhouette
+    n = n * (1 - r.teeth) + Math.pow(n, 2.4) * r.teeth * 1.6;
+    return r.base + n * r.amp;
+  }
+
+  function starField(z) {
+    if (!z.stars) return null;
+    if (z._stars && z._stars.length === z.stars) return z._stars;
+    const rnd = U.rng(z.id.length * 7717 + z.stars);
+    const out = [];
+    for (let i = 0; i < z.stars; i++) {
+      out.push({
+        az: rnd() * Math.PI * 2,
+        // biased upward: nobody looks for stars at their feet
+        alt: (2 + Math.pow(rnd(), 0.65) * 76) * (Math.PI / 180),
+        m: 0.35 + rnd() * 0.65, tw: rnd() * 6.3
+      });
+    }
+    z._stars = out;
+    return out;
+  }
+
+  function drawSky(v, g, dt) {
+    const ctx = v.ctx, z = g.zone || (K.zones ? K.zones.LIST[0] : null);
+    if (!z) return;
+    const hy = clamp(v.horizonY, -v.h * 3, v.h * 2.5);
+
+    // 1. the gradient, hung off the horizon so it tilts with the camera
+    const grad = ctx.createLinearGradient(0, hy - v.h * 1.35, 0, hy);
+    const st = z.sky.stops;
+    grad.addColorStop(0, st[0]); grad.addColorStop(0.45, st[1]);
+    grad.addColorStop(0.80, st[2]); grad.addColorStop(1, st[3]);
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, v.w, v.h);
+
+    // 2. stars, before the sun, so the sun's glow washes them out
+    const stars = starField(z);
+    if (stars) {
+      ctx.fillStyle = '#ffffff';
+      for (const s of stars) {
+        const p = skyPoint(v, s.az, s.alt);
+        if (!p || p.y > hy) continue;
+        ctx.globalAlpha = s.m * (0.55 + 0.45 * Math.sin(g.t * 1.7 + s.tw)) * 0.9;
+        const r = 0.6 + s.m * 1.1;
+        ctx.fillRect(p.x - r / 2, p.y - r / 2, r, r);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // 3. the sun or moon, with the glow doing most of the work
+    if (z.sun) {
+      const p = skyPoint(v, z.sun.az, z.sun.alt);
+      if (p) {
+        const rad = z.sun.r * v.f;
+        const gr = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rad * z.sun.glowR);
+        gr.addColorStop(0, css(rgb(z.sun.glow), z.sun.glowA));
+        gr.addColorStop(0.35, css(rgb(z.sun.glow), z.sun.glowA * 0.30));
+        gr.addColorStop(1, css(rgb(z.sun.glow), 0));
+        ctx.fillStyle = gr; ctx.fillRect(0, 0, v.w, v.h);
+        ctx.fillStyle = z.sun.col;
+        ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 7); ctx.fill();
+      }
+    }
+
+    // 4. the horizon. Sampled from behind the camera round to behind it
+    //    again, so the visible arc is always one unbroken run of points and
+    //    never has to be stitched across the wrap.
+    if (z.ridge) {
+      const N = 96, span = Math.PI, y0 = v.cam.yaw !== undefined ? v.cam.yaw : 0;
+      const pts = [];
+      for (let i = 0; i <= N; i++) {
+        const az = y0 - span + (i / N) * span * 2;
+        const p = skyPoint(v, az, ridgeAt(z.ridge, az));
+        if (!p) continue;
+        pts.push({ x: clamp(p.x, -v.w * 8, v.w * 9), y: p.y });
+      }
+      if (pts.length > 2) {
+        ctx.fillStyle = z.ridge.col;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        // close down past the bottom of the frame; the board covers the seam
+        ctx.lineTo(pts[pts.length - 1].x, v.h + 40);
+        ctx.lineTo(pts[0].x, v.h + 40);
+        ctx.closePath(); ctx.fill();
+      }
+    }
+
+    // 5. haze: the band that makes a horizon a distance rather than an edge
+    if (z.sky.haze && hy > -v.h) {
+      const band = v.h * 0.30;
+      const hz = ctx.createLinearGradient(0, hy - band, 0, hy + band * 0.5);
+      hz.addColorStop(0, css(rgb(z.sky.haze), 0));
+      hz.addColorStop(0.72, css(rgb(z.sky.haze), z.sky.hazeA));
+      hz.addColorStop(1, css(rgb(z.sky.haze), 0));
+      ctx.fillStyle = hz; ctx.fillRect(0, hy - band, v.w, band * 1.5);
+    }
+
+    // 6. weather. Screen space on purpose: ash and mist are near the camera,
+    //    not on the sky sphere, and at this cost they can be per-frame.
+    if (z.motes) {
+      if (!v.motes || v.motes.z !== z.id) {
+        const rnd = U.rng(z.id.length * 331 + 7);
+        const list = [];
+        for (let i = 0; i < z.motes.n; i++) list.push({ x: rnd(), y: rnd(), s: 0.4 + rnd(), d: rnd() * 6.3 });
+        v.motes = { z: z.id, list };
+      }
+      const m = z.motes;
+      ctx.fillStyle = m.col;
+      for (const p of v.motes.list) {
+        p.y += (m.rise ? -1 : 1) * m.speed * p.s * dt;
+        p.x += Math.sin(g.t * 0.5 + p.d) * 0.00035;
+        if (p.y > 1.05) p.y = -0.05; else if (p.y < -0.05) p.y = 1.05;
+        ctx.globalAlpha = m.a * (0.45 + 0.55 * Math.sin(g.t * 2 + p.d)) * 0.9;
+        const r = m.size * p.s;
+        ctx.beginPath(); ctx.arc(p.x * v.w, p.y * v.h, r, 0, 7); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+
+  /* ------------------------------------------------------------ the ground
+
+     Measured at the game's own camera: the horizon sits 224 px ABOVE the top
+     of the frame. Every pixel on screen is therefore looking at ground, and
+     the empty band above the board is not sky at all — it is the ground plane
+     25 to 35 m out, which the renderer was drawing as nothing. That band is
+     what made the board read as a slab floating in a void.
+
+     So the world gets a floor. It is drawn as concentric squares from far to
+     near, each filled at its own fog depth, which gives banded aerial
+     perspective for the cost of a dozen polygons and lets the plane fade into
+     the zone's fog exactly where the arena's own fog takes over. When the
+     player orbits the camera down and the true horizon comes into frame, this
+     plane meets it on its own, because it is real geometry and not a gradient
+     pretending to be one. */
+
+  function drawGround(v, g, z) {
+    if (!z) return;
+    const ctx = v.ctx, c = v.cam;
+    const arena = g.battle.arena;
+    // sit it just under the arena's lowest deck so it never z-fights the board
+    let base = 1e9;
+    for (const s of arena.surfaces) base = Math.min(base, s.y - Math.max(0.18, s.solid));
+    if (!isFinite(base)) base = 0;
+    base -= 0.35;
+
+    /* This began as twelve concentric quads, each filled at its own fog depth.
+       At a grazing angle those compress toward the horizon and the steps
+       between them became visible stripes right across the top of the frame —
+       measured on the Glasswaste, four hard value steps at y = 18, 64, 122 and
+       195 that read as bands of sky.
+
+       An infinite plane seen from a fixed height has a closed form: a screen
+       row an angle A below the horizon is looking at ground camH / tan(A) away.
+       So the whole floor is one vertical gradient whose stops are sampled from
+       that distance, which is both exact and free of steps — a gradient
+       interpolates where twelve quads could only jump. */
+    const earth = rgb(z.ground.col);
+    const fn = v.fogNear || FOG_NEAR, ff = v.fogFar || FOG_FAR;
+    const camH = Math.max(0.5, c.y - base);
+    const hz = clamp(v.horizonY, -v.h * 6, v.h);
+    if (hz >= v.h) return;
+    const grad = ctx.createLinearGradient(0, hz, 0, v.h);
+    for (let i = 0; i <= 14; i++) {
+      const t = i / 14;
+      const ang = ((hz + (v.h - hz) * t) - hz) / v.f;   // radians below horizon
+      const d = ang > 1e-4 ? camH / Math.tan(ang) : 1e7;
+      const fogT = clamp((d - fn) / (ff - fn), 0, 1);
+      // held under the deck's own value: the arena is the lit thing, the
+      // ground around it is not, and without that gap the board stops
+      // reading as a board and becomes a patch of ground with pieces on it
+      grad.addColorStop(t, css(mix(mix(earth, [8, 9, 14], 0.62 * (1 - fogT)),
+        v.fog, Math.pow(fogT, 0.8) * 0.96), 1));
+    }
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, Math.max(0, hz), v.w, v.h - Math.max(0, hz));
+  }
+
   /* ---------------------------------------------------------------- frame */
 
   function frame(v, g, dt) {
     const ctx = v.ctx;
     ctx.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
-    v.fog = FOG;
+    const zone = g.zone || (K.zones ? K.zones.LIST[0] : null);
+    v.fog = zone ? zone.fog : FOG;
+    v.fogNear = zone ? zone.near : FOG_NEAR;
+    v.fogFar = zone ? zone.far : FOG_FAR;
     const cam = g.cam;
     const sh = cam.shake;
     setCamera(v, cam, (Math.random() - 0.5) * sh * 12, (Math.random() - 0.5) * sh * 12);
 
-    const hy = clamp(v.horizonY, -v.h * 2, v.h * 1.8);
-    const sky = ctx.createLinearGradient(0, hy - v.h * 1.2, 0, hy + v.h * 0.4);
-    sky.addColorStop(0, SKY[0]); sky.addColorStop(0.5, SKY[1]);
-    sky.addColorStop(0.85, SKY[2]); sky.addColorStop(1, SKY[3]);
-    ctx.fillStyle = sky; ctx.fillRect(0, 0, v.w, v.h);
-    if (hy < v.h) {
-      const deep = ctx.createLinearGradient(0, hy, 0, v.h);
-      deep.addColorStop(0, css(mix(FOG, [10, 12, 20], 0.4), 0.95));
-      deep.addColorStop(1, 'rgba(6,7,12,1)');
-      ctx.fillStyle = deep; ctx.fillRect(0, hy, v.w, v.h - hy);
-    }
+    drawSky(v, g, dt);
+    drawGround(v, g, zone);
 
-    // The arena is a slab in the dark, and on a tall screen there is a lot of
-    // dark. A wash of light under it turns the emptiness into a room the board
-    // is standing in rather than a page that failed to fill.
-    const mid = screenOf(v, 0, 0, 0);
-    if (mid) {
-      const r = clamp(v.f * 34 / Math.max(8, cam.dist), 160, 2600);
-      const gl = ctx.createRadialGradient(mid.x, mid.y, r * 0.10, mid.x, mid.y, r);
-      gl.addColorStop(0, 'rgba(84, 104, 142, 0.44)');
-      gl.addColorStop(0.45, 'rgba(48, 61, 90, 0.20)');
-      gl.addColorStop(1, 'rgba(10, 13, 20, 0)');
-      ctx.fillStyle = gl;
-      ctx.fillRect(0, 0, v.w, v.h);
-    }
+    /* There used to be a fixed blue wash here, standing in for a world the
+       renderer did not have: it turned the void under the board into "a room".
+       There is a real ground plane now, and the wash was a cold blue circle
+       painted straight over the top of it — in the Ashfall it read as a sheet
+       of grey slate lying across a rust-coloured desert. The world replaced
+       the trick, so the trick goes. */
 
     v.items.length = 0;
     drawArena(v, g);
@@ -800,5 +1075,7 @@ K.render = (function () {
     return d;
   }
 
-  return { View, resize, frame, pick, Camera, camUpdate, screenOf, fitDistance, SIDE };
+  return { View, resize, frame, pick, Camera, camUpdate, screenOf, fitDistance, SIDE,
+    // for measuring: where the renderer thinks the horizon and the lens are
+    probe: (v) => ({ horizonY: v.horizonY, my: v.my, f: v.f, h: v.h, w: v.w }) };
 })();
