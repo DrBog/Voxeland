@@ -42,8 +42,12 @@ K.render = (function () {
       x: 0, y: 0, z: 0,
       tx: 0, ty: 0.9, tz: 0,        // what we look at
       fx: 0, fy: 0.9, fz: 0,        // where we want to look
-      yaw: 2.35, pitch: 0.88, dist: 28,
-      wantYaw: 2.35, wantPitch: 0.88, wantDist: 28,
+      // Face-on, with a few degrees of swing for depth. A board turned to the
+      // diamond spends the width of a portrait screen on its own diagonal and
+      // leaves two triangles of void along the bottom edge; square on, the
+      // near rank is a full-width line and the arena fills the frame.
+      yaw: Math.PI + 0.10, pitch: 0.74, dist: 24,
+      wantYaw: Math.PI + 0.10, wantPitch: 0.74, wantDist: 24,
       shake: 0, fov: 1
     };
   }
@@ -63,7 +67,20 @@ K.render = (function () {
   }
 
   function View(canvas) {
-    return { canvas, ctx: canvas.getContext('2d'), w: 0, h: 0, dpr: 1, f: 500, items: [], fog: FOG };
+    return {
+      canvas, ctx: canvas.getContext('2d'), w: 0, h: 0, dpr: 1, f: 500, items: [], fog: FOG,
+      // the strip of screen the board gets: the HUD owns the rest, and framing
+      // the arena in the whole viewport puts half of it under the bars
+      band: { top: 44, bottom: 96 },
+      // where in that band the camera's own target sits. Looking down at a
+      // board, everything you are about to do with a unit is UP-screen of it,
+      // so a centred unit wastes the bottom third on empty floor.
+      frameBias: 0.62
+    };
+  }
+  function midY(v) {
+    const h = Math.max(140, v.h - v.band.top - v.band.bottom);
+    return v.band.top + h * (v.frameBias === undefined ? 0.5 : v.frameBias);
   }
 
   function resize(v) {
@@ -84,11 +101,16 @@ K.render = (function () {
     const rl = Math.hypot(rx, ry, rz) || 1;
     rx /= rl; ry /= rl; rz /= rl;
     const ux = ry * fz - rz * fy, uy = rz * fx - rx * fz, uz = rx * fy - ry * fx;  // right x fwd
+    const band = Math.max(140, v.h - v.band.top - v.band.bottom);
+    // scale is set by the SHORTER axis of the space the board actually has, so
+    // a unit is the same size in your hand whatever the phone
+    const ref = Math.min(v.w * 1.42, band);
     const fovY = 1.02 / (cam.fov || 1);
-    v.f = (v.h * 0.5) / Math.tan(fovY * 0.5);
+    v.f = (ref * 0.5) / Math.tan(fovY * 0.5);
     v.cam = { x: cam.x, y: cam.y, z: cam.z, fx, fy, fz, rx, ry, rz, ux, uy, uz, sx: sx || 0, sy: sy || 0 };
+    v.my = midY(v);
     const dfwd = fz, dup = uz;
-    v.horizonY = dfwd > 0.01 ? v.h * (0.5 + FRAME) - v.f * (dup / dfwd) : -v.h;
+    v.horizonY = dfwd > 0.01 ? v.my - v.f * (dup / dfwd) : -v.h;
   }
 
   function proj(v, x, y, z) {
@@ -100,13 +122,9 @@ K.render = (function () {
       cz: dx * c.fx + dy * c.fy + dz * c.fz
     };
   }
-  /* The board is framed a little below centre: the status bar lives at the top
-     of a phone and the far rank of a tactics map is the last thing that should
-     be hiding under it. */
-  const FRAME = 0.055;
   function toScreen(v, p) {
     const s = v.f / p.cz;
-    return { x: v.w / 2 + p.cx * s + v.cam.sx, y: v.h * (0.5 + FRAME) - p.cy * s + v.cam.sy, s, z: p.cz };
+    return { x: v.w / 2 + p.cx * s + v.cam.sx, y: v.my - p.cy * s + v.cam.sy, s, z: p.cz };
   }
   function screenOf(v, x, y, z) {
     const p = proj(v, x, y, z);
@@ -404,7 +422,11 @@ K.render = (function () {
     const fogT = clamp((depth - FOG_NEAR) / (FOG_FAR - FOG_NEAR), 0, 1);
     const S = SIDE[a.unit.side];
     const dead = a.unit.dead;
-    const skin = dead ? mix(S.body, [70, 66, 74], 0.55) : S.body;
+    // a unit that has had its turn should look like it: on a board of eleven
+    // bodies, "who can still move" has to be answerable at a glance
+    const spent = !dead && a.unit.acted;
+    const skin = dead ? mix(S.body, [70, 66, 74], 0.55)
+      : spent ? mix(S.body, [86, 92, 108], 0.62) : S.body;
     const acc = rgb(S.accent);
     v.items.push({
       z: depth - 0.35,
@@ -454,7 +476,7 @@ K.render = (function () {
         }
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-        const alpha = dead ? 0.72 : 1;
+        const alpha = dead ? 0.72 : spent ? 0.8 : 1;
         const ink = 'rgba(8,8,13,' + (0.85 * alpha) + ')';
         const flesh = css(mix(mix(skin, [26, 24, 34], clamp((depth - 6) / 22, 0, 0.35)), v.fog, fogT * 0.7), alpha);
         const scale = P.pelvis ? (v.f / Math.max(NEAR, depth)) : 1;
@@ -584,6 +606,20 @@ K.render = (function () {
       ctx.fillStyle = deep; ctx.fillRect(0, hy, v.w, v.h - hy);
     }
 
+    // The arena is a slab in the dark, and on a tall screen there is a lot of
+    // dark. A wash of light under it turns the emptiness into a room the board
+    // is standing in rather than a page that failed to fill.
+    const mid = screenOf(v, 0, 0, 0);
+    if (mid) {
+      const r = clamp(v.f * 34 / Math.max(8, cam.dist), 160, 2600);
+      const gl = ctx.createRadialGradient(mid.x, mid.y, r * 0.10, mid.x, mid.y, r);
+      gl.addColorStop(0, 'rgba(84, 104, 142, 0.44)');
+      gl.addColorStop(0.45, 'rgba(48, 61, 90, 0.20)');
+      gl.addColorStop(1, 'rgba(10, 13, 20, 0)');
+      ctx.fillStyle = gl;
+      ctx.fillRect(0, 0, v.w, v.h);
+    }
+
     v.items.length = 0;
     drawArena(v, g);
     drawOverlays(v, g);
@@ -623,7 +659,7 @@ K.render = (function () {
   function pick(v, sx, sy, arena) {
     if (!v.cam) return null;
     const c = v.cam;
-    const ax = (sx - v.w / 2) / v.f, ay = (v.h * (0.5 + FRAME) - sy) / v.f;
+    const ax = (sx - v.w / 2) / v.f, ay = (v.my - sy) / v.f;
     const dx = c.fx + c.rx * ax + c.ux * ay;
     const dy = c.fy + c.ry * ax + c.uy * ay;
     const dz = c.fz + c.rz * ax + c.uz * ay;
@@ -656,5 +692,47 @@ K.render = (function () {
     return best ? best.s : null;
   }
 
-  return { View, resize, frame, pick, Camera, camUpdate, screenOf, SIDE };
+  /* The distance at which the whole arena sits inside the band, with room to
+     spare — the far end of the zoom, and the number every other distance is
+     expressed as a fraction of. */
+  function fitDistance(v, arena, cam) {
+    if (!v.w || !v.h) return 26;
+    const T = K.grid.TILE;
+    const pts = [];
+    for (const s of arena.surfaces) {
+      const w = arena.world(s);
+      pts.push([w.x - T / 2, s.y, w.z - T / 2], [w.x + T / 2, s.y, w.z + T / 2],
+               [w.x + T / 2, s.y + 1.8, w.z - T / 2], [w.x - T / 2, s.y + 1.8, w.z + T / 2]);
+    }
+    // the whole board is only ever framed centred, so it is measured centred
+    const bias0 = v.frameBias;
+    v.frameBias = 0.5;
+    const availW = v.w * 0.94;
+    const availH = Math.max(140, v.h - v.band.top - v.band.bottom) * 0.94;
+    const probe = { tx: 0, ty: 1.1, tz: 0, yaw: cam.yaw, pitch: cam.pitch, dist: 26, fov: cam.fov };
+    let d = 26;
+    for (let it = 0; it < 5; it++) {
+      probe.dist = d;
+      const ch = Math.cos(probe.pitch);
+      probe.x = probe.tx - Math.sin(probe.yaw) * ch * d;
+      probe.y = probe.ty + Math.sin(probe.pitch) * d;
+      probe.z = probe.tz - Math.cos(probe.yaw) * ch * d;
+      setCamera(v, probe, 0, 0);
+      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+      for (const p of pts) {
+        const s = screenOf(v, p[0], p[1], p[2]);
+        if (!s) continue;
+        if (s.x < x0) x0 = s.x; if (s.x > x1) x1 = s.x;
+        if (s.y < y0) y0 = s.y; if (s.y > y1) y1 = s.y;
+      }
+      if (x1 <= x0) break;
+      const k = Math.max((x1 - x0) / availW, (y1 - y0) / availH);
+      d = clamp(d * (0.35 + 0.65 * k), 8, 70);
+      if (Math.abs(k - 1) < 0.02) break;
+    }
+    v.frameBias = bias0;
+    return d;
+  }
+
+  return { View, resize, frame, pick, Camera, camUpdate, screenOf, fitDistance, SIDE };
 })();

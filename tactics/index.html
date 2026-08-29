@@ -18,41 +18,51 @@
     <div class="pill" id="phase"><b>PLAYER</b><span id="turn">turn 1</span></div>
     <div class="pill" id="tally"><span class="mine" id="tallyMine">4</span><i>vs</i><span class="theirs" id="tallyTheirs">5</span></div>
     <div class="spacer"></div>
+    <button class="icon" id="btnFit" title="Whole board">⤢</button>
     <button class="icon" id="btnLog" title="Field log">≡</button>
     <button class="icon" id="btnSound" title="Sound">♪</button>
   </div>
 
   <div id="banner"><b></b><span></span></div>
+  <div id="hint">tap one of yours</div>
 
-  <div id="card" class="panel hidden">
-    <div class="cardhead">
-      <div>
-        <b id="cName">VESS</b>
-        <span id="cClass">Blade · lv 3</span>
+  <!-- the bottom bar: one strip that always says who is selected and what can
+       be done about it, so nothing ever floats over the board -->
+  <div id="bar">
+    <div id="strip">
+      <div id="unitStrip" class="stripface">
+        <div class="who">
+          <b id="uName">—</b>
+          <span id="uClass"></span>
+        </div>
+        <div class="vitals">
+          <div class="hpline"><span id="uHp">—</span><i id="uTerrain"></i></div>
+          <div class="hpbar"><div id="uHpFill"></div></div>
+          <div class="statline" id="uStats"></div>
+        </div>
+        <button class="more" id="btnMore" aria-label="Full stats">▲</button>
       </div>
-      <div class="hpwrap">
-        <div class="hpnum"><b id="cHp">20</b><i>/<span id="cMax">20</span></i></div>
-        <div class="hpbar"><div id="cHpFill"></div></div>
+
+      <div id="fcStrip" class="stripface hidden">
+        <div class="fcside mine" id="fcA"></div>
+        <div class="fcmid" id="fcVs"></div>
+        <div class="fcside theirs" id="fcB"></div>
       </div>
     </div>
-    <div class="stats" id="cStats"></div>
-    <div class="cardfoot"><span id="cWeapon">Iron Sword</span><span id="cTerrain">stone</span></div>
+
+    <div id="acts">
+      <button id="btnAttack" class="act strike hidden">STRIKE</button>
+      <button id="btnWait" class="act hidden">WAIT</button>
+      <button id="btnCancel" class="act ghost hidden">BACK</button>
+      <button id="btnEnd" class="act ghost">END TURN</button>
+    </div>
   </div>
 
-  <div id="forecast" class="panel hidden">
-    <div class="fcside" id="fcA"></div>
-    <div class="fcvs" id="fcVs">→</div>
-    <div class="fcside" id="fcB"></div>
+  <div id="sheet" class="hidden">
+    <div class="sheethead"><b id="sName">—</b><button class="icon" id="btnSheetClose">✕</button></div>
+    <div class="stats" id="sStats"></div>
+    <div class="sheetfoot"><span id="sWeapon"></span><span id="sTag"></span></div>
   </div>
-
-  <div id="actions">
-    <button id="btnAttack" class="act strike hidden">STRIKE</button>
-    <button id="btnWait" class="act hidden">WAIT</button>
-    <button id="btnCancel" class="act ghost hidden">CANCEL</button>
-    <button id="btnEnd" class="act ghost">END TURN</button>
-  </div>
-
-  <div id="hint">tap a unit · drag to look</div>
 
   <div id="log" class="hidden">
     <div class="loghead">FIELD LOG<button class="icon" id="btnLogClose">✕</button></div>
@@ -74,10 +84,10 @@
       <h1>IRONWAKE</h1>
       <p class="sub">a tactics arena where every blow is simulated</p>
       <ul>
-        <li><b>Tap</b> one of yours, then a blue tile to move — or an enemy to close and strike.</li>
+        <li><b>Tap</b> one of yours, then a blue tile to move — or an enemy to line up a strike.</li>
+        <li><b>Drag</b> to move the camera, pinch to zoom, ⤢ for the whole board.</li>
         <li>Height, terrain and the weapon triangle all count. So does the drop.</li>
         <li>Survivors carry their levels into the next wave. The fallen do not come back.</li>
-        <li>Nothing here is animation: a killing blow throws a body, and a bridge has no rail.</li>
       </ul>
       <button id="btnStart">TAKE THE FIELD</button>
     </div>

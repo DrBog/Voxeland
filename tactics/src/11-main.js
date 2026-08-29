@@ -1,7 +1,9 @@
 /* IRONWAKE — the shell.
-   Boot, the fixed-step loop, the camera, and the one hard input problem a
-   3D tactics game has on a phone: telling a tap on a tile apart from a drag
-   of the world, on a map where two tiles can sit above each other. */
+   Boot, the fixed-step loop, the camera and the input. The hard problem on a
+   phone is that one finger has to mean three things — pick a tile, pick the
+   unit standing on it, and move the view — on a board where two tiles can sit
+   above one another. Drag moves the camera, a tap picks, and a unit is
+   hit-tested in screen space before the ray ever reaches the map. */
 (function () {
   const R = K.render, B = K.battle, U = K.util, Un = K.units;
   const { clamp, lerp } = U;
@@ -12,44 +14,55 @@
   const g = {
     battle: null, cam: null, view,
     t: 0, hover: null, pathPreview: null, cardUnit: null, pair: null,
-    threat: [], running: false, baseDist: 21
+    threat: [], running: false,
+    zoomT: 0.85,            // 0 = in among them, 1 = the whole board
+    zoomAuto: true, fitDist: 26, manual: false, look: null
   };
   window.G = g;   // the console is a legitimate debugging surface
 
-  function newBattle(seed) {
+  /* ------------------------------------------------------------------ setup */
+
+  function newBattle() {
     const run = g.run;
     const rnd = U.rng((run.wave * 7919 + (run.runs || 0) * 104729) >>> 0);
-    g.battle = B.create(seed, {
+    g.battle = B.create(null, {
       wave: run.wave,
       player: K.camp.playerPlan(run),
       enemy: run.wave === 1 && (run.runs || 0) === 0 ? null : K.camp.enemyPlan(run.wave, rnd)
     });
     g.summary = null;
     g.cam = R.Camera(g.battle.arena);
-    g.baseDist = 21;
-    g.cam.wantDist = g.baseDist;
     g.hover = null; g.pathPreview = null; g.cardUnit = null; g.pair = null; g.threat = [];
-    const c = centreOf(g.battle);
+    g.manual = false; g.look = null; g.zoomT = 0.85; g.zoomAuto = true;
+    measure();
+    const c = restPoint();
     g.cam.tx = g.cam.fx = c.x; g.cam.ty = g.cam.fy = c.y; g.cam.tz = g.cam.fz = c.z;
     R.camUpdate(g.cam, 1);
   }
 
-  /* At rest the camera sits between your line and the middle of the board:
-     close enough that the units you command are the subject, wide enough that
-     you can see what is coming for them. */
-  function centreOf(b) {
+  /* the board is framed in the gap between the two bars, and how far away the
+     camera has to be for that is a measurement, not a guess */
+  function measure() {
+    view.band = K.ui.band();
+    R.resize(view);
+    if (g.battle && g.cam) g.fitDist = R.fitDistance(view, g.battle.arena, g.cam);
+  }
+
+  function restPoint() {
+    const b = g.battle;
     const mine = B.living(b, 0);
     if (!mine.length) return { x: 0, y: 1.4, z: 0 };
-    let x = 0, y = 0, z = 0;
-    for (const u of mine) { const w = b.arena.world(u.surface); x += w.x; y += w.y; z += w.z; }
-    const k = 0.45;
-    return { x: lerp(x / mine.length, 0, k), y: y / mine.length + 1.1, z: lerp(z / mine.length, 0, k) };
+    let y = 0;
+    for (const u of mine) y += b.arena.world(u.surface).y;
+    // surveying, the board is the subject and it is centred; the small pull
+    // toward your own line is only so your side sits nearer the near edge
+    return { x: 0, y: y / mine.length + 1.2, z: 1.2 };
   }
 
   const unitOn = (b, s) => b.units.find(u => !u.dead && u.surface === s) || null;
 
-  /* where should this unit stand to hit that one? cheapest tile that reaches,
-     preferring cover, height, and a weak answer */
+  /* ------------------------------------------------------------- reasoning */
+
   function bestApproach(b, u, foe) {
     if (!b.reach) return null;
     let best = null;
@@ -85,9 +98,8 @@
   /* ------------------------------------------------------------------ taps */
 
   /* A finger lands on a BODY, not on the tile behind it. Casting the tap ray
-     straight at the map picks up whatever is a metre further out, which is how
-     you end up selecting the tile behind the unit you meant to pick, so units
-     are hit-tested in screen space first. */
+     straight at the map picks up whatever is a metre further out, so units are
+     hit-tested in screen space first. */
   function unitAt(sx, sy) {
     const b = g.battle;
     let best = null;
@@ -99,7 +111,7 @@
       const p = R.screenOf(view, c.x, c.y, c.z);
       if (!p) continue;
       const d = Math.hypot(p.x - sx, p.y - sy);
-      const r = Math.max(20, 0.5 * p.s);
+      const r = Math.max(22, 0.5 * p.s);
       if (d < r && (!best || d < best.d)) best = { u, d };
     }
     return best ? best.u : null;
@@ -114,12 +126,19 @@
 
     if (b.over) return;
     if (b.busy || b.phase !== 'player') { if (u) g.cardUnit = u; return; }
+    // a tap that cannot do anything should say why, once, in the hint line
+    if (u && u.side === 0 && u.acted && !b.sel) {
+      g.cardUnit = u;
+      g.note = { text: u.name + ' has already moved this turn', t: g.t };
+      return;
+    }
+    g.manual = false; g.zoomAuto = true;    // a tap means: follow the game again
 
     // a target is already proposed: tapping it again is the commit
     if (g.pair) {
       if (u === g.pair.def) { commit(); return; }
       g.pair = null; g.pathPreview = null;
-      // fall through: the tap also means whatever it would have meant
+      // and otherwise the tap still means whatever it would have meant
     }
 
     // the unit has moved and is choosing who to hit
@@ -145,9 +164,7 @@
         // deliberate act — nobody should lose a unit to a stray tap.
         const spot = bestApproach(b, b.sel, u);
         if (spot) {
-          const save = b.sel.surface; b.sel.surface = spot.s;
           g.pair = { att: b.sel, def: u, spot: spot.s };
-          b.sel.surface = save;
           g.cardUnit = u;
           g.pathPreview = spot.s === b.sel.surface ? null : b.arena.pathTo(b.reach, spot.s);
           K.audio.buy();
@@ -155,11 +172,8 @@
         return;
       }
       if (u && u.side === 0 && !u.acted) { B.select(b, u); g.cardUnit = u; g.threat = []; return; }
-      if (b.reach.has(s.id) && !B.occupied(b, s, b.sel)) {
-        B.moveTo(b, b.sel, s);
-        g.pathPreview = null;
-        return;
-      }
+      if (u && u.side === 0 && u.acted) { g.cardUnit = u; g.note = { text: u.name + ' has already moved', t: g.t }; return; }
+      if (b.reach.has(s.id) && !B.occupied(b, s, b.sel)) { B.moveTo(b, b.sel, s); g.pathPreview = null; return; }
       B.clearSel(b); g.cardUnit = null; g.pathPreview = null;
       return;
     }
@@ -172,7 +186,6 @@
     } else { g.cardUnit = null; g.threat = []; }
   }
 
-  /* the second tap: walk there if we have to, then swing */
   function commit() {
     const b = g.battle;
     if (!g.pair || b.busy) return;
@@ -185,7 +198,7 @@
   /* --------------------------------------------------------------- pointer */
 
   const ptrs = new Map();
-  let dragging = false, downT = 0, downX = 0, downY = 0, pinch0 = 0, dist0 = 0;
+  let gesture = null, downT = 0, downX = 0, downY = 0, pinch0 = 0, zoom0 = 0, mid0 = null;
 
   function localPos(e) {
     const r = canvas.getBoundingClientRect();
@@ -196,57 +209,78 @@
     canvas.setPointerCapture(e.pointerId);
     const p = localPos(e);
     ptrs.set(e.pointerId, p);
-    if (ptrs.size === 1) { dragging = false; downT = performance.now(); downX = p.x; downY = p.y; }
+    if (ptrs.size === 1) { gesture = null; downT = performance.now(); downX = p.x; downY = p.y; }
     if (ptrs.size === 2) {
       const [a, b] = [...ptrs.values()];
       pinch0 = Math.hypot(a.x - b.x, a.y - b.y);
-      dist0 = g.cam.wantDist;
-      dragging = true;
+      zoom0 = g.zoomT;
+      mid0 = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      gesture = 'two';
     }
   });
 
   canvas.addEventListener('pointermove', (e) => {
     const p = localPos(e);
     const prev = ptrs.get(e.pointerId);
-    if (!prev) {                                  // a mouse simply hovering
-      hoverAt(p.x, p.y);
-      return;
-    }
+    if (!prev) { hoverAt(p.x, p.y); return; }   // a mouse simply hovering
     ptrs.set(e.pointerId, p);
-    if (ptrs.size === 2) {
+
+    if (ptrs.size >= 2) {
       const [a, b] = [...ptrs.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
-      if (pinch0 > 8) {
-        g.baseDist = clamp(dist0 * (pinch0 / Math.max(8, d)), 8, 38);
-        g.cam.wantDist = g.baseDist;
+      if (pinch0 > 12) {
+        // pinch zooms, and the two fingers together swing the camera round
+        g.zoomT = clamp(zoom0 * (pinch0 / Math.max(12, d)), 0, 1);
+        g.zoomAuto = false;
       }
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      if (mid0) {
+        g.cam.wantYaw -= (mid.x - mid0.x) * 0.006;
+        g.cam.wantPitch = clamp(g.cam.wantPitch + (mid.y - mid0.y) * 0.005, 0.30, 1.24);
+      }
+      mid0 = mid;
       return;
     }
+
     const dx = p.x - prev.x, dy = p.y - prev.y;
-    if (!dragging && Math.hypot(p.x - downX, p.y - downY) > 9) dragging = true;
-    if (dragging) {
-      g.cam.wantYaw -= dx * 0.0075;
-      g.cam.wantPitch = clamp(g.cam.wantPitch + dy * 0.0055, 0.14, 1.32);
-    }
+    if (!gesture && Math.hypot(p.x - downX, p.y - downY) > 9) gesture = 'pan';
+    if (gesture === 'pan') pan(dx, dy);
   });
+
+  /* One finger drags the board itself: the world should stay under the thumb,
+     which means converting pixels to metres at the distance being looked at. */
+  function pan(dx, dy) {
+    const cam = g.cam;
+    if (!g.look) g.look = { x: cam.fx, y: cam.fy, z: cam.fz };
+    g.manual = true;
+    const perPx = cam.dist / Math.max(120, view.f);
+    const sy = Math.max(0.35, Math.sin(cam.pitch));
+    const rx = -Math.cos(cam.yaw), rz = Math.sin(cam.yaw);      // screen right, on the ground
+    const fx = Math.sin(cam.yaw), fz = Math.cos(cam.yaw);       // screen up, on the ground
+    g.look.x -= (rx * dx * perPx) + (fx * dy * perPx / sy);
+    g.look.z -= (rz * dx * perPx) + (fz * dy * perPx / sy);
+    const lim = K.grid.TILE * 8;
+    g.look.x = clamp(g.look.x, -lim, lim);
+    g.look.z = clamp(g.look.z, -lim, lim);
+  }
 
   function endPointer(e) {
     const p = localPos(e);
     const had = ptrs.has(e.pointerId);
     ptrs.delete(e.pointerId);
     if (!had) return;
-    if (ptrs.size === 0 && !dragging && performance.now() - downT < 600) {
-      if (g.running) tap(p.x, p.y);
+    if (ptrs.size === 0) {
+      if (!gesture && performance.now() - downT < 600 && g.running) tap(p.x, p.y);
+      gesture = null; mid0 = null;
     }
-    if (ptrs.size === 0) dragging = false;
   }
   canvas.addEventListener('pointerup', endPointer);
   canvas.addEventListener('pointercancel', endPointer);
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   window.addEventListener('wheel', (e) => {
     if (!g.cam) return;
-    g.baseDist = clamp(g.baseDist + e.deltaY * 0.012, 8, 38);
-    g.cam.wantDist = g.baseDist;
+    g.zoomT = clamp(g.zoomT + e.deltaY * 0.0011, 0, 1);
+    g.zoomAuto = false;
   }, { passive: true });
 
   function hoverAt(sx, sy) {
@@ -264,47 +298,72 @@
 
   /* ---------------------------------------------------------------- camera */
 
+  /* The camera has an opinion about how close it wants to be, and it changes
+     with what you are doing: survey the board when nothing is selected, come
+     in when you pick someone up, get close for the blow. A pinch says you
+     would rather decide yourself, and it holds until you tap something. */
   function driveCamera(dt) {
     const b = g.battle, cam = g.cam;
-    let want = null, close = null;
+    const CLOSE = Math.min(11.5, g.fitDist);
+    let want = null, aim = 0.85;
+
     if (b.busy && b.busy.kind === 'fight') {
       const a = b.busy.aA, d = b.busy.aD;
       want = { x: (a.pos.x + d.pos.x) / 2, y: (a.body.parts.chest.y + d.body.parts.chest.y) / 2, z: (a.pos.z + d.pos.z) / 2 };
-      close = Math.min(g.baseDist, 13.5);
+      aim = 0.12;
+      g.manual = false;
+      // hold on the two of them after the last blow: pulling out the instant
+      // the arithmetic finishes is pulling out before the body has landed
+      g.hold = { want, aim, t: 1.3 };
+    } else if (g.hold && g.hold.t > 0 && !g.manual) {
+      g.hold.t -= dt;
+      want = g.hold.want; aim = g.hold.aim;
     } else if (b.busy && b.busy.act) {
       const a = b.busy.act;
       want = { x: a.pos.x, y: a.body.parts.chest.y, z: a.pos.z };
-      close = Math.min(g.baseDist, 17);
-    } else if (b.sel) {
-      const a = B.actorOf(b, b.sel);
-      if (a) want = { x: a.pos.x, y: a.pos.y + 0.9, z: a.pos.z };
-    } else if (b.phase === 'enemy' && b.focus) {
-      want = { x: b.focus.pos.x, y: b.focus.pos.y + 0.9, z: b.focus.pos.z };
-    } else if (g.cardUnit && !g.cardUnit.dead) {
-      // looking one of theirs up should also look AT them
-      const a = B.actorOf(b, g.cardUnit);
-      if (a) want = { x: a.pos.x, y: a.pos.y + 0.9, z: a.pos.z };
+      aim = 0.26;
+      g.manual = false;
+    } else if (!g.manual) {
+      const u = b.sel || (b.phase === 'enemy' && b.focus ? null : g.cardUnit);
+      const a = u ? B.actorOf(b, u) : (b.phase === 'enemy' ? b.focus : null);
+      if (a) { want = { x: a.pos.x, y: a.pos.y + 0.9, z: a.pos.z }; aim = b.sel ? 0.46 : 0.62; }
+      else { want = restPoint(); aim = 0.78; }
+    } else {
+      want = { x: g.look.x, y: g.look.y, z: g.look.z };
+      aim = g.zoomT;
     }
-    if (!want) {
-      want = centreOf(b);
-    }
+
     cam.fx = want.x; cam.fy = want.y; cam.fz = want.z;
-    cam.wantDist = close || g.baseDist;
+    if (g.manual) { g.look = { x: want.x, y: want.y, z: want.z }; }
+    // coming in is a cut to the action and should be quick; going back out is
+    // the game handing control back, and should not yank
+    if (g.zoomAuto) g.zoomT = lerp(g.zoomT, aim, clamp(dt * (aim < g.zoomT ? 7 : 2.4), 0, 1));
+    const t = g.zoomT;
+    // pulled back to see the board, the board is centred; up close, the unit
+    // sits low and the ground it is about to cross fills the screen
+    view.frameBias = lerp(0.70, 0.5, t);
+    cam.wantDist = lerp(CLOSE, g.fitDist, t);
     cam.shake = Math.max(cam.shake, b.shake);
     R.camUpdate(cam, dt);
   }
 
   /* ------------------------------------------------------------------ loop */
 
-  let last = 0, acc = 0;
+  let last = 0, acc = 0, lastW = 0, lastH = 0;
   const STEP = 1 / 120;
 
   function loop(now) {
     requestAnimationFrame(loop);
     const t = now / 1000;
-    let dt = last ? Math.min(0.1, t - last) : 0.016;
+    const dt = last ? Math.min(0.1, t - last) : 0.016;
     last = t;
     g.t += dt;
+
+    const r = canvas.getBoundingClientRect();
+    if (Math.abs(r.width - lastW) > 0.5 || Math.abs(r.height - lastH) > 0.5) {
+      lastW = r.width; lastH = r.height;
+      measure();
+    }
 
     if (g.running) {
       acc += dt;
@@ -314,20 +373,13 @@
       g.simMs = g.simMs ? g.simMs * 0.92 + (performance.now() - s0) * 0.08 : (performance.now() - s0);
       if (acc > 0.3) acc = 0;
       driveCamera(dt);
-      // keep the selection card honest without the player having to re-tap
       if (g.battle.sel && !g.cardUnit) g.cardUnit = g.battle.sel;
       if (g.pair && (g.pair.def.dead || g.pair.att.dead || g.battle.busy)) { g.pair = null; g.pathPreview = null; }
-      // the moment a field is settled, the run banks it
-      if (g.battle.over && !g.summary) {
-        g.summary = K.camp.afterBattle(g.run, g.battle, g.battle.over === 'win');
-      }
+      if (g.battle.over && !g.summary) g.summary = K.camp.afterBattle(g.run, g.battle, g.battle.over === 'win');
     }
 
-    if (view.w !== canvas.getBoundingClientRect().width) R.resize(view);
     const t0 = performance.now();
     R.frame(view, g, dt);
-    // a running estimate of how much of the frame this costs, so the cost of
-    // a change is a number rather than an opinion
     g.drawMs = g.drawMs ? g.drawMs * 0.92 + (performance.now() - t0) * 0.08 : (performance.now() - t0);
     K.ui.sync(g);
   }
@@ -335,19 +387,23 @@
   /* ------------------------------------------------------------------ boot */
 
   K.ui.init({
-    start: () => { g.running = true; },
+    start: () => { g.running = true; measure(); },
     again: () => { newBattle(); g.running = true; },
     wipe: () => { g.run = K.camp.fresh(); K.camp.save(g.run); newBattle(); g.running = true; },
     attack: () => commit(),
     wait: () => { const b = g.battle; if (b.sel) B.finishUnit(b, b.sel); g.pair = null; g.cardUnit = null; },
-    cancel: () => { B.clearSel(g.battle); g.pair = null; g.cardUnit = null; g.pathPreview = null; },
-    end: () => { B.endPhase(g.battle); g.cardUnit = null; g.pair = null; }
+    cancel: () => {
+      if (g.pair) { g.pair = null; g.pathPreview = null; return; }
+      B.clearSel(g.battle); g.cardUnit = null; g.pathPreview = null;
+    },
+    end: () => { B.endPhase(g.battle); g.cardUnit = null; g.pair = null; g.manual = false; },
+    fit: () => { g.zoomT = g.zoomT > 0.8 ? 0.4 : 1; g.zoomAuto = false; g.manual = false; }
   });
 
   g.run = K.camp.load();
   newBattle();
-  R.resize(view);
-  window.addEventListener('resize', () => R.resize(view));
-  window.addEventListener('orientationchange', () => setTimeout(() => R.resize(view), 220));
+  measure();
+  window.addEventListener('resize', measure);
+  window.addEventListener('orientationchange', () => setTimeout(measure, 220));
   requestAnimationFrame(loop);
 })();

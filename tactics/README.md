@@ -35,7 +35,10 @@ Survivors carry their levels into the next wave. The fallen do not come back.
   the attack. The forecast shows the exchange from where you *would* be
   standing; STRIKE commits, anything else cancels.
 - Tap one of theirs with nothing selected to see what it can reach next turn.
-- **Drag** to look around, **pinch** to zoom.
+- **Drag** moves the camera, **pinch** zooms, two fingers swing it around, and
+  ⤢ snaps between the whole board and the fight. Left alone it frames itself:
+  the board when you are thinking, the unit when you pick one up, the two of
+  them when a blow lands.
 - Tap your own unit again to hold its ground, WAIT to end its turn.
 
 ## Layout

@@ -11,14 +11,14 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --ink: #e6ecf8;
-  --dim: #98a1b6;
+  --ink: #e8edf8;
+  --dim: #949db2;
   --mine: #7fd8ff;
   --theirs: #ff7d6b;
   --good: #8affc0;
   --warn: #ffd166;
-  --panel: rgba(12, 15, 24, 0.86);
-  --edge: rgba(150, 170, 210, 0.20);
+  --panel: rgba(11, 14, 22, 0.90);
+  --edge: rgba(150, 170, 210, 0.18);
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
 }
@@ -31,156 +31,172 @@ html, body {
 }
 #app { position: fixed; inset: 0; }
 #view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.hidden { display: none !important; }
 
-/* ------------------------------------------------------------------ chrome */
+/* ------------------------------------------------------------------ top bar */
 #top {
-  position: absolute; top: calc(8px + var(--safe-t)); left: 8px; right: 8px;
-  display: flex; gap: 6px; align-items: center; pointer-events: none;
+  position: absolute; top: calc(7px + var(--safe-t)); left: 7px; right: 7px;
+  display: flex; gap: 5px; align-items: center; pointer-events: none; z-index: 3;
 }
 .pill {
   background: var(--panel); border: 1px solid var(--edge); border-radius: 999px;
-  padding: 5px 11px; font-size: 11px; letter-spacing: 0.06em;
-  display: flex; gap: 7px; align-items: baseline; backdrop-filter: blur(7px);
+  padding: 4px 10px; font-size: 10.5px; letter-spacing: 0.06em;
+  display: flex; gap: 6px; align-items: baseline; backdrop-filter: blur(7px);
 }
 .pill b { font-weight: 700; }
-.pill span { color: var(--dim); font-size: 10px; }
-#phase.enemy b { color: var(--theirs); }
+.pill span { color: var(--dim); font-size: 9.5px; }
 #phase b { color: var(--mine); }
-#tally .mine { color: var(--mine); font-size: 12px; font-weight: 700; }
-#tally .theirs { color: var(--theirs); font-size: 12px; font-weight: 700; }
+#phase.enemy b { color: var(--theirs); }
+#tally .mine { color: var(--mine); font-size: 11.5px; font-weight: 700; }
+#tally .theirs { color: var(--theirs); font-size: 11.5px; font-weight: 700; }
 #tally i { color: var(--dim); font-style: normal; font-size: 9px; }
 .spacer { flex: 1; }
 .icon {
   pointer-events: auto; background: var(--panel); border: 1px solid var(--edge);
-  color: var(--ink); border-radius: 999px; width: 30px; height: 30px; font-size: 13px;
-  font-family: inherit; cursor: pointer; padding: 0;
+  color: var(--ink); border-radius: 999px; width: 29px; height: 29px; font-size: 12px;
+  font-family: inherit; cursor: pointer; padding: 0; flex: none;
 }
-.icon.off { color: #5d6577; }
+.icon.off { color: #59616f; }
 
+#hint {
+  position: absolute; top: calc(42px + var(--safe-t)); left: 0; right: 0;
+  text-align: center; font-size: 10px; color: rgba(148,157,178,0.85);
+  pointer-events: none; letter-spacing: 0.05em; z-index: 2; transition: opacity .2s;
+}
 #banner {
-  position: absolute; top: 16%; left: 0; right: 0; text-align: center;
-  pointer-events: none; opacity: 0; transition: opacity .25s;
+  position: absolute; top: calc(46px + var(--safe-t)); left: 0; right: 0; text-align: center;
+  pointer-events: none; opacity: 0; transition: opacity .25s; z-index: 2;
 }
 #banner.show { opacity: 1; }
 #banner b {
-  display: block; font-size: 21px; letter-spacing: 0.2em; font-weight: 700;
-  text-shadow: 0 2px 22px rgba(0,0,0,0.8);
+  display: block; font-size: 17px; letter-spacing: 0.2em; font-weight: 700;
+  text-shadow: 0 2px 22px rgba(0,0,0,0.85);
 }
-#banner span { display: block; font-size: 11px; color: var(--dim); margin-top: 5px; letter-spacing: 0.08em; }
+#banner span { display: block; font-size: 10px; color: var(--dim); margin-top: 4px; letter-spacing: 0.06em; }
 #banner.enemy b { color: var(--theirs); }
 #banner.mine b { color: var(--mine); }
 
-/* ------------------------------------------------------------------ panels */
-.panel {
-  position: absolute; background: var(--panel); border: 1px solid var(--edge);
-  border-radius: 12px; backdrop-filter: blur(9px);
+/* --------------------------------------------------------------- bottom bar */
+#bar {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
+  padding: 6px 7px calc(6px + var(--safe-b));
+  background: linear-gradient(to top, rgba(6,8,13,0.96) 62%, rgba(6,8,13,0));
+  display: flex; flex-direction: column; gap: 6px;
 }
-.hidden { display: none !important; }
-
-#card { left: 8px; bottom: calc(58px + var(--safe-b)); width: min(268px, 62vw); padding: 9px 11px; }
-.cardhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-.cardhead b { font-size: 15px; letter-spacing: 0.08em; }
-.cardhead span { display: block; font-size: 10px; color: var(--dim); margin-top: 2px; }
-.hpwrap { min-width: 92px; }
-.hpnum { text-align: right; font-size: 13px; }
-.hpnum i { color: var(--dim); font-style: normal; font-size: 10px; }
-.hpbar { height: 4px; background: rgba(255,255,255,0.10); border-radius: 3px; overflow: hidden; margin-top: 3px; }
-#cHpFill { height: 100%; width: 100%; background: var(--good); transition: width .2s; }
-.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px 6px; margin: 8px 0 6px; }
-.stats div { font-size: 10px; color: var(--dim); display: flex; justify-content: space-between; }
-.stats div b { color: var(--ink); font-weight: 600; }
-.cardfoot { display: flex; justify-content: space-between; gap: 10px; font-size: 10px; color: var(--dim); border-top: 1px solid var(--edge); padding-top: 6px; }
-.cardfoot span { white-space: nowrap; }
-.cardfoot span:first-child { color: var(--warn); }
-
-#forecast {
-  left: 50%; transform: translateX(-50%); bottom: calc(58px + var(--safe-b));
-  display: flex; align-items: stretch; padding: 8px 6px; gap: 4px; min-width: 260px;
+#strip {
+  background: var(--panel); border: 1px solid var(--edge); border-radius: 12px;
+  backdrop-filter: blur(9px); min-height: 46px; display: flex;
 }
-.fcside { flex: 1; padding: 0 8px; }
+.stripface { display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 11px; width: 100%; }
+
+.who { min-width: 84px; }
+.stripface.empty .who { min-width: 0; }
+.stripface.empty .who b { font-size: 12px; letter-spacing: 0.22em; color: var(--dim); }
+.stripface.empty .vitals, .stripface.empty .more { display: none; }
+.who b { font-size: 14px; letter-spacing: 0.08em; display: block; }
+.who span { font-size: 9.5px; color: var(--dim); display: block; margin-top: 1px; }
+.vitals { flex: 1; min-width: 0; }
+.hpline { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; }
+.hpline i { font-style: normal; font-size: 9.5px; color: var(--dim); }
+.hpbar { height: 4px; background: rgba(255,255,255,0.10); border-radius: 3px; overflow: hidden; margin: 3px 0 3px; }
+#uHpFill { height: 100%; width: 100%; background: var(--good); transition: width .2s; }
+.statline { font-size: 9.5px; color: var(--dim); letter-spacing: 0.02em; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.statline b { color: var(--ink); font-weight: 600; }
+.more {
+  background: none; border: 1px solid var(--edge); color: var(--dim); border-radius: 8px;
+  width: 26px; height: 30px; font-size: 9px; font-family: inherit; cursor: pointer; flex: none;
+}
+
+/* the forecast takes the same strip: same place, same size, no new furniture */
+.fcside { flex: 1; min-width: 0; }
 .fcside .n { font-size: 12px; letter-spacing: 0.06em; }
-.fcside .hp { font-size: 10px; color: var(--dim); margin-bottom: 5px; }
-.fcside .row { display: flex; justify-content: space-between; font-size: 11px; }
-.fcside .row span { color: var(--dim); font-size: 10px; }
-.fcside .row b { font-weight: 700; }
 .fcside.mine .n { color: var(--mine); }
 .fcside.theirs .n { color: var(--theirs); }
-.fcside.none { opacity: .45; }
-.fcvs { align-self: center; color: var(--dim); font-size: 11px; padding: 0 2px; text-align: center; }
-.fcvs .tri { display: block; font-size: 9px; margin-top: 3px; }
+.fcside .hp { font-size: 9.5px; color: var(--dim); }
+.fcside .num { font-size: 10.5px; margin-top: 1px; white-space: nowrap; }
+.fcside .num b { font-weight: 700; }
+.fcside .num .d { color: var(--warn); }
+.fcside.theirs { text-align: right; }
+.fcside.none { opacity: .4; }
+.fcmid { font-size: 9px; color: var(--dim); text-align: center; padding: 0 4px; flex: none; width: 68px;
+  align-self: center; line-height: 1.5; }
+.fcmid .tri { display: block; }
 .up { color: var(--good); } .down { color: var(--theirs); }
-.dmg { color: var(--warn); }
 .kill { color: var(--theirs); font-weight: 700; }
 
-#actions {
-  position: absolute; right: 8px; bottom: calc(10px + var(--safe-b));
-  display: flex; gap: 6px; align-items: center;
-}
+#acts { display: flex; gap: 6px; align-items: center; }
 .act {
   font-family: inherit; font-size: 11px; letter-spacing: 0.1em; font-weight: 600;
-  padding: 10px 14px; border-radius: 10px; cursor: pointer;
+  padding: 11px 14px; border-radius: 10px; cursor: pointer; white-space: nowrap;
   background: rgba(127,216,255,0.13); color: var(--mine); border: 1px solid rgba(127,216,255,0.42);
 }
-.act.ghost { background: var(--panel); color: var(--dim); border-color: var(--edge); }
-.act.strike { background: rgba(255,125,107,0.16); color: #ffb0a2; border-color: rgba(255,125,107,0.55); }
+.act.ghost { background: rgba(11,14,22,0.8); color: var(--dim); border-color: var(--edge); }
+.act.strike { background: rgba(255,125,107,0.18); color: #ffb0a2; border-color: rgba(255,125,107,0.55); flex: 1; }
+#btnEnd { margin-left: auto; }
 .act:active { transform: translateY(1px); }
 
-#hint {
-  position: absolute; left: 0; right: 0; top: calc(46px + var(--safe-t));
-  text-align: center; font-size: 10px; color: rgba(152,161,182,0.8);
-  pointer-events: none; letter-spacing: 0.06em;
+/* ------------------------------------------------------------------- sheets */
+#sheet {
+  position: absolute; left: 7px; right: 7px; bottom: calc(112px + var(--safe-b));
+  background: var(--panel); border: 1px solid var(--edge); border-radius: 12px;
+  backdrop-filter: blur(9px); padding: 9px 11px 11px; z-index: 4;
 }
+.sheethead { display: flex; justify-content: space-between; align-items: center; }
+.sheethead b { font-size: 13px; letter-spacing: 0.08em; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 8px; margin: 9px 0 8px; }
+.stats div { font-size: 10px; color: var(--dim); display: flex; justify-content: space-between; }
+.stats div b { color: var(--ink); font-weight: 600; }
+.sheetfoot { display: flex; justify-content: space-between; gap: 10px; font-size: 10px;
+  color: var(--dim); border-top: 1px solid var(--edge); padding-top: 7px; }
+.sheetfoot span:first-child { color: var(--warn); white-space: nowrap; }
 
 #log {
-  position: absolute; right: 8px; top: calc(46px + var(--safe-t)); width: min(300px, 76vw);
-  max-height: 46vh; background: var(--panel); border: 1px solid var(--edge);
-  border-radius: 12px; backdrop-filter: blur(9px); display: flex; flex-direction: column;
+  position: absolute; right: 7px; top: calc(44px + var(--safe-t)); width: min(310px, 78vw);
+  max-height: 44vh; background: var(--panel); border: 1px solid var(--edge);
+  border-radius: 12px; backdrop-filter: blur(9px); display: flex; flex-direction: column; z-index: 4;
 }
 .loghead {
   display: flex; justify-content: space-between; align-items: center;
   font-size: 10px; letter-spacing: 0.14em; color: var(--dim);
-  padding: 8px 8px 6px 11px; border-bottom: 1px solid var(--edge);
+  padding: 7px 7px 6px 11px; border-bottom: 1px solid var(--edge);
 }
 #logBody { overflow-y: auto; padding: 7px 11px 4px; }
-#logFoot { border-top: 1px solid var(--edge); padding: 7px 11px 9px; display: flex; justify-content: space-between; align-items: center; }
-#logFoot span { font-size: 10px; color: var(--dim); }
-#btnWipe { font-family: inherit; font-size: 9px; letter-spacing: 0.12em; color: var(--theirs);
-  background: none; border: 1px solid rgba(255,125,107,0.35); border-radius: 6px; padding: 4px 8px; cursor: pointer; }
 #logBody div { font-size: 10.5px; line-height: 1.5; color: var(--dim); }
 #logBody div.hit { color: var(--ink); }
 #logBody div.crit { color: var(--warn); }
 #logBody div.miss { color: #7d8598; }
 #logBody div.level { color: var(--mine); }
-#logBody div.down { color: var(--theirs); }
+#logFoot { border-top: 1px solid var(--edge); padding: 7px 11px 9px; display: flex;
+  justify-content: space-between; align-items: center; }
+#logFoot span { font-size: 10px; color: var(--dim); }
+#btnWipe { font-family: inherit; font-size: 9px; letter-spacing: 0.12em; color: var(--theirs);
+  background: none; border: 1px solid rgba(255,125,107,0.35); border-radius: 6px; padding: 4px 8px; cursor: pointer; }
 
 #over, #intro {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  background: rgba(5, 7, 12, 0.82); backdrop-filter: blur(4px); z-index: 5;
+  background: rgba(5, 7, 12, 0.86); backdrop-filter: blur(4px); z-index: 6; padding: 16px;
 }
 .overbox, .introbox {
-  text-align: center; padding: 26px 24px; max-width: 340px;
-  border: 1px solid var(--edge); border-radius: 16px; background: rgba(12,15,24,0.9);
+  text-align: center; padding: 24px 22px; max-width: 340px;
+  border: 1px solid var(--edge); border-radius: 16px; background: rgba(12,15,24,0.94);
 }
-.overbox b { display: block; font-size: 22px; letter-spacing: 0.2em; }
+.overbox b { display: block; font-size: 21px; letter-spacing: 0.2em; }
 .overbox span { display: block; font-size: 11px; color: var(--dim); margin: 8px 0 12px; }
 #overList { text-align: left; margin: 0 0 16px; }
 #overList div { font-size: 11px; color: var(--dim); line-height: 1.7; display: flex; justify-content: space-between; gap: 12px; }
 #overList div b { color: var(--ink); font-weight: 600; font-size: 11px; letter-spacing: 0.06em; }
 #overList div.gone { color: var(--theirs); }
 #overList div.up b { color: var(--good); }
-.introbox h1 { margin: 0; font-size: 30px; letter-spacing: 0.34em; font-weight: 700; }
+.introbox h1 { margin: 0; font-size: 28px; letter-spacing: 0.32em; font-weight: 700; }
 .introbox .sub { color: var(--dim); font-size: 11px; margin: 8px 0 16px; letter-spacing: 0.04em; }
-.introbox ul { text-align: left; padding-left: 16px; margin: 0 0 20px; }
-.introbox li { font-size: 11px; color: var(--dim); line-height: 1.7; }
+.introbox ul { text-align: left; padding-left: 16px; margin: 0 0 18px; }
+.introbox li { font-size: 11px; color: var(--dim); line-height: 1.65; }
 .introbox li b { color: var(--ink); }
 #btnStart, #btnAgain {
   font-family: inherit; font-size: 12px; letter-spacing: 0.16em; font-weight: 600;
   padding: 12px 22px; border-radius: 10px; cursor: pointer;
   background: rgba(127,216,255,0.14); color: var(--mine); border: 1px solid rgba(127,216,255,0.5);
-}
-@media (max-height: 560px) {
-  .introbox li { line-height: 1.5; }
-  #card { width: min(240px, 56vw); }
 }
 
 </style>
@@ -191,41 +207,51 @@ html, body {
     <div class="pill" id="phase"><b>PLAYER</b><span id="turn">turn 1</span></div>
     <div class="pill" id="tally"><span class="mine" id="tallyMine">4</span><i>vs</i><span class="theirs" id="tallyTheirs">5</span></div>
     <div class="spacer"></div>
+    <button class="icon" id="btnFit" title="Whole board">⤢</button>
     <button class="icon" id="btnLog" title="Field log">≡</button>
     <button class="icon" id="btnSound" title="Sound">♪</button>
   </div>
 
   <div id="banner"><b></b><span></span></div>
+  <div id="hint">tap one of yours</div>
 
-  <div id="card" class="panel hidden">
-    <div class="cardhead">
-      <div>
-        <b id="cName">VESS</b>
-        <span id="cClass">Blade · lv 3</span>
+  <!-- the bottom bar: one strip that always says who is selected and what can
+       be done about it, so nothing ever floats over the board -->
+  <div id="bar">
+    <div id="strip">
+      <div id="unitStrip" class="stripface">
+        <div class="who">
+          <b id="uName">—</b>
+          <span id="uClass"></span>
+        </div>
+        <div class="vitals">
+          <div class="hpline"><span id="uHp">—</span><i id="uTerrain"></i></div>
+          <div class="hpbar"><div id="uHpFill"></div></div>
+          <div class="statline" id="uStats"></div>
+        </div>
+        <button class="more" id="btnMore" aria-label="Full stats">▲</button>
       </div>
-      <div class="hpwrap">
-        <div class="hpnum"><b id="cHp">20</b><i>/<span id="cMax">20</span></i></div>
-        <div class="hpbar"><div id="cHpFill"></div></div>
+
+      <div id="fcStrip" class="stripface hidden">
+        <div class="fcside mine" id="fcA"></div>
+        <div class="fcmid" id="fcVs"></div>
+        <div class="fcside theirs" id="fcB"></div>
       </div>
     </div>
-    <div class="stats" id="cStats"></div>
-    <div class="cardfoot"><span id="cWeapon">Iron Sword</span><span id="cTerrain">stone</span></div>
+
+    <div id="acts">
+      <button id="btnAttack" class="act strike hidden">STRIKE</button>
+      <button id="btnWait" class="act hidden">WAIT</button>
+      <button id="btnCancel" class="act ghost hidden">BACK</button>
+      <button id="btnEnd" class="act ghost">END TURN</button>
+    </div>
   </div>
 
-  <div id="forecast" class="panel hidden">
-    <div class="fcside" id="fcA"></div>
-    <div class="fcvs" id="fcVs">→</div>
-    <div class="fcside" id="fcB"></div>
+  <div id="sheet" class="hidden">
+    <div class="sheethead"><b id="sName">—</b><button class="icon" id="btnSheetClose">✕</button></div>
+    <div class="stats" id="sStats"></div>
+    <div class="sheetfoot"><span id="sWeapon"></span><span id="sTag"></span></div>
   </div>
-
-  <div id="actions">
-    <button id="btnAttack" class="act strike hidden">STRIKE</button>
-    <button id="btnWait" class="act hidden">WAIT</button>
-    <button id="btnCancel" class="act ghost hidden">CANCEL</button>
-    <button id="btnEnd" class="act ghost">END TURN</button>
-  </div>
-
-  <div id="hint">tap a unit · drag to look</div>
 
   <div id="log" class="hidden">
     <div class="loghead">FIELD LOG<button class="icon" id="btnLogClose">✕</button></div>
@@ -247,10 +273,10 @@ html, body {
       <h1>IRONWAKE</h1>
       <p class="sub">a tactics arena where every blow is simulated</p>
       <ul>
-        <li><b>Tap</b> one of yours, then a blue tile to move — or an enemy to close and strike.</li>
+        <li><b>Tap</b> one of yours, then a blue tile to move — or an enemy to line up a strike.</li>
+        <li><b>Drag</b> to move the camera, pinch to zoom, ⤢ for the whole board.</li>
         <li>Height, terrain and the weapon triangle all count. So does the drop.</li>
         <li>Survivors carry their levels into the next wave. The fallen do not come back.</li>
-        <li>Nothing here is animation: a killing blow throws a body, and a bridge has no rail.</li>
       </ul>
       <button id="btnStart">TAKE THE FIELD</button>
     </div>
@@ -2018,8 +2044,12 @@ K.render = (function () {
       x: 0, y: 0, z: 0,
       tx: 0, ty: 0.9, tz: 0,        // what we look at
       fx: 0, fy: 0.9, fz: 0,        // where we want to look
-      yaw: 2.35, pitch: 0.88, dist: 28,
-      wantYaw: 2.35, wantPitch: 0.88, wantDist: 28,
+      // Face-on, with a few degrees of swing for depth. A board turned to the
+      // diamond spends the width of a portrait screen on its own diagonal and
+      // leaves two triangles of void along the bottom edge; square on, the
+      // near rank is a full-width line and the arena fills the frame.
+      yaw: Math.PI + 0.10, pitch: 0.74, dist: 24,
+      wantYaw: Math.PI + 0.10, wantPitch: 0.74, wantDist: 24,
       shake: 0, fov: 1
     };
   }
@@ -2039,7 +2069,20 @@ K.render = (function () {
   }
 
   function View(canvas) {
-    return { canvas, ctx: canvas.getContext('2d'), w: 0, h: 0, dpr: 1, f: 500, items: [], fog: FOG };
+    return {
+      canvas, ctx: canvas.getContext('2d'), w: 0, h: 0, dpr: 1, f: 500, items: [], fog: FOG,
+      // the strip of screen the board gets: the HUD owns the rest, and framing
+      // the arena in the whole viewport puts half of it under the bars
+      band: { top: 44, bottom: 96 },
+      // where in that band the camera's own target sits. Looking down at a
+      // board, everything you are about to do with a unit is UP-screen of it,
+      // so a centred unit wastes the bottom third on empty floor.
+      frameBias: 0.62
+    };
+  }
+  function midY(v) {
+    const h = Math.max(140, v.h - v.band.top - v.band.bottom);
+    return v.band.top + h * (v.frameBias === undefined ? 0.5 : v.frameBias);
   }
 
   function resize(v) {
@@ -2060,11 +2103,16 @@ K.render = (function () {
     const rl = Math.hypot(rx, ry, rz) || 1;
     rx /= rl; ry /= rl; rz /= rl;
     const ux = ry * fz - rz * fy, uy = rz * fx - rx * fz, uz = rx * fy - ry * fx;  // right x fwd
+    const band = Math.max(140, v.h - v.band.top - v.band.bottom);
+    // scale is set by the SHORTER axis of the space the board actually has, so
+    // a unit is the same size in your hand whatever the phone
+    const ref = Math.min(v.w * 1.42, band);
     const fovY = 1.02 / (cam.fov || 1);
-    v.f = (v.h * 0.5) / Math.tan(fovY * 0.5);
+    v.f = (ref * 0.5) / Math.tan(fovY * 0.5);
     v.cam = { x: cam.x, y: cam.y, z: cam.z, fx, fy, fz, rx, ry, rz, ux, uy, uz, sx: sx || 0, sy: sy || 0 };
+    v.my = midY(v);
     const dfwd = fz, dup = uz;
-    v.horizonY = dfwd > 0.01 ? v.h * (0.5 + FRAME) - v.f * (dup / dfwd) : -v.h;
+    v.horizonY = dfwd > 0.01 ? v.my - v.f * (dup / dfwd) : -v.h;
   }
 
   function proj(v, x, y, z) {
@@ -2076,13 +2124,9 @@ K.render = (function () {
       cz: dx * c.fx + dy * c.fy + dz * c.fz
     };
   }
-  /* The board is framed a little below centre: the status bar lives at the top
-     of a phone and the far rank of a tactics map is the last thing that should
-     be hiding under it. */
-  const FRAME = 0.055;
   function toScreen(v, p) {
     const s = v.f / p.cz;
-    return { x: v.w / 2 + p.cx * s + v.cam.sx, y: v.h * (0.5 + FRAME) - p.cy * s + v.cam.sy, s, z: p.cz };
+    return { x: v.w / 2 + p.cx * s + v.cam.sx, y: v.my - p.cy * s + v.cam.sy, s, z: p.cz };
   }
   function screenOf(v, x, y, z) {
     const p = proj(v, x, y, z);
@@ -2380,7 +2424,11 @@ K.render = (function () {
     const fogT = clamp((depth - FOG_NEAR) / (FOG_FAR - FOG_NEAR), 0, 1);
     const S = SIDE[a.unit.side];
     const dead = a.unit.dead;
-    const skin = dead ? mix(S.body, [70, 66, 74], 0.55) : S.body;
+    // a unit that has had its turn should look like it: on a board of eleven
+    // bodies, "who can still move" has to be answerable at a glance
+    const spent = !dead && a.unit.acted;
+    const skin = dead ? mix(S.body, [70, 66, 74], 0.55)
+      : spent ? mix(S.body, [86, 92, 108], 0.62) : S.body;
     const acc = rgb(S.accent);
     v.items.push({
       z: depth - 0.35,
@@ -2430,7 +2478,7 @@ K.render = (function () {
         }
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-        const alpha = dead ? 0.72 : 1;
+        const alpha = dead ? 0.72 : spent ? 0.8 : 1;
         const ink = 'rgba(8,8,13,' + (0.85 * alpha) + ')';
         const flesh = css(mix(mix(skin, [26, 24, 34], clamp((depth - 6) / 22, 0, 0.35)), v.fog, fogT * 0.7), alpha);
         const scale = P.pelvis ? (v.f / Math.max(NEAR, depth)) : 1;
@@ -2560,6 +2608,20 @@ K.render = (function () {
       ctx.fillStyle = deep; ctx.fillRect(0, hy, v.w, v.h - hy);
     }
 
+    // The arena is a slab in the dark, and on a tall screen there is a lot of
+    // dark. A wash of light under it turns the emptiness into a room the board
+    // is standing in rather than a page that failed to fill.
+    const mid = screenOf(v, 0, 0, 0);
+    if (mid) {
+      const r = clamp(v.f * 34 / Math.max(8, cam.dist), 160, 2600);
+      const gl = ctx.createRadialGradient(mid.x, mid.y, r * 0.10, mid.x, mid.y, r);
+      gl.addColorStop(0, 'rgba(84, 104, 142, 0.44)');
+      gl.addColorStop(0.45, 'rgba(48, 61, 90, 0.20)');
+      gl.addColorStop(1, 'rgba(10, 13, 20, 0)');
+      ctx.fillStyle = gl;
+      ctx.fillRect(0, 0, v.w, v.h);
+    }
+
     v.items.length = 0;
     drawArena(v, g);
     drawOverlays(v, g);
@@ -2599,7 +2661,7 @@ K.render = (function () {
   function pick(v, sx, sy, arena) {
     if (!v.cam) return null;
     const c = v.cam;
-    const ax = (sx - v.w / 2) / v.f, ay = (v.h * (0.5 + FRAME) - sy) / v.f;
+    const ax = (sx - v.w / 2) / v.f, ay = (v.my - sy) / v.f;
     const dx = c.fx + c.rx * ax + c.ux * ay;
     const dy = c.fy + c.ry * ax + c.uy * ay;
     const dz = c.fz + c.rz * ax + c.uz * ay;
@@ -2632,7 +2694,49 @@ K.render = (function () {
     return best ? best.s : null;
   }
 
-  return { View, resize, frame, pick, Camera, camUpdate, screenOf, SIDE };
+  /* The distance at which the whole arena sits inside the band, with room to
+     spare — the far end of the zoom, and the number every other distance is
+     expressed as a fraction of. */
+  function fitDistance(v, arena, cam) {
+    if (!v.w || !v.h) return 26;
+    const T = K.grid.TILE;
+    const pts = [];
+    for (const s of arena.surfaces) {
+      const w = arena.world(s);
+      pts.push([w.x - T / 2, s.y, w.z - T / 2], [w.x + T / 2, s.y, w.z + T / 2],
+               [w.x + T / 2, s.y + 1.8, w.z - T / 2], [w.x - T / 2, s.y + 1.8, w.z + T / 2]);
+    }
+    // the whole board is only ever framed centred, so it is measured centred
+    const bias0 = v.frameBias;
+    v.frameBias = 0.5;
+    const availW = v.w * 0.94;
+    const availH = Math.max(140, v.h - v.band.top - v.band.bottom) * 0.94;
+    const probe = { tx: 0, ty: 1.1, tz: 0, yaw: cam.yaw, pitch: cam.pitch, dist: 26, fov: cam.fov };
+    let d = 26;
+    for (let it = 0; it < 5; it++) {
+      probe.dist = d;
+      const ch = Math.cos(probe.pitch);
+      probe.x = probe.tx - Math.sin(probe.yaw) * ch * d;
+      probe.y = probe.ty + Math.sin(probe.pitch) * d;
+      probe.z = probe.tz - Math.cos(probe.yaw) * ch * d;
+      setCamera(v, probe, 0, 0);
+      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+      for (const p of pts) {
+        const s = screenOf(v, p[0], p[1], p[2]);
+        if (!s) continue;
+        if (s.x < x0) x0 = s.x; if (s.x > x1) x1 = s.x;
+        if (s.y < y0) y0 = s.y; if (s.y > y1) y1 = s.y;
+      }
+      if (x1 <= x0) break;
+      const k = Math.max((x1 - x0) / availW, (y1 - y0) / availH);
+      d = clamp(d * (0.35 + 0.65 * k), 8, 70);
+      if (Math.abs(k - 1) < 0.02) break;
+    }
+    v.frameBias = bias0;
+    return d;
+  }
+
+  return { View, resize, frame, pick, Camera, camUpdate, screenOf, fitDistance, SIDE };
 })();
 
 /* ---- 09-audio.js ---- */
@@ -2722,7 +2826,9 @@ K.audio = (function () {
 /* IRONWAKE — the readable half.
    Everything a tactics game asks you to weigh is a number, and numbers belong
    in DOM, not painted into a canvas at whatever size the perspective felt
-   like. The canvas shows the fight; this shows the decision. */
+   like. It all lives in one strip along the bottom: on a phone the board is
+   the scarce thing, and a panel that floats over it is a panel standing where
+   you wanted to look. */
 K.ui = (function () {
   const U = K.util, Un = K.units;
   const { clamp } = U;
@@ -2735,93 +2841,123 @@ K.ui = (function () {
       phase: $('phase'), phaseB: $('phase').querySelector('b'), turn: $('turn'),
       tallyMine: $('tallyMine'), tallyTheirs: $('tallyTheirs'),
       banner: $('banner'), bannerB: $('banner').querySelector('b'), bannerS: $('banner').querySelector('span'),
-      card: $('card'), cName: $('cName'), cClass: $('cClass'), cHp: $('cHp'), cMax: $('cMax'),
-      cHpFill: $('cHpFill'), cStats: $('cStats'), cWeapon: $('cWeapon'), cTerrain: $('cTerrain'),
-      forecast: $('forecast'), fcA: $('fcA'), fcB: $('fcB'), fcVs: $('fcVs'),
+      bar: $('bar'), strip: $('strip'), unitStrip: $('unitStrip'), fcStrip: $('fcStrip'),
+      uName: $('uName'), uClass: $('uClass'), uHp: $('uHp'), uHpFill: $('uHpFill'),
+      uTerrain: $('uTerrain'), uStats: $('uStats'), btnMore: $('btnMore'),
+      fcA: $('fcA'), fcB: $('fcB'), fcVs: $('fcVs'),
       btnAttack: $('btnAttack'), btnWait: $('btnWait'), btnCancel: $('btnCancel'), btnEnd: $('btnEnd'),
-      hint: $('hint'), log: $('log'), logBody: $('logBody'),
+      hint: $('hint'), log: $('log'), logBody: $('logBody'), runStat: $('runStat'),
+      sheet: $('sheet'), sName: $('sName'), sStats: $('sStats'), sWeapon: $('sWeapon'), sTag: $('sTag'),
       over: $('over'), overTitle: $('overTitle'), overSub: $('overSub'),
-      overList: $('overList'), btnAgain: $('btnAgain'), intro: $('intro'),
-      runStat: $('runStat')
+      overList: $('overList'), btnAgain: $('btnAgain'), intro: $('intro')
     };
     $('btnStart').onclick = () => { el.intro.classList.add('hidden'); H.start && H.start(); };
     $('btnAgain').onclick = () => { el.over.classList.add('hidden'); H.again && H.again(); };
     $('btnLog').onclick = () => el.log.classList.toggle('hidden');
     $('btnLogClose').onclick = () => el.log.classList.add('hidden');
-    $('btnWipe').onclick = (e) => {
-      const b = e.currentTarget;
-      if (b.dataset.armed) { el.log.classList.add('hidden'); b.textContent = 'ABANDON RUN'; delete b.dataset.armed; H.wipe && H.wipe(); }
-      else { b.textContent = 'SURE?'; b.dataset.armed = '1'; setTimeout(() => { b.textContent = 'ABANDON RUN'; delete b.dataset.armed; }, 3000); }
-    };
+    $('btnFit').onclick = () => H.fit && H.fit();
+    $('btnSheetClose').onclick = () => el.sheet.classList.add('hidden');
+    el.btnMore.onclick = () => el.sheet.classList.toggle('hidden');
     $('btnSound').onclick = (e) => {
       const on = !K.audio.isOn();
       K.audio.enable(on);
       e.currentTarget.classList.toggle('off', !on);
     };
     $('btnSound').classList.add('off');
+    $('btnWipe').onclick = (e) => {
+      const b = e.currentTarget;
+      if (b.dataset.armed) {
+        el.log.classList.add('hidden'); b.textContent = 'ABANDON RUN';
+        delete b.dataset.armed; H.wipe && H.wipe();
+      } else {
+        b.textContent = 'SURE?'; b.dataset.armed = '1';
+        setTimeout(() => { b.textContent = 'ABANDON RUN'; delete b.dataset.armed; }, 3000);
+      }
+    };
     el.btnAttack.onclick = () => H.attack && H.attack();
     el.btnWait.onclick = () => H.wait && H.wait();
     el.btnCancel.onclick = () => H.cancel && H.cancel();
     el.btnEnd.onclick = () => H.end && H.end();
   }
 
+  /* how much screen the HUD is standing on, so the board can be framed in
+     what is left rather than behind it */
+  function band() {
+    const t = el.bar ? 42 + (window.visualViewport ? 0 : 0) : 44;
+    const b = el.bar ? el.bar.getBoundingClientRect().height : 96;
+    return { top: t, bottom: Math.max(70, b + 4) };
+  }
+
   const STAT_ROWS = [['STR', 'str'], ['MAG', 'mag'], ['SKL', 'skl'], ['SPD', 'spd'],
                      ['LCK', 'lck'], ['DEF', 'def'], ['RES', 'res'], ['MOV', 'mov']];
 
-  function unitCard(u) {
-    if (!u) { el.card.classList.add('hidden'); return; }
-    el.card.classList.remove('hidden');
-    el.cName.textContent = u.name;
-    el.cName.style.color = u.side === 0 ? 'var(--mine)' : 'var(--theirs)';
-    el.cClass.textContent = u.cls + ' · lv ' + u.level + (u.dead ? ' · down' : u.acted ? ' · spent' : '');
-    el.cHp.textContent = u.hp; el.cMax.textContent = u.maxHp;
-    const frac = clamp(u.hp / u.maxHp, 0, 1);
-    el.cHpFill.style.width = (frac * 100).toFixed(1) + '%';
-    el.cHpFill.style.background = frac > 0.5 ? 'var(--good)' : frac > 0.25 ? 'var(--warn)' : 'var(--theirs)';
+  function unitStrip(u) {
+    const has = !!u;
+    el.unitStrip.classList.toggle('empty', !has);
+    el.uName.textContent = has ? u.name : 'IRONWAKE';
+    el.uName.style.color = has ? (u.side === 0 ? 'var(--mine)' : 'var(--theirs)') : 'var(--dim)';
+    el.uClass.textContent = has
+      ? u.cls + ' · lv ' + u.level + (u.dead ? ' · down' : u.acted ? ' · spent' : '')
+      : 'tap one of yours to give an order';
+    el.uHp.textContent = has ? u.hp + ' / ' + u.maxHp : '';
+    const frac = has ? clamp(u.hp / u.maxHp, 0, 1) : 0;
+    el.uHpFill.style.width = (frac * 100).toFixed(1) + '%';
+    el.uHpFill.style.background = frac > 0.5 ? 'var(--good)' : frac > 0.25 ? 'var(--warn)' : 'var(--theirs)';
+    const s = has ? u.surface : null;
+    el.uTerrain.textContent = s
+      ? s.t.name + (s.t.avoid ? ' +' + s.t.avoid + 'avo' : '') + (s.y > 0.1 ? ' · ' + s.y.toFixed(1) + 'm' : '')
+      : '';
+    el.uStats.innerHTML = has
+      ? (u.weapon.magic ? 'MAG <b>' + u.mag + '</b>' : 'STR <b>' + u.str + '</b>')
+        + ' · DEF <b>' + u.def + '</b> · AS <b>' + Un.AS(u) + '</b> · MOV <b>' + u.mov + '</b>'
+        + ' · <span style="color:var(--warn)">' + u.weapon.kind.toUpperCase() + '</span>'
+      : '';
+    el.btnMore.style.visibility = has ? 'visible' : 'hidden';
+    if (has && !el.sheet.classList.contains('hidden')) sheet(u);
+  }
+
+  function sheet(u) {
+    el.sName.textContent = u.name + ' · ' + u.cls + ' · lv ' + u.level;
     let html = '';
     for (const [label, key] of STAT_ROWS) html += '<div>' + label + '<b>' + u[key] + '</b></div>';
     html += '<div>AS<b>' + Un.AS(u) + '</b></div>';
+    html += '<div>HP<b>' + u.hp + '/' + u.maxHp + '</b></div>';
     html += '<div>EXP<b>' + u.exp + '</b></div>';
-    el.cStats.innerHTML = html;
-    el.cWeapon.textContent = u.weapon.name + ' · mt ' + u.weapon.mt + ' · rng ' +
-      (u.weapon.rng[0] === u.weapon.rng[1] ? u.weapon.rng[0] : u.weapon.rng.join('-'));
-    const s = u.surface;
-    el.cTerrain.textContent = s
-      ? s.t.name + (s.t.avoid ? ' +' + s.t.avoid + ' avo' : '') + (s.t.def ? ' +' + s.t.def + ' def' : '') +
-        (s.y > 0.1 ? ' · +' + s.y.toFixed(1) + 'm' : '')
-      : '';
+    el.sStats.innerHTML = html;
+    el.sWeapon.textContent = u.weapon.name + ' · mt ' + u.weapon.mt + ' · hit ' + u.weapon.hit
+      + ' · rng ' + (u.weapon.rng[0] === u.weapon.rng[1] ? u.weapon.rng[0] : u.weapon.rng.join('-'));
+    el.sTag.textContent = u.tag || '';
   }
 
-  function sideHtml(u, s, cls, willDie) {
-    if (!s) return '<div class="n">' + u.name + '</div><div class="hp">' + u.hp + ' hp</div>' +
-      '<div class="row"><span>no answer</span></div>';
-    return '<div class="n">' + u.name + '</div>' +
-      '<div class="hp">' + u.hp + '/' + u.maxHp + ' hp' + (willDie ? ' <b class="kill">· falls</b>' : '') + '</div>' +
-      '<div class="row"><span>dmg</span><b class="dmg">' + s.dmg + (s.hits > 1 ? ' ×2' : '') + '</b></div>' +
-      '<div class="row"><span>hit</span><b>' + s.acc + '%</b></div>' +
-      '<div class="row"><span>crit</span><b>' + s.crit + '%</b></div>';
+  function side(u, s, dies) {
+    const head = '<div class="n">' + u.name + '</div>'
+      + '<div class="hp">' + u.hp + '/' + u.maxHp + (dies ? ' <b class="kill">falls</b>' : '') + '</div>';
+    if (!s) return head + '<div class="num">cannot answer</div>';
+    return head
+      + '<div class="num"><b class="d">' + s.dmg + (s.hits > 1 ? ' ×2' : '') + '</b> dmg</div>'
+      + '<div class="num"><b>' + s.acc + '%</b> hit' + (s.crit ? ' · <b>' + s.crit + '%</b> crit' : '') + '</div>';
   }
 
   function forecast(pair, arena) {
-    if (!pair) { el.forecast.classList.add('hidden'); return null; }
+    if (!pair) { el.fcStrip.classList.add('hidden'); el.unitStrip.classList.remove('hidden'); return null; }
     // the odds are the odds from where the attacker will be standing, not
     // from where it happens to be standing while you think about it
     const save = pair.att.surface;
     if (pair.spot) pair.att.surface = pair.spot;
     const f = Un.forecast(pair.att, pair.def, arena);
     pair.att.surface = save;
-    el.forecast.classList.remove('hidden');
-    const defDies = f.a.total >= pair.def.hp;
-    const attDies = f.b && f.b.total >= pair.att.hp;
-    el.fcA.className = 'fcside ' + (pair.att.side === 0 ? 'mine' : 'theirs');
-    el.fcB.className = 'fcside ' + (pair.def.side === 0 ? 'mine' : 'theirs') + (f.b ? '' : ' none');
-    el.fcA.innerHTML = sideHtml(pair.att, f.a, '', attDies);
-    el.fcB.innerHTML = sideHtml(pair.def, f.b, '', defDies);
-    const tri = f.a.tri > 0 ? '<span class="tri up">triangle +</span>'
-      : f.a.tri < 0 ? '<span class="tri down">triangle −</span>' : '';
-    const high = f.a.high > 0.2 ? '<span class="tri up">high ground</span>'
-      : f.a.high < -0.2 ? '<span class="tri down">below them</span>' : '';
-    el.fcVs.innerHTML = 'vs' + tri + high;
+    el.fcStrip.classList.remove('hidden');
+    el.unitStrip.classList.add('hidden');
+    el.sheet.classList.add('hidden');
+    el.fcA.innerHTML = side(pair.att, f.a, f.b && f.b.total >= pair.att.hp);
+    el.fcB.innerHTML = side(pair.def, f.b, f.a.total >= pair.def.hp);
+    el.fcB.classList.toggle('none', !f.b);
+    const bits = [];
+    if (f.a.tri > 0) bits.push('<span class="tri up">triangle +</span>');
+    else if (f.a.tri < 0) bits.push('<span class="tri down">triangle −</span>');
+    if (f.a.high > 0.2) bits.push('<span class="tri up">high ground</span>');
+    else if (f.a.high < -0.2) bits.push('<span class="tri down">below them</span>');
+    el.fcVs.innerHTML = '<span class="tri">vs</span>' + bits.join('');
     return f;
   }
 
@@ -2833,7 +2969,6 @@ K.ui = (function () {
 
   let lastLog = 0, lastBanner = null;
 
-  /* pushed once per frame — cheap because every write is guarded */
   function sync(g) {
     const b = g.battle;
     el.phaseB.textContent = b.phase === 'player' ? 'PLAYER' : 'ENEMY';
@@ -2851,26 +2986,28 @@ K.ui = (function () {
       } else el.banner.className = '';
     }
 
-    // the forecast owns the bottom of the screen while it is up
-    unitCard(g.pair ? null : g.cardUnit);
     g.fc = forecast(g.pair, b.arena);
+    if (!g.pair) unitStrip(g.cardUnit || b.sel);
 
     const busy = !!b.busy, mine = b.phase === 'player' && !b.over && !busy;
     el.btnAttack.classList.toggle('hidden', !(mine && g.pair));
-    el.btnWait.classList.toggle('hidden', !(mine && b.sel && !b.reach));
-    el.btnCancel.classList.toggle('hidden', !(mine && b.sel && b.reach));
+    el.btnWait.classList.toggle('hidden', !(mine && b.sel && !b.reach && !g.pair));
+    el.btnCancel.classList.toggle('hidden', !(mine && (g.pair || (b.sel && b.reach))));
     el.btnEnd.classList.toggle('hidden', !mine || !!b.sel);
 
     if (b.log.length !== lastLog) { lastLog = b.log.length; log(b.log); }
     if (g.run) el.runStat.textContent = 'run ' + ((g.run.runs || 0) + 1) + ' · best wave ' + (g.run.best || 0);
 
-    el.hint.textContent = b.over ? ''
+    el.hint.style.opacity = b.banner ? '0' : '1';
+    const note = g.note && g.t - g.note.t < 2.2 ? g.note.text : null;
+    el.hint.textContent = note ? note
+      : b.over ? ''
       : busy ? ''
       : b.phase === 'enemy' ? 'they move'
-      : g.pair ? 'STRIKE to commit, or pick another'
+      : g.pair ? 'STRIKE to commit'
       : b.sel && !b.reach ? 'pick a target, or WAIT'
-      : b.sel ? 'blue to move · red to strike · tap them again to hold'
-      : 'tap one of yours · drag to look · pinch to zoom';
+      : b.sel ? 'blue to move · tap them to strike'
+      : 'tap one of yours';
 
     if (b.over && g.summary && el.over.classList.contains('hidden')) {
       const s = g.summary, won = b.over === 'win';
@@ -2880,9 +3017,7 @@ K.ui = (function () {
         ? 'wave ' + s.wave + ' taken on turn ' + b.turn
         : 'wave ' + s.wave + ' broke the line · best ' + (g.run.best || 0);
       let html = '';
-      for (const u of s.survivors) {
-        html += '<div class="up"><span>' + u.name + ' · ' + u.cls + '</span><b>lv ' + u.level + '</b></div>';
-      }
+      for (const u of s.survivors) html += '<div class="up"><span>' + u.name + ' · ' + u.cls + '</span><b>lv ' + u.level + '</b></div>';
       for (const name of s.lost) html += '<div class="gone"><span>' + name + '</span><b>fallen</b></div>';
       el.overList.innerHTML = html;
       el.btnAgain.textContent = won ? 'PRESS ON' : 'BEGIN AGAIN';
@@ -2890,14 +3025,16 @@ K.ui = (function () {
     }
   }
 
-  return { init, sync, unitCard };
+  return { init, sync, band };
 })();
 
 /* ---- 11-main.js ---- */
 /* IRONWAKE — the shell.
-   Boot, the fixed-step loop, the camera, and the one hard input problem a
-   3D tactics game has on a phone: telling a tap on a tile apart from a drag
-   of the world, on a map where two tiles can sit above each other. */
+   Boot, the fixed-step loop, the camera and the input. The hard problem on a
+   phone is that one finger has to mean three things — pick a tile, pick the
+   unit standing on it, and move the view — on a board where two tiles can sit
+   above one another. Drag moves the camera, a tap picks, and a unit is
+   hit-tested in screen space before the ray ever reaches the map. */
 (function () {
   const R = K.render, B = K.battle, U = K.util, Un = K.units;
   const { clamp, lerp } = U;
@@ -2908,44 +3045,55 @@ K.ui = (function () {
   const g = {
     battle: null, cam: null, view,
     t: 0, hover: null, pathPreview: null, cardUnit: null, pair: null,
-    threat: [], running: false, baseDist: 21
+    threat: [], running: false,
+    zoomT: 0.85,            // 0 = in among them, 1 = the whole board
+    zoomAuto: true, fitDist: 26, manual: false, look: null
   };
   window.G = g;   // the console is a legitimate debugging surface
 
-  function newBattle(seed) {
+  /* ------------------------------------------------------------------ setup */
+
+  function newBattle() {
     const run = g.run;
     const rnd = U.rng((run.wave * 7919 + (run.runs || 0) * 104729) >>> 0);
-    g.battle = B.create(seed, {
+    g.battle = B.create(null, {
       wave: run.wave,
       player: K.camp.playerPlan(run),
       enemy: run.wave === 1 && (run.runs || 0) === 0 ? null : K.camp.enemyPlan(run.wave, rnd)
     });
     g.summary = null;
     g.cam = R.Camera(g.battle.arena);
-    g.baseDist = 21;
-    g.cam.wantDist = g.baseDist;
     g.hover = null; g.pathPreview = null; g.cardUnit = null; g.pair = null; g.threat = [];
-    const c = centreOf(g.battle);
+    g.manual = false; g.look = null; g.zoomT = 0.85; g.zoomAuto = true;
+    measure();
+    const c = restPoint();
     g.cam.tx = g.cam.fx = c.x; g.cam.ty = g.cam.fy = c.y; g.cam.tz = g.cam.fz = c.z;
     R.camUpdate(g.cam, 1);
   }
 
-  /* At rest the camera sits between your line and the middle of the board:
-     close enough that the units you command are the subject, wide enough that
-     you can see what is coming for them. */
-  function centreOf(b) {
+  /* the board is framed in the gap between the two bars, and how far away the
+     camera has to be for that is a measurement, not a guess */
+  function measure() {
+    view.band = K.ui.band();
+    R.resize(view);
+    if (g.battle && g.cam) g.fitDist = R.fitDistance(view, g.battle.arena, g.cam);
+  }
+
+  function restPoint() {
+    const b = g.battle;
     const mine = B.living(b, 0);
     if (!mine.length) return { x: 0, y: 1.4, z: 0 };
-    let x = 0, y = 0, z = 0;
-    for (const u of mine) { const w = b.arena.world(u.surface); x += w.x; y += w.y; z += w.z; }
-    const k = 0.45;
-    return { x: lerp(x / mine.length, 0, k), y: y / mine.length + 1.1, z: lerp(z / mine.length, 0, k) };
+    let y = 0;
+    for (const u of mine) y += b.arena.world(u.surface).y;
+    // surveying, the board is the subject and it is centred; the small pull
+    // toward your own line is only so your side sits nearer the near edge
+    return { x: 0, y: y / mine.length + 1.2, z: 1.2 };
   }
 
   const unitOn = (b, s) => b.units.find(u => !u.dead && u.surface === s) || null;
 
-  /* where should this unit stand to hit that one? cheapest tile that reaches,
-     preferring cover, height, and a weak answer */
+  /* ------------------------------------------------------------- reasoning */
+
   function bestApproach(b, u, foe) {
     if (!b.reach) return null;
     let best = null;
@@ -2981,9 +3129,8 @@ K.ui = (function () {
   /* ------------------------------------------------------------------ taps */
 
   /* A finger lands on a BODY, not on the tile behind it. Casting the tap ray
-     straight at the map picks up whatever is a metre further out, which is how
-     you end up selecting the tile behind the unit you meant to pick, so units
-     are hit-tested in screen space first. */
+     straight at the map picks up whatever is a metre further out, so units are
+     hit-tested in screen space first. */
   function unitAt(sx, sy) {
     const b = g.battle;
     let best = null;
@@ -2995,7 +3142,7 @@ K.ui = (function () {
       const p = R.screenOf(view, c.x, c.y, c.z);
       if (!p) continue;
       const d = Math.hypot(p.x - sx, p.y - sy);
-      const r = Math.max(20, 0.5 * p.s);
+      const r = Math.max(22, 0.5 * p.s);
       if (d < r && (!best || d < best.d)) best = { u, d };
     }
     return best ? best.u : null;
@@ -3010,12 +3157,19 @@ K.ui = (function () {
 
     if (b.over) return;
     if (b.busy || b.phase !== 'player') { if (u) g.cardUnit = u; return; }
+    // a tap that cannot do anything should say why, once, in the hint line
+    if (u && u.side === 0 && u.acted && !b.sel) {
+      g.cardUnit = u;
+      g.note = { text: u.name + ' has already moved this turn', t: g.t };
+      return;
+    }
+    g.manual = false; g.zoomAuto = true;    // a tap means: follow the game again
 
     // a target is already proposed: tapping it again is the commit
     if (g.pair) {
       if (u === g.pair.def) { commit(); return; }
       g.pair = null; g.pathPreview = null;
-      // fall through: the tap also means whatever it would have meant
+      // and otherwise the tap still means whatever it would have meant
     }
 
     // the unit has moved and is choosing who to hit
@@ -3041,9 +3195,7 @@ K.ui = (function () {
         // deliberate act — nobody should lose a unit to a stray tap.
         const spot = bestApproach(b, b.sel, u);
         if (spot) {
-          const save = b.sel.surface; b.sel.surface = spot.s;
           g.pair = { att: b.sel, def: u, spot: spot.s };
-          b.sel.surface = save;
           g.cardUnit = u;
           g.pathPreview = spot.s === b.sel.surface ? null : b.arena.pathTo(b.reach, spot.s);
           K.audio.buy();
@@ -3051,11 +3203,8 @@ K.ui = (function () {
         return;
       }
       if (u && u.side === 0 && !u.acted) { B.select(b, u); g.cardUnit = u; g.threat = []; return; }
-      if (b.reach.has(s.id) && !B.occupied(b, s, b.sel)) {
-        B.moveTo(b, b.sel, s);
-        g.pathPreview = null;
-        return;
-      }
+      if (u && u.side === 0 && u.acted) { g.cardUnit = u; g.note = { text: u.name + ' has already moved', t: g.t }; return; }
+      if (b.reach.has(s.id) && !B.occupied(b, s, b.sel)) { B.moveTo(b, b.sel, s); g.pathPreview = null; return; }
       B.clearSel(b); g.cardUnit = null; g.pathPreview = null;
       return;
     }
@@ -3068,7 +3217,6 @@ K.ui = (function () {
     } else { g.cardUnit = null; g.threat = []; }
   }
 
-  /* the second tap: walk there if we have to, then swing */
   function commit() {
     const b = g.battle;
     if (!g.pair || b.busy) return;
@@ -3081,7 +3229,7 @@ K.ui = (function () {
   /* --------------------------------------------------------------- pointer */
 
   const ptrs = new Map();
-  let dragging = false, downT = 0, downX = 0, downY = 0, pinch0 = 0, dist0 = 0;
+  let gesture = null, downT = 0, downX = 0, downY = 0, pinch0 = 0, zoom0 = 0, mid0 = null;
 
   function localPos(e) {
     const r = canvas.getBoundingClientRect();
@@ -3092,57 +3240,78 @@ K.ui = (function () {
     canvas.setPointerCapture(e.pointerId);
     const p = localPos(e);
     ptrs.set(e.pointerId, p);
-    if (ptrs.size === 1) { dragging = false; downT = performance.now(); downX = p.x; downY = p.y; }
+    if (ptrs.size === 1) { gesture = null; downT = performance.now(); downX = p.x; downY = p.y; }
     if (ptrs.size === 2) {
       const [a, b] = [...ptrs.values()];
       pinch0 = Math.hypot(a.x - b.x, a.y - b.y);
-      dist0 = g.cam.wantDist;
-      dragging = true;
+      zoom0 = g.zoomT;
+      mid0 = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      gesture = 'two';
     }
   });
 
   canvas.addEventListener('pointermove', (e) => {
     const p = localPos(e);
     const prev = ptrs.get(e.pointerId);
-    if (!prev) {                                  // a mouse simply hovering
-      hoverAt(p.x, p.y);
-      return;
-    }
+    if (!prev) { hoverAt(p.x, p.y); return; }   // a mouse simply hovering
     ptrs.set(e.pointerId, p);
-    if (ptrs.size === 2) {
+
+    if (ptrs.size >= 2) {
       const [a, b] = [...ptrs.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
-      if (pinch0 > 8) {
-        g.baseDist = clamp(dist0 * (pinch0 / Math.max(8, d)), 8, 38);
-        g.cam.wantDist = g.baseDist;
+      if (pinch0 > 12) {
+        // pinch zooms, and the two fingers together swing the camera round
+        g.zoomT = clamp(zoom0 * (pinch0 / Math.max(12, d)), 0, 1);
+        g.zoomAuto = false;
       }
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      if (mid0) {
+        g.cam.wantYaw -= (mid.x - mid0.x) * 0.006;
+        g.cam.wantPitch = clamp(g.cam.wantPitch + (mid.y - mid0.y) * 0.005, 0.30, 1.24);
+      }
+      mid0 = mid;
       return;
     }
+
     const dx = p.x - prev.x, dy = p.y - prev.y;
-    if (!dragging && Math.hypot(p.x - downX, p.y - downY) > 9) dragging = true;
-    if (dragging) {
-      g.cam.wantYaw -= dx * 0.0075;
-      g.cam.wantPitch = clamp(g.cam.wantPitch + dy * 0.0055, 0.14, 1.32);
-    }
+    if (!gesture && Math.hypot(p.x - downX, p.y - downY) > 9) gesture = 'pan';
+    if (gesture === 'pan') pan(dx, dy);
   });
+
+  /* One finger drags the board itself: the world should stay under the thumb,
+     which means converting pixels to metres at the distance being looked at. */
+  function pan(dx, dy) {
+    const cam = g.cam;
+    if (!g.look) g.look = { x: cam.fx, y: cam.fy, z: cam.fz };
+    g.manual = true;
+    const perPx = cam.dist / Math.max(120, view.f);
+    const sy = Math.max(0.35, Math.sin(cam.pitch));
+    const rx = -Math.cos(cam.yaw), rz = Math.sin(cam.yaw);      // screen right, on the ground
+    const fx = Math.sin(cam.yaw), fz = Math.cos(cam.yaw);       // screen up, on the ground
+    g.look.x -= (rx * dx * perPx) + (fx * dy * perPx / sy);
+    g.look.z -= (rz * dx * perPx) + (fz * dy * perPx / sy);
+    const lim = K.grid.TILE * 8;
+    g.look.x = clamp(g.look.x, -lim, lim);
+    g.look.z = clamp(g.look.z, -lim, lim);
+  }
 
   function endPointer(e) {
     const p = localPos(e);
     const had = ptrs.has(e.pointerId);
     ptrs.delete(e.pointerId);
     if (!had) return;
-    if (ptrs.size === 0 && !dragging && performance.now() - downT < 600) {
-      if (g.running) tap(p.x, p.y);
+    if (ptrs.size === 0) {
+      if (!gesture && performance.now() - downT < 600 && g.running) tap(p.x, p.y);
+      gesture = null; mid0 = null;
     }
-    if (ptrs.size === 0) dragging = false;
   }
   canvas.addEventListener('pointerup', endPointer);
   canvas.addEventListener('pointercancel', endPointer);
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   window.addEventListener('wheel', (e) => {
     if (!g.cam) return;
-    g.baseDist = clamp(g.baseDist + e.deltaY * 0.012, 8, 38);
-    g.cam.wantDist = g.baseDist;
+    g.zoomT = clamp(g.zoomT + e.deltaY * 0.0011, 0, 1);
+    g.zoomAuto = false;
   }, { passive: true });
 
   function hoverAt(sx, sy) {
@@ -3160,47 +3329,72 @@ K.ui = (function () {
 
   /* ---------------------------------------------------------------- camera */
 
+  /* The camera has an opinion about how close it wants to be, and it changes
+     with what you are doing: survey the board when nothing is selected, come
+     in when you pick someone up, get close for the blow. A pinch says you
+     would rather decide yourself, and it holds until you tap something. */
   function driveCamera(dt) {
     const b = g.battle, cam = g.cam;
-    let want = null, close = null;
+    const CLOSE = Math.min(11.5, g.fitDist);
+    let want = null, aim = 0.85;
+
     if (b.busy && b.busy.kind === 'fight') {
       const a = b.busy.aA, d = b.busy.aD;
       want = { x: (a.pos.x + d.pos.x) / 2, y: (a.body.parts.chest.y + d.body.parts.chest.y) / 2, z: (a.pos.z + d.pos.z) / 2 };
-      close = Math.min(g.baseDist, 13.5);
+      aim = 0.12;
+      g.manual = false;
+      // hold on the two of them after the last blow: pulling out the instant
+      // the arithmetic finishes is pulling out before the body has landed
+      g.hold = { want, aim, t: 1.3 };
+    } else if (g.hold && g.hold.t > 0 && !g.manual) {
+      g.hold.t -= dt;
+      want = g.hold.want; aim = g.hold.aim;
     } else if (b.busy && b.busy.act) {
       const a = b.busy.act;
       want = { x: a.pos.x, y: a.body.parts.chest.y, z: a.pos.z };
-      close = Math.min(g.baseDist, 17);
-    } else if (b.sel) {
-      const a = B.actorOf(b, b.sel);
-      if (a) want = { x: a.pos.x, y: a.pos.y + 0.9, z: a.pos.z };
-    } else if (b.phase === 'enemy' && b.focus) {
-      want = { x: b.focus.pos.x, y: b.focus.pos.y + 0.9, z: b.focus.pos.z };
-    } else if (g.cardUnit && !g.cardUnit.dead) {
-      // looking one of theirs up should also look AT them
-      const a = B.actorOf(b, g.cardUnit);
-      if (a) want = { x: a.pos.x, y: a.pos.y + 0.9, z: a.pos.z };
+      aim = 0.26;
+      g.manual = false;
+    } else if (!g.manual) {
+      const u = b.sel || (b.phase === 'enemy' && b.focus ? null : g.cardUnit);
+      const a = u ? B.actorOf(b, u) : (b.phase === 'enemy' ? b.focus : null);
+      if (a) { want = { x: a.pos.x, y: a.pos.y + 0.9, z: a.pos.z }; aim = b.sel ? 0.46 : 0.62; }
+      else { want = restPoint(); aim = 0.78; }
+    } else {
+      want = { x: g.look.x, y: g.look.y, z: g.look.z };
+      aim = g.zoomT;
     }
-    if (!want) {
-      want = centreOf(b);
-    }
+
     cam.fx = want.x; cam.fy = want.y; cam.fz = want.z;
-    cam.wantDist = close || g.baseDist;
+    if (g.manual) { g.look = { x: want.x, y: want.y, z: want.z }; }
+    // coming in is a cut to the action and should be quick; going back out is
+    // the game handing control back, and should not yank
+    if (g.zoomAuto) g.zoomT = lerp(g.zoomT, aim, clamp(dt * (aim < g.zoomT ? 7 : 2.4), 0, 1));
+    const t = g.zoomT;
+    // pulled back to see the board, the board is centred; up close, the unit
+    // sits low and the ground it is about to cross fills the screen
+    view.frameBias = lerp(0.70, 0.5, t);
+    cam.wantDist = lerp(CLOSE, g.fitDist, t);
     cam.shake = Math.max(cam.shake, b.shake);
     R.camUpdate(cam, dt);
   }
 
   /* ------------------------------------------------------------------ loop */
 
-  let last = 0, acc = 0;
+  let last = 0, acc = 0, lastW = 0, lastH = 0;
   const STEP = 1 / 120;
 
   function loop(now) {
     requestAnimationFrame(loop);
     const t = now / 1000;
-    let dt = last ? Math.min(0.1, t - last) : 0.016;
+    const dt = last ? Math.min(0.1, t - last) : 0.016;
     last = t;
     g.t += dt;
+
+    const r = canvas.getBoundingClientRect();
+    if (Math.abs(r.width - lastW) > 0.5 || Math.abs(r.height - lastH) > 0.5) {
+      lastW = r.width; lastH = r.height;
+      measure();
+    }
 
     if (g.running) {
       acc += dt;
@@ -3210,20 +3404,13 @@ K.ui = (function () {
       g.simMs = g.simMs ? g.simMs * 0.92 + (performance.now() - s0) * 0.08 : (performance.now() - s0);
       if (acc > 0.3) acc = 0;
       driveCamera(dt);
-      // keep the selection card honest without the player having to re-tap
       if (g.battle.sel && !g.cardUnit) g.cardUnit = g.battle.sel;
       if (g.pair && (g.pair.def.dead || g.pair.att.dead || g.battle.busy)) { g.pair = null; g.pathPreview = null; }
-      // the moment a field is settled, the run banks it
-      if (g.battle.over && !g.summary) {
-        g.summary = K.camp.afterBattle(g.run, g.battle, g.battle.over === 'win');
-      }
+      if (g.battle.over && !g.summary) g.summary = K.camp.afterBattle(g.run, g.battle, g.battle.over === 'win');
     }
 
-    if (view.w !== canvas.getBoundingClientRect().width) R.resize(view);
     const t0 = performance.now();
     R.frame(view, g, dt);
-    // a running estimate of how much of the frame this costs, so the cost of
-    // a change is a number rather than an opinion
     g.drawMs = g.drawMs ? g.drawMs * 0.92 + (performance.now() - t0) * 0.08 : (performance.now() - t0);
     K.ui.sync(g);
   }
@@ -3231,20 +3418,24 @@ K.ui = (function () {
   /* ------------------------------------------------------------------ boot */
 
   K.ui.init({
-    start: () => { g.running = true; },
+    start: () => { g.running = true; measure(); },
     again: () => { newBattle(); g.running = true; },
     wipe: () => { g.run = K.camp.fresh(); K.camp.save(g.run); newBattle(); g.running = true; },
     attack: () => commit(),
     wait: () => { const b = g.battle; if (b.sel) B.finishUnit(b, b.sel); g.pair = null; g.cardUnit = null; },
-    cancel: () => { B.clearSel(g.battle); g.pair = null; g.cardUnit = null; g.pathPreview = null; },
-    end: () => { B.endPhase(g.battle); g.cardUnit = null; g.pair = null; }
+    cancel: () => {
+      if (g.pair) { g.pair = null; g.pathPreview = null; return; }
+      B.clearSel(g.battle); g.cardUnit = null; g.pathPreview = null;
+    },
+    end: () => { B.endPhase(g.battle); g.cardUnit = null; g.pair = null; g.manual = false; },
+    fit: () => { g.zoomT = g.zoomT > 0.8 ? 0.4 : 1; g.zoomAuto = false; g.manual = false; }
   });
 
   g.run = K.camp.load();
   newBattle();
-  R.resize(view);
-  window.addEventListener('resize', () => R.resize(view));
-  window.addEventListener('orientationchange', () => setTimeout(() => R.resize(view), 220));
+  measure();
+  window.addEventListener('resize', measure);
+  window.addEventListener('orientationchange', () => setTimeout(measure, 220));
   requestAnimationFrame(loop);
 })();
 
