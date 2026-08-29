@@ -1,0 +1,3243 @@
+<title>IRONWAKE</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: #e6ecf8;
+  --dim: #98a1b6;
+  --mine: #7fd8ff;
+  --theirs: #ff7d6b;
+  --good: #8affc0;
+  --warn: #ffd166;
+  --panel: rgba(12, 15, 24, 0.86);
+  --edge: rgba(150, 170, 210, 0.20);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden; background: #070910; color: var(--ink);
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  overscroll-behavior: none; touch-action: none;
+  -webkit-user-select: none; user-select: none;
+}
+#app { position: fixed; inset: 0; }
+#view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* ------------------------------------------------------------------ chrome */
+#top {
+  position: absolute; top: calc(8px + var(--safe-t)); left: 8px; right: 8px;
+  display: flex; gap: 6px; align-items: center; pointer-events: none;
+}
+.pill {
+  background: var(--panel); border: 1px solid var(--edge); border-radius: 999px;
+  padding: 5px 11px; font-size: 11px; letter-spacing: 0.06em;
+  display: flex; gap: 7px; align-items: baseline; backdrop-filter: blur(7px);
+}
+.pill b { font-weight: 700; }
+.pill span { color: var(--dim); font-size: 10px; }
+#phase.enemy b { color: var(--theirs); }
+#phase b { color: var(--mine); }
+#tally .mine { color: var(--mine); font-size: 12px; font-weight: 700; }
+#tally .theirs { color: var(--theirs); font-size: 12px; font-weight: 700; }
+#tally i { color: var(--dim); font-style: normal; font-size: 9px; }
+.spacer { flex: 1; }
+.icon {
+  pointer-events: auto; background: var(--panel); border: 1px solid var(--edge);
+  color: var(--ink); border-radius: 999px; width: 30px; height: 30px; font-size: 13px;
+  font-family: inherit; cursor: pointer; padding: 0;
+}
+.icon.off { color: #5d6577; }
+
+#banner {
+  position: absolute; top: 16%; left: 0; right: 0; text-align: center;
+  pointer-events: none; opacity: 0; transition: opacity .25s;
+}
+#banner.show { opacity: 1; }
+#banner b {
+  display: block; font-size: 21px; letter-spacing: 0.2em; font-weight: 700;
+  text-shadow: 0 2px 22px rgba(0,0,0,0.8);
+}
+#banner span { display: block; font-size: 11px; color: var(--dim); margin-top: 5px; letter-spacing: 0.08em; }
+#banner.enemy b { color: var(--theirs); }
+#banner.mine b { color: var(--mine); }
+
+/* ------------------------------------------------------------------ panels */
+.panel {
+  position: absolute; background: var(--panel); border: 1px solid var(--edge);
+  border-radius: 12px; backdrop-filter: blur(9px);
+}
+.hidden { display: none !important; }
+
+#card { left: 8px; bottom: calc(58px + var(--safe-b)); width: min(268px, 62vw); padding: 9px 11px; }
+.cardhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.cardhead b { font-size: 15px; letter-spacing: 0.08em; }
+.cardhead span { display: block; font-size: 10px; color: var(--dim); margin-top: 2px; }
+.hpwrap { min-width: 92px; }
+.hpnum { text-align: right; font-size: 13px; }
+.hpnum i { color: var(--dim); font-style: normal; font-size: 10px; }
+.hpbar { height: 4px; background: rgba(255,255,255,0.10); border-radius: 3px; overflow: hidden; margin-top: 3px; }
+#cHpFill { height: 100%; width: 100%; background: var(--good); transition: width .2s; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px 6px; margin: 8px 0 6px; }
+.stats div { font-size: 10px; color: var(--dim); display: flex; justify-content: space-between; }
+.stats div b { color: var(--ink); font-weight: 600; }
+.cardfoot { display: flex; justify-content: space-between; gap: 10px; font-size: 10px; color: var(--dim); border-top: 1px solid var(--edge); padding-top: 6px; }
+.cardfoot span { white-space: nowrap; }
+.cardfoot span:first-child { color: var(--warn); }
+
+#forecast {
+  left: 50%; transform: translateX(-50%); bottom: calc(58px + var(--safe-b));
+  display: flex; align-items: stretch; padding: 8px 6px; gap: 4px; min-width: 260px;
+}
+.fcside { flex: 1; padding: 0 8px; }
+.fcside .n { font-size: 12px; letter-spacing: 0.06em; }
+.fcside .hp { font-size: 10px; color: var(--dim); margin-bottom: 5px; }
+.fcside .row { display: flex; justify-content: space-between; font-size: 11px; }
+.fcside .row span { color: var(--dim); font-size: 10px; }
+.fcside .row b { font-weight: 700; }
+.fcside.mine .n { color: var(--mine); }
+.fcside.theirs .n { color: var(--theirs); }
+.fcside.none { opacity: .45; }
+.fcvs { align-self: center; color: var(--dim); font-size: 11px; padding: 0 2px; text-align: center; }
+.fcvs .tri { display: block; font-size: 9px; margin-top: 3px; }
+.up { color: var(--good); } .down { color: var(--theirs); }
+.dmg { color: var(--warn); }
+.kill { color: var(--theirs); font-weight: 700; }
+
+#actions {
+  position: absolute; right: 8px; bottom: calc(10px + var(--safe-b));
+  display: flex; gap: 6px; align-items: center;
+}
+.act {
+  font-family: inherit; font-size: 11px; letter-spacing: 0.1em; font-weight: 600;
+  padding: 10px 14px; border-radius: 10px; cursor: pointer;
+  background: rgba(127,216,255,0.13); color: var(--mine); border: 1px solid rgba(127,216,255,0.42);
+}
+.act.ghost { background: var(--panel); color: var(--dim); border-color: var(--edge); }
+.act.strike { background: rgba(255,125,107,0.16); color: #ffb0a2; border-color: rgba(255,125,107,0.55); }
+.act:active { transform: translateY(1px); }
+
+#hint {
+  position: absolute; left: 0; right: 0; top: calc(46px + var(--safe-t));
+  text-align: center; font-size: 10px; color: rgba(152,161,182,0.8);
+  pointer-events: none; letter-spacing: 0.06em;
+}
+
+#log {
+  position: absolute; right: 8px; top: calc(46px + var(--safe-t)); width: min(300px, 76vw);
+  max-height: 46vh; background: var(--panel); border: 1px solid var(--edge);
+  border-radius: 12px; backdrop-filter: blur(9px); display: flex; flex-direction: column;
+}
+.loghead {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 10px; letter-spacing: 0.14em; color: var(--dim);
+  padding: 8px 8px 6px 11px; border-bottom: 1px solid var(--edge);
+}
+#logBody { overflow-y: auto; padding: 7px 11px 4px; }
+#logFoot { border-top: 1px solid var(--edge); padding: 7px 11px 9px; display: flex; justify-content: space-between; align-items: center; }
+#logFoot span { font-size: 10px; color: var(--dim); }
+#btnWipe { font-family: inherit; font-size: 9px; letter-spacing: 0.12em; color: var(--theirs);
+  background: none; border: 1px solid rgba(255,125,107,0.35); border-radius: 6px; padding: 4px 8px; cursor: pointer; }
+#logBody div { font-size: 10.5px; line-height: 1.5; color: var(--dim); }
+#logBody div.hit { color: var(--ink); }
+#logBody div.crit { color: var(--warn); }
+#logBody div.miss { color: #7d8598; }
+#logBody div.level { color: var(--mine); }
+#logBody div.down { color: var(--theirs); }
+
+#over, #intro {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(5, 7, 12, 0.82); backdrop-filter: blur(4px); z-index: 5;
+}
+.overbox, .introbox {
+  text-align: center; padding: 26px 24px; max-width: 340px;
+  border: 1px solid var(--edge); border-radius: 16px; background: rgba(12,15,24,0.9);
+}
+.overbox b { display: block; font-size: 22px; letter-spacing: 0.2em; }
+.overbox span { display: block; font-size: 11px; color: var(--dim); margin: 8px 0 12px; }
+#overList { text-align: left; margin: 0 0 16px; }
+#overList div { font-size: 11px; color: var(--dim); line-height: 1.7; display: flex; justify-content: space-between; gap: 12px; }
+#overList div b { color: var(--ink); font-weight: 600; font-size: 11px; letter-spacing: 0.06em; }
+#overList div.gone { color: var(--theirs); }
+#overList div.up b { color: var(--good); }
+.introbox h1 { margin: 0; font-size: 30px; letter-spacing: 0.34em; font-weight: 700; }
+.introbox .sub { color: var(--dim); font-size: 11px; margin: 8px 0 16px; letter-spacing: 0.04em; }
+.introbox ul { text-align: left; padding-left: 16px; margin: 0 0 20px; }
+.introbox li { font-size: 11px; color: var(--dim); line-height: 1.7; }
+.introbox li b { color: var(--ink); }
+#btnStart, #btnAgain {
+  font-family: inherit; font-size: 12px; letter-spacing: 0.16em; font-weight: 600;
+  padding: 12px 22px; border-radius: 10px; cursor: pointer;
+  background: rgba(127,216,255,0.14); color: var(--mine); border: 1px solid rgba(127,216,255,0.5);
+}
+@media (max-height: 560px) {
+  .introbox li { line-height: 1.5; }
+  #card { width: min(240px, 56vw); }
+}
+
+</style>
+<div id="app">
+  <canvas id="view"></canvas>
+
+  <div id="top">
+    <div class="pill" id="phase"><b>PLAYER</b><span id="turn">turn 1</span></div>
+    <div class="pill" id="tally"><span class="mine" id="tallyMine">4</span><i>vs</i><span class="theirs" id="tallyTheirs">5</span></div>
+    <div class="spacer"></div>
+    <button class="icon" id="btnLog" title="Field log">≡</button>
+    <button class="icon" id="btnSound" title="Sound">♪</button>
+  </div>
+
+  <div id="banner"><b></b><span></span></div>
+
+  <div id="card" class="panel hidden">
+    <div class="cardhead">
+      <div>
+        <b id="cName">VESS</b>
+        <span id="cClass">Blade · lv 3</span>
+      </div>
+      <div class="hpwrap">
+        <div class="hpnum"><b id="cHp">20</b><i>/<span id="cMax">20</span></i></div>
+        <div class="hpbar"><div id="cHpFill"></div></div>
+      </div>
+    </div>
+    <div class="stats" id="cStats"></div>
+    <div class="cardfoot"><span id="cWeapon">Iron Sword</span><span id="cTerrain">stone</span></div>
+  </div>
+
+  <div id="forecast" class="panel hidden">
+    <div class="fcside" id="fcA"></div>
+    <div class="fcvs" id="fcVs">→</div>
+    <div class="fcside" id="fcB"></div>
+  </div>
+
+  <div id="actions">
+    <button id="btnAttack" class="act strike hidden">STRIKE</button>
+    <button id="btnWait" class="act hidden">WAIT</button>
+    <button id="btnCancel" class="act ghost hidden">CANCEL</button>
+    <button id="btnEnd" class="act ghost">END TURN</button>
+  </div>
+
+  <div id="hint">tap a unit · drag to look</div>
+
+  <div id="log" class="hidden">
+    <div class="loghead">FIELD LOG<button class="icon" id="btnLogClose">✕</button></div>
+    <div id="logBody"></div>
+    <div id="logFoot"><span id="runStat">run 1 · best wave 0</span><button id="btnWipe">ABANDON RUN</button></div>
+  </div>
+
+  <div id="over" class="hidden">
+    <div class="overbox">
+      <b id="overTitle">FIELD HELD</b>
+      <span id="overSub"></span>
+      <div id="overList"></div>
+      <button id="btnAgain">PRESS ON</button>
+    </div>
+  </div>
+
+  <div id="intro">
+    <div class="introbox">
+      <h1>IRONWAKE</h1>
+      <p class="sub">a tactics arena where every blow is simulated</p>
+      <ul>
+        <li><b>Tap</b> one of yours, then a blue tile to move — or an enemy to close and strike.</li>
+        <li>Height, terrain and the weapon triangle all count. So does the drop.</li>
+        <li>Survivors carry their levels into the next wave. The fallen do not come back.</li>
+        <li>Nothing here is animation: a killing blow throws a body, and a bridge has no rail.</li>
+      </ul>
+      <button id="btnStart">TAKE THE FIELD</button>
+    </div>
+  </div>
+</div>
+<script>
+/* ---- 00-util.js ---- */
+/* KINESIS — shared math, rng, formatting.
+   Everything hangs off the single global K. */
+window.K = window.K || {};
+
+K.util = (function () {
+  const TAU = Math.PI * 2;
+
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function smooth(a, b, t) { return a + (b - a) * clamp(t, 0, 1); }
+  function mix(a, b, t) { return a + (b - a) * t; }
+  function sign(v) { return v < 0 ? -1 : 1; }
+
+  /* shortest signed difference between two angles */
+  function angDiff(target, current) {
+    let d = (target - current) % TAU;
+    if (d > Math.PI) d -= TAU;
+    if (d < -Math.PI) d += TAU;
+    return d;
+  }
+
+  /* frame-rate independent approach: pull v toward t, `rate` = fraction per second */
+  function approach(v, t, rate, dt) {
+    return t + (v - t) * Math.exp(-rate * dt);
+  }
+
+  /* mulberry32 — small deterministic prng so a seed reproduces a route */
+  function rng(seed) {
+    let a = seed >>> 0;
+    const f = function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    f.range = (lo, hi) => lo + f() * (hi - lo);
+    f.int = (lo, hi) => Math.floor(lo + f() * (hi - lo + 1));
+    f.pick = (arr) => arr[Math.floor(f() * arr.length)];
+    f.chance = (p) => f() < p;
+    return f;
+  }
+
+  const UNITS = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc'];
+  /* idle games live and die by their number formatting */
+  function num(v) {
+    if (!isFinite(v)) return '∞';
+    const neg = v < 0; v = Math.abs(v);
+    if (v < 1000) {
+      if (v >= 100) return (neg ? '-' : '') + Math.floor(v);
+      if (v >= 10) return (neg ? '-' : '') + (Math.round(v * 10) / 10);
+      return (neg ? '-' : '') + (Math.round(v * 100) / 100);
+    }
+    let tier = Math.floor(Math.log10(v) / 3);
+    tier = Math.min(tier, UNITS.length - 1);
+    const scaled = v / Math.pow(1000, tier);
+    const s = scaled >= 100 ? scaled.toFixed(0) : scaled >= 10 ? scaled.toFixed(1) : scaled.toFixed(2);
+    return (neg ? '-' : '') + s + UNITS[tier];
+  }
+
+  function dist(v) {
+    if (v >= 1000) return (v / 1000).toFixed(v >= 10000 ? 1 : 2) + ' km';
+    return v.toFixed(v < 100 ? 1 : 0) + ' m';
+  }
+
+  function time(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    if (h) return h + 'h ' + m + 'm';
+    if (m) return m + 'm ' + s + 's';
+    return s + 's';
+  }
+
+  return { TAU, clamp, lerp, mix, smooth, sign, angDiff, approach, rng, num, dist, time };
+})();
+
+/* ---- 01-physics.js ---- */
+/* KINESIS — verlet body solver, three dimensions.
+   Units are SI: metres, seconds, kilograms.
+     x = lateral (left/right across the deck)
+     y = up
+     z = forward, the direction of the run and of the camera's gaze.
+   A body is point masses held by distance bones and hinge joints. Muscles
+   are not springs — they are drives: a muscle asks for a velocity toward a
+   target and may change the point's real velocity by at most `accel` per
+   second. Weak muscles lose to gravity, which is why a hurt runner folds. */
+K.phys = (function () {
+  const { clamp, angDiff } = K.util;
+
+  const GRAVITY = -11.2;      // a touch hot; reads better on a small screen
+  const AIR_DAMP = 0.020;
+
+  function Part(name, x, y, z, mass, radius) {
+    return {
+      name, x, y, z, px: x, py: y, pz: z,
+      ax: 0, ay: 0, az: 0,
+      vx0: 0, vy0: 0, vz0: 0, fx: 0, fy: 0, fz: 0,
+      m: mass, im: 1 / mass, r: radius,
+      grounded: false, ground: null, friction: 1, touched: false, touchedLast: false,
+      impact: 0, pinned: null
+    };
+  }
+
+  function Body() { return { parts: {}, list: [], bones: [], hinges: [], contacts: 0 }; }
+
+  function add(body, name, x, y, z, mass, radius) {
+    const p = Part(name, x, y, z, mass, radius);
+    body.parts[name] = p; body.list.push(p);
+    return p;
+  }
+
+  function bone(body, a, b, k) {
+    const A = body.parts[a], B = body.parts[b];
+    const len = Math.hypot(A.x - B.x, A.y - B.y, A.z - B.z);
+    body.bones.push({ a: A, b: B, len, k: k === undefined ? 1 : k });
+  }
+
+  /* A hinge: the middle point is pulled into the plane whose normal is the
+     joint axis, and the bend angle is clamped. Knees and elbows therefore
+     fold one way, on one plane, however hard the body lands. */
+  function hinge(body, a, b, c, axis, min, max) {
+    body.hinges.push({ a: body.parts[a], b: body.parts[b], c: body.parts[c], axis, min, max });
+  }
+
+  function integrate(body, dt, gscale) {
+    const g = GRAVITY * (gscale === undefined ? 1 : gscale);
+    for (const p of body.list) {
+      // NB: contact flags are cleared in collide(), not here — the behaviour
+      // layer runs between the two and has to be able to see the last plant
+      p.touchedLast = p.touched; p.touched = false;
+      if (p.pinned) {
+        p.px = p.x = p.pinned.x; p.py = p.y = p.pinned.y; p.pz = p.z = p.pinned.z;
+        p.ax = p.ay = p.az = 0; p.vx0 = p.vy0 = p.vz0 = 0;
+        continue;
+      }
+      p.vx0 = (p.x - p.px) / dt; p.vy0 = (p.y - p.py) / dt; p.vz0 = (p.z - p.pz) / dt;
+      // Constraint solving turns position corrections into velocity, and at
+      // 180 Hz a millimetre reads as metres per second. Impacts are judged on
+      // a short moving average instead, which noise cannot fake but a real
+      // arrival sustains.
+      p.fx += (p.vx0 - p.fx) * 0.22; p.fy += (p.vy0 - p.fy) * 0.22; p.fz += (p.vz0 - p.fz) * 0.22;
+      let vx = p.x - p.px, vy = p.y - p.py, vz = p.z - p.pz;
+      const sp = Math.hypot(vx, vy, vz) / dt;
+      const drag = Math.max(0.5, 1 - AIR_DAMP * sp * dt);
+      vx *= drag; vy *= drag; vz *= drag;
+      const nx = p.x + vx + p.ax * dt * dt;
+      const ny = p.y + vy + (p.ay + g) * dt * dt;
+      const nz = p.z + vz + p.az * dt * dt;
+      p.px = p.x; p.py = p.y; p.pz = p.z;
+      p.x = nx; p.y = ny; p.z = nz;
+      p.ax = p.ay = p.az = 0;
+    }
+  }
+
+  function solveBones(body) {
+    for (const c of body.bones) {
+      const a = c.a, b = c.b;
+      let dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+      let d = Math.hypot(dx, dy, dz);
+      if (d < 1e-6) { d = 1e-6; dx = 1e-6; }
+      const diff = (d - c.len) / d * c.k;
+      const wa = a.pinned ? 0 : a.im, wb = b.pinned ? 0 : b.im;
+      const w = wa + wb; if (w === 0) continue;
+      const fa = diff * (wa / w), fb = diff * (wb / w);
+      a.x += dx * fa; a.y += dy * fa; a.z += dz * fa;
+      b.x -= dx * fb; b.y -= dy * fb; b.z -= dz * fb;
+    }
+  }
+
+  /* rotate p around pivot, about unit axis k, by angle t (Rodrigues).
+     `quiet` rotates the previous position too, so the correction moves the
+     point without inventing velocity. Joint limits must be quiet — they are
+     structure, not muscle — or the skeleton pumps itself into orbit. */
+  function spin(p, piv, kx, ky, kz, t, quiet) {
+    const c = Math.cos(t), s = Math.sin(t);
+    const dot0 = kx * (p.x - piv.x) + ky * (p.y - piv.y) + kz * (p.z - piv.z);
+    const dx = p.x - piv.x, dy = p.y - piv.y, dz = p.z - piv.z;
+    const cx = ky * dz - kz * dy, cy = kz * dx - kx * dz, cz = kx * dy - ky * dx;
+    p.x = piv.x + dx * c + cx * s + kx * dot0 * (1 - c);
+    p.y = piv.y + dy * c + cy * s + ky * dot0 * (1 - c);
+    p.z = piv.z + dz * c + cz * s + kz * dot0 * (1 - c);
+    if (quiet) {
+      const qx = p.px - piv.x, qy = p.py - piv.y, qz = p.pz - piv.z;
+      const qdot = kx * qx + ky * qy + kz * qz;
+      const ax = ky * qz - kz * qy, ay = kz * qx - kx * qz, az = kx * qy - ky * qx;
+      p.px = piv.x + qx * c + ax * s + kx * qdot * (1 - c);
+      p.py = piv.y + qy * c + ay * s + ky * qdot * (1 - c);
+      p.pz = piv.z + qz * c + az * s + kz * qdot * (1 - c);
+    }
+  }
+
+  function bendAngle(a, b, c) {
+    const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z;
+    const vx = c.x - b.x, vy = c.y - b.y, vz = c.z - b.z;
+    const cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx;
+    return Math.atan2(Math.hypot(cx, cy, cz), ux * vx + uy * vy + uz * vz);
+  }
+
+  /* push the a-b-c bend toward `target` radians, strength 0..1 */
+  function torque(a, b, c, target, strength, quiet) {
+    const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z;
+    const vx = c.x - b.x, vy = c.y - b.y, vz = c.z - b.z;
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const nl = Math.hypot(nx, ny, nz);
+    if (nl < 1e-7) return;
+    nx /= nl; ny /= nl; nz /= nl;
+    const cur = Math.atan2(nl, ux * vx + uy * vy + uz * vz);
+    const err = (target - cur) * clamp(strength, 0, 1);
+    if (Math.abs(err) < 1e-5) return;
+    const wa = a.pinned ? 0 : a.im, wc = c.pinned ? 0 : c.im;
+    const w = wa + wc; if (w === 0) return;
+    spin(a, b, nx, ny, nz, err * (wa / w), quiet);
+    spin(c, b, nx, ny, nz, -err * (wc / w), quiet);
+  }
+
+  /* Swing the segment a->b toward a target direction (unit vector).
+     The pivot is the segment's centre of mass, so the rotation is a torque
+     rather than a shove. It is still allowed to do work — it is a muscle —
+     and free flight is kept honest by ballistic(), below. */
+  function aim(a, b, tx, ty, tz, strength) {
+    let ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z;
+    const ul = Math.hypot(ux, uy, uz); if (ul < 1e-7) return;
+    ux /= ul; uy /= ul; uz /= ul;
+    let nx = uy * tz - uz * ty, ny = uz * tx - ux * tz, nz = ux * ty - uy * tx;
+    const nl = Math.hypot(nx, ny, nz);
+    const dot = clamp(ux * tx + uy * ty + uz * tz, -1, 1);
+    const ang = Math.atan2(nl, dot) * clamp(strength, 0, 1);
+    if (nl < 1e-7 || Math.abs(ang) < 1e-5) return;
+    nx /= nl; ny /= nl; nz /= nl;
+    const wa = a.pinned ? 0 : a.im, wb = b.pinned ? 0 : b.im;
+    const w = wa + wb; if (w === 0) return;
+    const piv = {
+      x: (a.x * wb + b.x * wa) / w, y: (a.y * wb + b.y * wa) / w, z: (a.z * wb + b.z * wa) / w
+    };
+    spin(a, piv, nx, ny, nz, ang);
+    spin(b, piv, nx, ny, nz, ang);
+  }
+
+  function solveHinges(body, frame) {
+    for (const h of body.hinges) {
+      const a = h.a, b = h.b, c = h.c;
+      // 1. hold the joint on its plane
+      const ax = h.axis === 'lat' ? frame.rx : 0;
+      const ay = h.axis === 'lat' ? frame.ry : 1;
+      const az = h.axis === 'lat' ? frame.rz : 0;
+      const mx = (a.x + c.x) / 2, my = (a.y + c.y) / 2, mz = (a.z + c.z) / 2;
+      const dx = b.x - mx, dy = b.y - my, dz = b.z - mz;
+      const comp = dx * ax + dy * ay + dz * az;
+      const k = 0.35;
+      b.x -= ax * comp * k; b.y -= ay * comp * k; b.z -= az * comp * k;
+      b.px -= ax * comp * k; b.py -= ay * comp * k; b.pz -= az * comp * k;
+      // 2. clamp the fold, quietly
+      const cur = bendAngle(a, b, c);
+      if (cur < h.min) torque(a, b, c, h.min, 0.6, true);
+      else if (cur > h.max) torque(a, b, c, h.max, 0.6, true);
+    }
+  }
+
+  function drive(p, tx, ty, tz, maxSpeed, dt, accel) {
+    if (p.pinned) return 0;
+    const dx = tx - p.x, dy = ty - p.y, dz = tz - p.z;
+    const d = Math.hypot(dx, dy, dz);
+    if (d < 1e-5) return 0;
+    const want = Math.min(maxSpeed, d / 0.05);
+    const k = want / d;
+    let ddx = dx * k - (p.x - p.px) / dt;
+    let ddy = dy * k - (p.y - p.py) / dt;
+    let ddz = dz * k - (p.z - p.pz) / dt;
+    const dd = Math.hypot(ddx, ddy, ddz);
+    const cap = (accel === undefined ? maxSpeed * 16 : accel) * dt;
+    if (dd > cap) { const s = cap / dd; ddx *= s; ddy *= s; ddz *= s; }
+    p.px -= ddx * dt; p.py -= ddy * dt; p.pz -= ddz * dt;
+    return d;
+  }
+
+  function addVel(p, vx, vy, vz, dt) { p.px -= vx * dt; p.py -= vy * dt; p.pz -= vz * dt; }
+  function vel(p, dt) { return { x: (p.x - p.px) / dt, y: (p.y - p.py) / dt, z: (p.z - p.pz) / dt }; }
+
+  function collide(body, level, dt) {
+    body.contacts = 0;
+    for (const p of body.list) {
+      p.grounded = false; p.ground = null;
+      if (p.pinned) continue;
+      const boxes = level.solidsNear(p.z, p.r + 0.6);
+      for (const b of boxes) {
+        // A foot resting a few millimetres proud of a deck is standing on it.
+        // Without this skin, contact flickers on and off at 180 Hz and the
+        // support leg spends half its life believing it is in mid-air.
+        if (p.x > b.x0 - p.r && p.x < b.x1 + p.r && p.z > b.z0 - p.r && p.z < b.z1 + p.r) {
+          const gap = p.y - (b.y1 + p.r);
+          if (gap >= 0 && gap < 0.035) {
+            p.grounded = true; p.ground = b; p.touched = true; body.contacts++;
+            continue;
+          }
+        }
+        if (p.x < b.x0 - p.r || p.x > b.x1 + p.r) continue;
+        if (p.y < b.y0 - p.r || p.y > b.y1 + p.r) continue;
+        if (p.z < b.z0 - p.r || p.z > b.z1 + p.r) continue;
+        const dTop = (b.y1 + p.r) - p.y, dBot = p.y - (b.y0 - p.r);
+        const dL = p.x - (b.x0 - p.r), dR = (b.x1 + p.r) - p.x;
+        const dB = p.z - (b.z0 - p.r), dF = (b.z1 + p.r) - p.z;
+        const m = Math.min(dTop, dBot, dL, dR, dB, dF);
+        let nx = 0, ny = 0, nz = 0;
+        if (m === dTop) ny = 1; else if (m === dBot) ny = -1;
+        else if (m === dL) nx = -1; else if (m === dR) nx = 1;
+        else if (m === dB) nz = -1; else nz = 1;
+
+        let vx = (p.x - p.px) / dt, vy = (p.y - p.py) / dt, vz = (p.z - p.pz) / dt;
+        // an impact is an arrival, not a resting load: a part already in
+        // contact last step is leaning, not hitting
+        const vn0 = p.fx * nx + p.fy * ny + p.fz * nz;
+        if (!p.touchedLast && vn0 < -1 && -vn0 > p.impact) p.impact = -vn0;
+        p.touched = true;
+
+        // Push out of the surface WITHOUT inventing velocity: in Verlet a
+        // bare position correction is read as motion, and at 180 Hz a five
+        // centimetre depenetration reads as nine metres per second — which is
+        // how a runner who clipped a crate ended up eleven metres in the air.
+        // The velocity response is applied separately, just below.
+        p.x += nx * m; p.y += ny * m; p.z += nz * m;
+        p.px += nx * m; p.py += ny * m; p.pz += nz * m;
+        const vn = vx * nx + vy * ny + vz * nz;
+        if (vn < 0) { vx -= nx * vn; vy -= ny * vn; vz -= nz * vn; }
+        // coulomb-ish friction: a fixed tangential deceleration, so glass is
+        // genuinely glass and a dry deck genuinely holds a plant
+        // friction follows the normal: a foot on a deck grips, a shoulder
+        // scraping a vertical face does not hang there like velcro
+        const grip = ny > 0.3 ? 1 : 0.08;
+        const mu = (b.friction === undefined ? 1 : b.friction) * p.friction * grip;
+        const vt = Math.hypot(vx, vy, vz);
+        if (vt > 1e-6) {
+          const fr = mu * 55 * dt;
+          const s = vt <= fr ? 0 : (vt - fr) / vt;
+          vx *= s; vy *= s; vz *= s;
+        }
+        p.px = p.x - vx * dt; p.py = p.y - vy * dt; p.pz = p.z - vz * dt;
+        // touching a wall is still touching something; only an upward normal
+        // counts as standing on it
+        body.contacts++;
+        if (ny > 0) { p.grounded = true; p.ground = b; }
+      }
+      // last-resort sanity clamp, so a bad frame cannot fling the body away
+      const sp2 = Math.hypot(p.x - p.px, p.y - p.py, p.z - p.pz) / dt;
+      if (sp2 > 34) {
+        const k = 34 / sp2;
+        p.px = p.x - (p.x - p.px) * k; p.py = p.y - (p.y - p.py) * k; p.pz = p.z - (p.z - p.pz) * k;
+      }
+    }
+  }
+
+  /* With nothing in contact there are no external forces but gravity, so the
+     centre of mass MUST follow a parabola no matter what the limbs are doing.
+     Muscle work inside a free body can move its parts and its orientation; it
+     cannot move its centre of mass. Enforcing that literally is what stops a
+     ragdoll swimming through the air, which is otherwise very hard to prevent
+     when every muscle is a position correction. */
+  function ballistic(body, dt, v0, extraX, extraZ) {
+    let vx = 0, vy = 0, vz = 0, m = 0;
+    for (const p of body.list) {
+      vx += (p.x - p.px) / dt * p.m; vy += (p.y - p.py) / dt * p.m; vz += (p.z - p.pz) / dt * p.m;
+      m += p.m;
+    }
+    vx /= m; vy /= m; vz /= m;
+    const wantX = v0.x + (extraX || 0) * dt;
+    const wantY = v0.y + GRAVITY * dt;
+    const wantZ = v0.z + (extraZ || 0) * dt;
+    const dx = (wantX - vx) * dt, dy = (wantY - vy) * dt, dz = (wantZ - vz) * dt;
+    for (const p of body.list) { p.px -= dx; p.py -= dy; p.pz -= dz; }
+  }
+
+  function com(body) {
+    let x = 0, y = 0, z = 0, m = 0;
+    for (const p of body.list) { x += p.x * p.m; y += p.y * p.m; z += p.z * p.m; m += p.m; }
+    return { x: x / m, y: y / m, z: z / m, m };
+  }
+
+  function comVel(body, dt) {
+    let x = 0, y = 0, z = 0, m = 0;
+    for (const p of body.list) {
+      x += (p.x - p.px) / dt * p.m; y += (p.y - p.py) / dt * p.m; z += (p.z - p.pz) / dt * p.m; m += p.m;
+    }
+    return { x: x / m, y: y / m, z: z / m };
+  }
+
+  /* two-link IK. `hint` biases which way the knee or elbow breaks. */
+  function ik(rx, ry, rz, tx, ty, tz, l1, l2, hx, hy, hz) {
+    let dx = tx - rx, dy = ty - ry, dz = tz - rz;
+    let d = Math.hypot(dx, dy, dz);
+    const maxd = (l1 + l2) * 0.998, mind = Math.abs(l1 - l2) + 1e-3;
+    if (d > maxd) { const s = maxd / d; dx *= s; dy *= s; dz *= s; d = maxd; }
+    if (d < mind) { const s = mind / (d || 1e-6); dx *= s; dy *= s; dz *= s; d = mind; }
+    const ux = dx / d, uy = dy / d, uz = dz / d;
+    const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d);
+    const h = Math.sqrt(Math.max(0, l1 * l1 - a * a));
+    // hint, perpendicular to the limb line
+    const hd = hx * ux + hy * uy + hz * uz;
+    let px = hx - ux * hd, py = hy - uy * hd, pz = hz - uz * hd;
+    let pl = Math.hypot(px, py, pz);
+    if (pl < 1e-5) { px = -uy; py = ux; pz = 0; pl = Math.hypot(px, py, pz) || 1; }
+    px /= pl; py /= pl; pz /= pl;
+    return {
+      jx: rx + ux * a + px * h, jy: ry + uy * a + py * h, jz: rz + uz * a + pz * h,
+      ex: rx + dx, ey: ry + dy, ez: rz + dz
+    };
+  }
+
+  return {
+    GRAVITY, Body, add, bone, hinge, integrate, solveBones, solveHinges,
+    torque, aim, bendAngle, drive, collide, ballistic, com, comVel, ik, vel, addVel, spin
+  };
+})();
+
+/* ---- 02-ragdoll.js ---- */
+/* KINESIS — the runner's body, in three dimensions.
+   Seventeen point masses: a shoulder and hip yoke keep the limbs apart
+   laterally so the thing reads as a person from behind rather than as a
+   stick collapsing to the centre line. ~1.78 m, ~72 kg. */
+K.rag = (function () {
+  const P = K.phys, U = K.util;
+
+  const L = {
+    shin: 0.42, thigh: 0.42, foot: 0.17,
+    spine: 0.47, neck: 0.26,
+    upperArm: 0.29, foreArm: 0.27,
+    hipW: 0.12, shW: 0.19,
+    hipH: 0.97, chestH: 1.44, headH: 1.70
+  };
+  L.leg = L.shin + L.thigh;           // hip yoke to ankle, fully straight
+  /* Where a foot is asked to go when it is asked to stand on something.
+     The ankle rests 0.075 m (its radius) above a surface, so a target
+     slightly below that is what makes the foot press in and register as
+     contact at all — aim level with the deck and the runner hovers. */
+  L.plant = 0.048;
+  L.arm = L.upperArm + L.foreArm;
+
+  function build(x, y, z) {
+    const b = P.Body();
+    const A = (n, dx, dy, dz, m, r) => P.add(b, n, x + dx, y + dy, z + dz, m, r);
+
+    A('pelvis', 0, L.hipH, 0, 14, 0.13);
+    A('chest', 0, L.chestH, 0.01, 18, 0.15);
+    A('head', 0, L.headH, 0.02, 5, 0.115);
+    for (const s of [-1, 1]) {
+      const t = s < 0 ? 'L' : 'R';
+      A('hip' + t, s * L.hipW, L.hipH - 0.04, 0, 3, 0.10);
+      A('sh' + t, s * L.shW, L.chestH + 0.06, 0, 3, 0.10);
+      A('knee' + t, s * L.hipW, 0.52, 0.03, 5, 0.085);
+      A('foot' + t, s * L.hipW, 0.10, 0, 2.4, 0.075);
+      A('toe' + t, s * L.hipW, 0.045, 0.17, 0.8, 0.055);
+      A('elbow' + t, s * (L.shW + 0.02), 1.16, -0.02, 2, 0.07);
+      A('hand' + t, s * (L.shW + 0.03), 0.91, 0.05, 1.4, 0.062);
+    }
+
+    P.bone(b, 'pelvis', 'chest', 1);
+    P.bone(b, 'chest', 'head', 1);
+    P.bone(b, 'pelvis', 'head', 0.30);
+    P.bone(b, 'hipL', 'hipR', 1); P.bone(b, 'shL', 'shR', 1);
+    for (const t of ['L', 'R']) {
+      P.bone(b, 'hip' + t, 'pelvis', 1);
+      P.bone(b, 'hip' + t, 'chest', 0.65);
+      P.bone(b, 'sh' + t, 'chest', 1);
+      P.bone(b, 'sh' + t, 'pelvis', 0.65);
+      P.bone(b, 'sh' + t, 'head', 0.35);
+      P.bone(b, 'hip' + t, 'knee' + t, 1);
+      P.bone(b, 'knee' + t, 'foot' + t, 1);
+      P.bone(b, 'foot' + t, 'toe' + t, 1);
+      P.bone(b, 'sh' + t, 'elbow' + t, 1);
+      P.bone(b, 'elbow' + t, 'hand' + t, 1);
+      P.hinge(b, 'hip' + t, 'knee' + t, 'foot' + t, 'lat', 0.04, 2.40);
+      P.hinge(b, 'knee' + t, 'foot' + t, 'toe' + t, 'lat', 0.35, 1.70);
+      P.hinge(b, 'sh' + t, 'elbow' + t, 'hand' + t, 'lat', 0.04, 2.60);
+    }
+    b.L = L;
+    // the sprung mass: what a planted leg is actually holding up
+    b.trunk = ['pelvis', 'hipL', 'hipR', 'chest', 'shL', 'shR', 'head'].map(n => b.parts[n]);
+    return b;
+  }
+
+  function legs(b) {
+    return [
+      { hip: b.parts.hipL, knee: b.parts.kneeL, foot: b.parts.footL, toe: b.parts.toeL, tag: 'L', side: -1 },
+      { hip: b.parts.hipR, knee: b.parts.kneeR, foot: b.parts.footR, toe: b.parts.toeR, tag: 'R', side: 1 }
+    ];
+  }
+  function arms(b) {
+    return [
+      { sh: b.parts.shL, elbow: b.parts.elbowL, hand: b.parts.handL, tag: 'L', side: -1 },
+      { sh: b.parts.shR, elbow: b.parts.elbowR, hand: b.parts.handR, tag: 'R', side: 1 }
+    ];
+  }
+
+  /* body frame: right / up / forward, read off the shoulders and spine */
+  function frame(b) {
+    const p = b.parts;
+    let rx = p.shR.x - p.shL.x, ry = p.shR.y - p.shL.y, rz = p.shR.z - p.shL.z;
+    let rl = Math.hypot(rx, ry, rz) || 1;
+    rx /= rl; ry /= rl; rz /= rl;
+    let ux = p.chest.x - p.pelvis.x, uy = p.chest.y - p.pelvis.y, uz = p.chest.z - p.pelvis.z;
+    const ul = Math.hypot(ux, uy, uz) || 1;
+    ux /= ul; uy /= ul; uz /= ul;
+    // forward = right x up
+    const fx = ry * uz - rz * uy, fy = rz * ux - rx * uz, fz = rx * uy - ry * ux;
+    const fl = Math.hypot(fx, fy, fz) || 1;
+    return { rx, ry, rz, ux, uy, uz, fx: fx / fl, fy: fy / fl, fz: fz / fl };
+  }
+
+  function reachLeg(b, leg, tx, ty, tz, speed, dt, hint) {
+    const h = leg.hip;
+    const s = P.ik(h.x, h.y, h.z, tx, ty, tz, L.thigh, L.shin, hint.x, hint.y, hint.z);
+    P.drive(leg.knee, s.jx, s.jy, s.jz, speed * 1.1, dt, speed * 12);
+    return P.drive(leg.foot, s.ex, s.ey, s.ez, speed, dt, speed * 26);
+  }
+
+  function reachArm(b, arm, tx, ty, tz, speed, dt, hint) {
+    const s0 = arm.sh;
+    const s = P.ik(s0.x, s0.y, s0.z, tx, ty, tz, L.upperArm, L.foreArm, hint.x, hint.y, hint.z);
+    P.drive(arm.elbow, s.jx, s.jy, s.jz, speed * 1.1, dt, speed * 26);
+    return P.drive(arm.hand, s.ex, s.ey, s.ez, speed, dt, speed * 34);
+  }
+
+  /* The support leg, as a height servo over the planted foot.
+     A pure axial spring is not enough: a straight leg carries no load along
+     its own axis and the hip simply rides an arc into the deck as the body
+     vaults over it. What a real stance leg does is hold the hip at a height
+     over the foot — flexing and extending the knee to do it — and that is
+     what this regulates, with a hard ceiling on the acceleration it can
+     produce. The ceiling is what LEG DRIVE buys, and what a hurt or
+     unconscious runner loses. */
+  const HOLD = 16.6;      // m/s^2 on the sprung mass to merely not sink
+  function support(b, leg, targetH, maxAcc, dt, share) {
+    const hip = leg.hip, f = leg.foot;
+    const err = (f.y + targetH) - hip.y;
+    const rate = ((hip.y - hip.py) - (f.y - f.py)) / dt;
+    // feed-forward the body's own weight, then correct: a pure proportional
+    // servo sags by exactly however much weight it forgot to carry
+    const t = K.tune || { supportGain: 90, supportDamp: 10 };
+    let a = HOLD * (share === undefined ? 1 : share) + err * t.supportGain - rate * t.supportDamp;
+    a = U.clamp(a, 0, maxAcc);
+    for (const t of b.trunk) P.addVel(t, 0, a * dt, 0, dt);
+    P.addVel(f, 0, -a * dt * 0.5, 0, dt);
+    P.addVel(leg.toe, 0, -a * dt * 0.2, 0, dt);
+    return a;
+  }
+
+  /* Axial push along the leg: the toe-off that turns support into travel. */
+  function legSpring(b, leg, targetLen, stiff, maxAcc, dt) {
+    const hip = leg.hip, f = leg.foot;
+    let dx = hip.x - f.x, dy = hip.y - f.y, dz = hip.z - f.z;
+    const d = Math.hypot(dx, dy, dz) || 1e-6;
+    const ux = dx / d, uy = dy / d, uz = dz / d;
+    const rate = (((hip.x - hip.px) - (f.x - f.px)) * ux
+                + ((hip.y - hip.py) - (f.y - f.py)) * uy
+                + ((hip.z - hip.pz) - (f.z - f.pz)) * uz) / dt;
+    // A leg can push on a roof. It cannot pull on one: clamped at zero, so
+    // the body settles where the spring balances its weight and no further.
+    let a = (targetLen - d) * stiff - rate * 16;
+    a = U.clamp(a, 0, maxAcc);
+    // the push goes into the whole sprung mass, not just the hip: a leg
+    // lifting only its own joint would never get a body off the deck
+    for (const t of b.trunk) P.addVel(t, ux * a * dt, uy * a * dt, uz * a * dt, dt);
+    P.addVel(f, -ux * a * dt * 0.55, -uy * a * dt * 0.55, -uz * a * dt * 0.55, dt);
+    P.addVel(leg.toe, -ux * a * dt * 0.2, -uy * a * dt * 0.2, -uz * a * dt * 0.2, dt);
+    return targetLen - d;
+  }
+
+  function poseLeg(b, leg, fx, fy, fz, speed, dt, hint) {
+    const h = leg.hip;
+    const s = P.ik(h.x, h.y, h.z, fx, fy, fz, L.thigh, L.shin, hint.x, hint.y, hint.z);
+    P.drive(leg.knee, s.jx, s.jy, s.jz, speed, dt, speed * 22);
+  }
+
+  function uprightness(b) {
+    const p = b.parts.pelvis, c = b.parts.chest;
+    const dx = c.x - p.x, dy = c.y - p.y, dz = c.z - p.z;
+    const l = Math.hypot(dx, dy, dz) || 1;
+    return { tilt: Math.acos(U.clamp(dy / l, -1, 1)) };
+  }
+
+  return { L, build, legs, arms, frame, reachLeg, reachArm, support, legSpring, poseLeg, uprightness };
+})();
+
+/* ---- 03-grid.js ---- */
+/* IRONWAKE — the arena.
+   A tactics map is not a heightmap: a bridge has to be able to cross over a
+   courtyard, and a unit has to be able to stand on either. So a tile is a
+   COLUMN holding any number of walkable surfaces, each with its own height,
+   terrain and cover. Movement, ranging and line of sight all work on
+   surfaces, which is what makes a genuinely multi-level arena possible. */
+K.grid = (function () {
+  const U = K.util;
+  const { clamp } = U;
+
+  const TILE = 1.7;              // metres per tile
+  const CLIMB = 0.62;            // step up you can take without a cost
+  const DROP = 1.25;             // and the most you will drop of your own will
+  const HOP = 1.5;               // gap you can cross for extra movement
+
+  const TERRAIN = {
+    stone:  { name: 'stone',  cost: 1, avoid: 0,  def: 0, col: '#4a4f60' },
+    grass:  { name: 'turf',   cost: 1, avoid: 5,  def: 0, col: '#3f5348' },
+    rubble: { name: 'rubble', cost: 2, avoid: 10, def: 1, col: '#584f45' },
+    roof:   { name: 'roof',   cost: 1, avoid: 5,  def: 0, col: '#5a4a52' },
+    bridge: { name: 'bridge', cost: 1, avoid: 0,  def: 0, col: '#655244' },
+    stair:  { name: 'stair',  cost: 1, avoid: 0,  def: 0, col: '#514f5c' },
+    fort:   { name: 'rampart',cost: 2, avoid: 20, def: 2, col: '#6a5a64' }
+  };
+
+  function key(x, z, i) { return x + ',' + z + ',' + i; }
+
+  function Arena(seed) {
+    const rnd = U.rng(seed);
+    const a = { w: 14, d: 14, cols: new Map(), surfaces: [], props: [], seed };
+
+    function col(x, z) {
+      const k = x + ',' + z;
+      let c = a.cols.get(k);
+      if (!c) { c = []; a.cols.set(k, c); }
+      return c;
+    }
+    /* add a walkable surface to a column; `solid` is how far down it fills */
+    function put(x, z, y, terrain, solid) {
+      if (x < 0 || z < 0 || x >= a.w || z >= a.d) return null;
+      const c = col(x, z);
+      const s = {
+        x, z, y, t: TERRAIN[terrain] || TERRAIN.stone, terrain,
+        solid: solid === undefined ? 0.5 : solid,
+        i: c.length, id: 0, occupant: null
+      };
+      c.push(s);
+      c.sort((p, q) => p.y - q.y);
+      c.forEach((v, i) => { v.i = i; });
+      a.surfaces.push(s);
+      return s;
+    }
+    a.put = put;
+    a.col = (x, z) => a.cols.get(x + ',' + z) || [];
+
+    /* ---- the arena itself: a courtyard, two roofs, a bridge over the middle,
+       a rampart on the high side and a pit you can be knocked into */
+    for (let x = 0; x < a.w; x++) {
+      for (let z = 0; z < a.d; z++) {
+        const edge = x === 0 || z === 0 || x === a.w - 1 || z === a.d - 1;
+        const pit = x >= 6 && x <= 8 && z >= 6 && z <= 8;
+        if (pit) continue;                                  // the drop
+        // the building and the rampart are solid masses, not roofed rooms:
+        // nothing walks under them, so nothing is built under them
+        if (x >= 1 && x <= 4 && z >= 1 && z <= 4) continue;
+        if (x >= 9 && x <= 12 && z >= 9 && z <= 12) continue;
+        const t = edge ? 'stone' : (rnd() < 0.18 ? 'grass' : 'stone');
+        put(x, z, 0, t, 3);
+      }
+    }
+    // West building: two storeys. Every rise on the stair is inside CLIMB, so
+    // the route up is walkable in both directions — a staircase you can only
+    // fall down is a bug, not a level.
+    for (let x = 1; x <= 4; x++) for (let z = 1; z <= 4; z++) put(x, z, 2.2, 'roof', 2.2);
+    put(5, 4, 0.55, 'stair', 0.55); put(5, 3, 1.10, 'stair', 1.10);
+    put(5, 2, 1.65, 'stair', 1.65); put(5, 1, 2.20, 'stair', 2.20);
+    // east rampart, one storey, with its own short flight up from the middle
+    for (let x = 9; x <= 12; x++) for (let z = 9; z <= 12; z++) put(x, z, 1.5, 'fort', 1.5);
+    put(9, 8, 0.50, 'stair', 0.50); put(10, 8, 1.00, 'stair', 1.00);
+    // The bridge: off the roof at (4,4), across the pit, down onto the rampart.
+    // It lands on a low ramp tile so the crossing works from both ends.
+    for (let z = 5; z <= 9; z++) put(7, z, 2.2, 'bridge', 0.25);
+    put(6, 5, 2.2, 'bridge', 0.25); put(5, 5, 2.2, 'bridge', 0.25); put(4, 5, 2.2, 'bridge', 0.25);
+    put(8, 9, 2.2, 'bridge', 0.25); put(9, 9, 1.95, 'bridge', 0.45);
+    // scattered cover
+    for (let n = 0; n < 14; n++) {
+      const x = 1 + Math.floor(rnd() * (a.w - 2)), z = 1 + Math.floor(rnd() * (a.d - 2));
+      const c = a.col(x, z);
+      if (c.length === 1 && c[0].y === 0) { c[0].terrain = 'rubble'; c[0].t = TERRAIN.rubble; }
+    }
+    a.surfaces.forEach((s, i) => { s.id = i; });
+
+    /* Which sides of each slab can actually be seen? In a solid courtyard
+       every tile hides its neighbours' walls, and drawing two hundred buried
+       faces is most of what a software renderer would spend its frame on. */
+    (function faces() {
+      const span = (s) => ({ hi: s.y, lo: s.y - Math.max(0.2, s.solid) });
+      for (const s of a.surfaces) {
+        const me = span(s);
+        s.open = [];
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const c = a.col(s.x + dx, s.z + dz);
+          const hidden = c.some(n => {
+            const o = span(n);
+            return o.hi >= me.hi - 1e-3 && o.lo <= me.lo + 1e-3;
+          });
+          s.open.push(!hidden);
+        }
+      }
+    })();
+
+    /* ---- movement graph */
+    const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    a.neighbours = function (s) {
+      const out = [];
+      for (const [dx, dz] of DIRS) {
+        const c = a.col(s.x + dx, s.z + dz);
+        for (const n of c) {
+          const rise = n.y - s.y;
+          if (rise > CLIMB + 0.02) continue;                 // too high to step
+          // and no free ride down, either: if you could step off a roof the
+          // stairs would be decoration and the bridge would mean nothing
+          if (rise < -DROP) continue;
+          // is something directly overhead in the way?
+          const head = a.col(s.x + dx, s.z + dz).find(o => o.y > n.y + 0.1 && o.y < n.y + 1.7);
+          if (head) continue;
+          // a stair is a stair: it costs what it costs, without the climbing
+          // surcharge that makes hauling yourself over a wall expensive
+          const cost = n.t.cost + (rise > 0.35 && n.terrain !== 'stair' ? 1 : 0) + (rise < -0.65 ? 1 : 0);
+          out.push({ s: n, cost, drop: rise < -0.65 });
+        }
+      }
+      return out;
+    };
+
+    /* Dijkstra over surfaces: returns id -> { cost, from } */
+    a.reach = function (from, move, blocked) {
+      const best = new Map([[from.id, { cost: 0, from: null, s: from }]]);
+      const q = [{ s: from, cost: 0 }];
+      while (q.length) {
+        q.sort((p, r) => p.cost - r.cost);
+        const cur = q.shift();
+        if (cur.cost > move) continue;
+        for (const n of a.neighbours(cur.s)) {
+          if (blocked && blocked(n.s)) continue;
+          const c = cur.cost + n.cost;
+          if (c > move) continue;
+          const prev = best.get(n.s.id);
+          if (!prev || c < prev.cost) {
+            best.set(n.s.id, { cost: c, from: cur.s, s: n.s });
+            q.push({ s: n.s, cost: c });
+          }
+        }
+      }
+      return best;
+    };
+
+    a.pathTo = function (reachMap, target) {
+      const out = [];
+      let cur = reachMap.get(target.id);
+      if (!cur) return null;
+      while (cur) { out.unshift(cur.s); cur = cur.from ? reachMap.get(cur.from.id) : null; }
+      return out;
+    };
+
+    /* grid distance ignoring height — Fire Emblem ranging, in three dimensions */
+    a.dist = (p, q) => Math.abs(p.x - q.x) + Math.abs(p.z - q.z);
+
+    a.at = function (x, z, y) {
+      const c = a.col(x, z);
+      let best = null;
+      for (const s of c) if (!best || Math.abs(s.y - y) < Math.abs(best.y - y)) best = s;
+      return best;
+    };
+
+    /* world position of a surface's centre */
+    a.world = (s) => ({ x: (s.x - a.w / 2 + 0.5) * TILE, y: s.y, z: (s.z - a.d / 2 + 0.5) * TILE });
+
+    /* is this surface over the pit — i.e. is there nothing under it to land on? */
+    a.voidUnder = function (s) {
+      const c = a.col(s.x, s.z);
+      return !c.some(o => o.y < s.y - 0.1);
+    };
+
+    /* The arena as something the physics solver can hit: every surface is a
+       slab, bucketed by z so collision stays cheap with a dozen bodies. */
+    a.collider = function () {
+      const boxes = [], cells = new Map();
+      for (const s of a.surfaces) {
+        const w = a.world(s);
+        const b = {
+          x0: w.x - TILE / 2, x1: w.x + TILE / 2,
+          y0: s.y - Math.max(0.2, s.solid), y1: s.y,
+          z0: w.z - TILE / 2, z1: w.z + TILE / 2,
+          friction: 1, surface: s
+        };
+        boxes.push(b);
+        const c0 = Math.floor(b.z0 / 4), c1 = Math.floor(b.z1 / 4);
+        for (let c = c0; c <= c1; c++) {
+          if (!cells.has(c)) cells.set(c, []);
+          cells.get(c).push(b);
+        }
+      }
+      const EMPTY = [];
+      return {
+        boxes,
+        solidsNear(z, pad) {
+          const c0 = Math.floor((z - pad) / 4), c1 = Math.floor((z + pad) / 4);
+          if (c0 === c1) return cells.get(c0) || EMPTY;
+          const out = [];
+          for (let c = c0; c <= c1; c++) {
+            const arr = cells.get(c);
+            if (arr) for (const b of arr) if (out.indexOf(b) < 0) out.push(b);
+          }
+          return out;
+        },
+        groundAt(x, z, fromY) {
+          let best = null;
+          for (const b of this.solidsNear(z, 0.3)) {
+            if (x < b.x0 || x > b.x1 || z < b.z0 || z > b.z1) continue;
+            if (b.y1 <= fromY + 0.05 && (!best || b.y1 > best.y)) best = { y: b.y1, box: b };
+          }
+          return best;
+        }
+      };
+    };
+
+    return a;
+  }
+
+  return { TILE, CLIMB, DROP, HOP, TERRAIN, Arena };
+})();
+
+/* ---- 04-units.js ---- */
+/* IRONWAKE — units, weapons and the arithmetic of a duel.
+   Fire Emblem's combat maths, with two additions the third dimension earns:
+   height gives the high ground real bite, and a killing blow carries physical
+   force, which is what the ragdoll turns into a fall off a bridge. */
+K.units = (function () {
+  const U = K.util;
+  const { clamp } = U;
+
+  const WEAPONS = {
+    iron_sword:  { name: 'Iron Sword',  kind: 'sword', mt: 5, hit: 90, crit: 5,  rng: [1, 1], wt: 5 },
+    steel_sword: { name: 'Steel Sword', kind: 'sword', mt: 8, hit: 80, crit: 3,  rng: [1, 1], wt: 9 },
+    iron_lance:  { name: 'Iron Lance',  kind: 'lance', mt: 6, hit: 85, crit: 3,  rng: [1, 1], wt: 7 },
+    iron_axe:    { name: 'Iron Axe',    kind: 'axe',   mt: 7, hit: 75, crit: 3,  rng: [1, 1], wt: 9 },
+    hand_axe:    { name: 'Hand Axe',    kind: 'axe',   mt: 6, hit: 65, crit: 2,  rng: [1, 2], wt: 10 },
+    short_bow:   { name: 'Short Bow',   kind: 'bow',   mt: 5, hit: 85, crit: 5,  rng: [2, 2], wt: 6 },
+    fire:        { name: 'Fire',        kind: 'tome',  mt: 5, hit: 90, crit: 0,  rng: [1, 2], wt: 5, magic: true }
+  };
+
+  /* sword beats axe beats lance beats sword */
+  const BEATS = { sword: 'axe', axe: 'lance', lance: 'sword' };
+  function triangle(a, b) {
+    if (!a || !b) return 0;
+    if (BEATS[a.kind] === b.kind) return 1;
+    if (BEATS[b.kind] === a.kind) return -1;
+    return 0;
+  }
+
+  const CLASSES = {
+    Blade:   { hp: 20, str: 6, mag: 0, skl: 7, spd: 8, lck: 4, def: 6, res: 1, mov: 6,
+               growth: { hp: 70, str: 45, skl: 50, spd: 55, lck: 40, def: 35, res: 20 },
+               weapon: 'iron_sword', tag: 'quick, fragile, hits often' },
+    Halberd: { hp: 24, str: 7, mag: 0, skl: 5, spd: 5, lck: 3, def: 8, res: 2, mov: 5,
+               growth: { hp: 85, str: 55, skl: 35, spd: 30, lck: 25, def: 55, res: 25 },
+               weapon: 'iron_lance', tag: 'holds ground, beats swords' },
+    Reaver:  { hp: 26, str: 9, mag: 0, skl: 4, spd: 4, lck: 2, def: 6, res: 0, mov: 6,
+               growth: { hp: 90, str: 65, skl: 30, spd: 30, lck: 20, def: 40, res: 10 },
+               weapon: 'iron_axe', tag: 'heaviest swing on the field' },
+    Archer:  { hp: 18, str: 5, mag: 0, skl: 8, spd: 6, lck: 5, def: 4, res: 3, mov: 6,
+               growth: { hp: 60, str: 40, skl: 60, spd: 45, lck: 45, def: 20, res: 25 },
+               weapon: 'short_bow', tag: 'reaches two tiles, cannot counter close' },
+    Ember:   { hp: 17, str: 2, mag: 7, skl: 6, spd: 6, lck: 4, def: 3, res: 7, mov: 6,
+               growth: { hp: 55, str: 15, skl: 45, spd: 45, lck: 40, def: 15, res: 55 },
+               weapon: 'fire', tag: 'burns armour, folds under a blade' }
+  };
+
+  let nextId = 1;
+  function make(cls, side, name, level) {
+    const C = CLASSES[cls];
+    const u = {
+      id: nextId++, cls, side, name: name || cls, level: level || 1,
+      hp: C.hp, maxHp: C.hp,
+      str: C.str, mag: C.mag, skl: C.skl, spd: C.spd, lck: C.lck, def: C.def, res: C.res,
+      mov: C.mov, weapon: WEAPONS[C.weapon], growth: C.growth, tag: C.tag,
+      exp: 0, acted: false, dead: false, surface: null, facing: 0,
+      guard: false, alert: 4
+    };
+    // grow() advances the level itself, so walk to the target from level 1
+    const target = u.level;
+    u.level = 1;
+    while (u.level < target) grow(u, () => Math.random());
+    u.hp = u.maxHp;
+    return u;
+  }
+
+  function grow(u, rnd) {
+    const g = u.growth, gained = [];
+    for (const k of ['hp', 'str', 'skl', 'spd', 'lck', 'def', 'res']) {
+      if ((rnd() * 100) < (g[k] || 0)) {
+        if (k === 'hp') { u.maxHp += 1; u.hp += 1; } else u[k] += 1;
+        gained.push(k);
+      }
+    }
+    u.level++;
+    return gained;
+  }
+
+  /* attack speed: a heavy weapon in weak hands slows you down */
+  const AS = u => u.spd - Math.max(0, u.weapon.wt - Math.floor(u.str * 0.6 + 3));
+
+  function heightStep(a, d) {
+    if (!a.surface || !d.surface) return 0;
+    return clamp((a.surface.y - d.surface.y) / 1.5, -1.5, 1.5);
+  }
+
+  /* everything one side does to the other in a single exchange */
+  function strike(att, def, arena) {
+    const w = att.weapon, tri = triangle(w, def.weapon);
+    const high = heightStep(att, def);
+    const magic = !!w.magic;
+    const atk = (magic ? att.mag : att.str) + w.mt + tri * 1 + Math.round(high);
+    const armour = (magic ? def.res : def.def) + (def.surface ? def.surface.t.def : 0);
+    const dmg = Math.max(0, atk - armour);
+    const hit = w.hit + att.skl * 2 + Math.floor(att.lck / 2) + tri * 15 + Math.round(high * 10);
+    const avoid = AS(def) * 2 + def.lck + (def.surface ? def.surface.t.avoid : 0);
+    const acc = clamp(hit - avoid, 5, 100);
+    const crit = clamp(w.crit + Math.floor(att.skl / 2) - def.lck, 0, 60);
+    return { dmg, acc, crit, tri, high, magic };
+  }
+
+  function inRange(att, def, arena) {
+    if (!att.surface || !def.surface) return false;
+    const d = arena.dist(att.surface, def.surface);
+    return d >= att.weapon.rng[0] && d <= att.weapon.rng[1];
+  }
+
+  /* the forecast panel: what will happen if these two meet */
+  function forecast(att, def, arena) {
+    const a = strike(att, def, arena);
+    const canCounter = inRange(def, att, arena) && !def.dead;
+    const b = canCounter ? strike(def, att, arena) : null;
+    const aDouble = AS(att) - AS(def) >= 4;
+    const bDouble = b && AS(def) - AS(att) >= 4;
+    return {
+      att, def,
+      a: { ...a, hits: aDouble ? 2 : 1, total: a.dmg * (aDouble ? 2 : 1) },
+      b: b ? { ...b, hits: bDouble ? 2 : 1, total: b.dmg * (bDouble ? 2 : 1) } : null,
+      lethal: a.dmg * (aDouble ? 2 : 1) >= def.hp
+    };
+  }
+
+  /* Fire Emblem rolls hit twice and averages — displayed odds feel honest */
+  function rollHit(acc, rnd) { return ((rnd() * 100 + rnd() * 100) / 2) < acc; }
+
+  /* resolve one exchange, returning the blow-by-blow for the presentation */
+  function resolve(att, def, arena, rnd) {
+    rnd = rnd || Math.random;
+    const f = forecast(att, def, arena);
+    const blows = [];
+    const order = [];
+    order.push(['a', 1]);
+    if (f.b) order.push(['b', 1]);
+    if (f.a.hits > 1) order.push(['a', 2]);
+    if (f.b && f.b.hits > 1) order.push(['b', 2]);
+
+    for (const [who] of order) {
+      const src = who === 'a' ? att : def;
+      const dst = who === 'a' ? def : att;
+      if (src.dead || dst.dead) continue;
+      const s = who === 'a' ? f.a : f.b;
+      const hit = rollHit(s.acc, rnd);
+      const crit = hit && (rnd() * 100) < s.crit;
+      const dmg = hit ? s.dmg * (crit ? 3 : 1) : 0;
+      dst.hp = Math.max(0, dst.hp - dmg);
+      const killed = dst.hp <= 0;
+      if (killed) dst.dead = true;
+      blows.push({ src, dst, hit, crit, dmg, killed, magic: s.magic });
+      if (killed) break;
+    }
+    // experience, the way a tactics game should: more for a kill, more for a
+    // fight you were not supposed to win
+    if (!att.dead) {
+      const lvlGap = clamp(def.level - att.level, -5, 5);
+      att.exp += blows.some(b => b.killed && b.src === att) ? 30 + lvlGap * 3 : 10 + lvlGap;
+    }
+    return { forecast: f, blows };
+  }
+
+  return { WEAPONS, CLASSES, make, grow, strike, forecast, resolve, inRange, triangle, AS };
+})();
+
+/* ---- 05-actor.js ---- */
+/* IRONWAKE — the body of a unit.
+   This is where the euphoria idea earns its place in a tactics game. A unit
+   is pose-driven while it is under its own control: it stands, it walks its
+   path, it swings. The moment it is hit, the muscles lose authority and the
+   ragdoll takes the blow — stagger, knockdown, or a killing fall off the
+   bridge. Nothing here is animation: the same solver that ran the runner
+   holds these bodies up, and the same solver drops them. */
+K.actor = (function () {
+  const P = K.phys, R = K.rag, U = K.util;
+  const { clamp, lerp } = U;
+
+  const STANCE = 0.16;       // half the distance between the feet
+  const HIP = 0.74;          // hip height over the deck when standing
+
+  function create(unit, arena) {
+    const w = arena.world(unit.surface);
+    const body = R.build(w.x, w.y + 0.02, w.z);
+    return {
+      unit, body, arena,
+      mode: 'pose', t: 0, face: unit.side === 0 ? 1 : -1,
+      strength: 1, limp: 0, phase: 0,
+      path: null, leg: 0, stepT: 0, foot: [null, null],
+      pos: { x: w.x, y: w.y, z: w.z },
+      swing: 0, swingAt: null, fell: false, restT: 0
+    };
+  }
+
+  function surfaceTop(a) { return a.unit.surface ? a.unit.surface.y : 0; }
+
+  /* the pose a unit holds when it is standing its ground */
+  function stand(a, dt, lean) {
+    const b = a.body, p = b.parts, u = a.unit;
+    const sp = 5.0 * a.strength;
+    const gy = surfaceTop(a);
+    const f = a.face;
+    const hintK = { x: 0, y: 0, z: f }, hintA = { x: 0, y: 0, z: -f };
+
+    // feet planted either side of the tile centre
+    const legs = R.legs(b);
+    for (let i = 0; i < 2; i++) {
+      const L = legs[i];
+      const fx = a.pos.x + L.side * STANCE;
+      const fz = a.pos.z - L.side * 0.03 * f;
+      if (!a.foot[i]) a.foot[i] = { x: fx, z: fz };
+      // A body that has been thrown leaves its old footprints behind. Left
+      // alone the stance tries to stand on them, the legs trail out behind
+      // the hips and the unit quietly sinks to a kneel — so the plant walks
+      // itself home whenever it has drifted off the tile.
+      const off = Math.hypot(a.foot[i].x - fx, a.foot[i].z - fz);
+      if (off > 0.30) {
+        const k = U.clamp(dt * 6, 0, 1);
+        a.foot[i].x = lerp(a.foot[i].x, fx, k);
+        a.foot[i].z = lerp(a.foot[i].z, fz, k);
+      }
+      R.reachLeg(b, L, a.foot[i].x, gy + R.L.plant, a.foot[i].z, sp, dt, hintK);
+      if (L.foot.grounded || L.toe.grounded) {
+        R.support(b, L, R.L.leg * 0.88, (34 + 26) * a.strength, dt, 0.5);
+      }
+      P.drive(L.toe, L.foot.x, L.foot.y - 0.05, L.foot.z + 0.15 * f, sp, dt, sp * 14);
+    }
+    // hips over the feet, chest up, a little weight forward
+    P.drive(p.pelvis, a.pos.x, gy + HIP, a.pos.z, sp * 0.8, dt, 40 * a.strength);
+    const l = lean === undefined ? 0.08 : lean;
+    P.aim(p.pelvis, p.chest, 0, 1, l * f, 0.30 * a.strength);
+    P.aim(p.chest, p.head, 0, 1, 0.05 * f, 0.25 * a.strength);
+
+    // arms: weapon hand forward and across, off hand low
+    const A = R.arms(b);
+    const guard = a.swing > 0 ? 1 - a.swing : 0;
+    for (const arm of A) {
+      const lead = (arm.side > 0) === (f > 0);
+      const reach = lead ? 0.30 + guard * 0.16 : 0.14;
+      R.reachArm(b, arm,
+        arm.sh.x + arm.side * (lead ? 0.16 : 0.24),
+        arm.sh.y - 0.34 + (lead ? guard * 0.28 : 0),
+        arm.sh.z + f * reach, sp, dt, hintA);
+    }
+  }
+
+  /* walking a path: two-beat, deliberate, nothing fancy — a tactics unit
+     covers ground, it does not sprint */
+  function walk(a, dt, arena) {
+    const b = a.body, p = b.parts;
+    const sp = 5.5 * a.strength;
+    if (a.dirX === undefined) { a.dirX = 0; a.dirZ = a.face; }
+    const gy = a.pos.y;
+    const legs = R.legs(b);
+    const hintK = { x: 0, y: 0, z: a.face };
+
+    a.stepT += dt * 3.15;
+    if (a.stepT >= 1) { a.stepT = 0; a.leg = 1 - a.leg; a.foot[a.leg] = null; }
+    for (let i = 0; i < 2; i++) {
+      const L = legs[i];
+      const home = { x: a.pos.x + L.side * STANCE, z: a.pos.z };
+      if (i === a.leg) {
+        // swinging: lift and place ahead along the direction of travel
+        const s = Math.sin(a.stepT * Math.PI);
+        const ahead = lerp(-0.28, 0.34, a.stepT);
+        R.reachLeg(b, L,
+          home.x + a.dirX * ahead, gy + R.L.plant + s * 0.20, home.z + a.dirZ * ahead,
+          sp * 1.9, dt, hintK);
+      } else {
+        if (!a.foot[i]) a.foot[i] = { x: L.foot.x, z: L.foot.z };
+        R.reachLeg(b, L, a.foot[i].x, gy + R.L.plant, a.foot[i].z, sp, dt, hintK);
+        if (L.foot.grounded || L.toe.grounded) R.support(b, L, R.L.leg * 0.88, 60 * a.strength, dt, 1);
+      }
+    }
+    P.drive(p.pelvis, a.pos.x, gy + HIP, a.pos.z, sp, dt, 70 * a.strength);
+    P.aim(p.pelvis, p.chest, 0, 1, 0.10 * a.face, 0.34 * a.strength);
+    P.aim(p.chest, p.head, 0, 1, 0, 0.25 * a.strength);
+    const A = R.arms(b);
+    for (const arm of A) {
+      const s = Math.sin(a.stepT * Math.PI * 2 + (arm.side > 0 ? Math.PI : 0));
+      R.reachArm(b, arm, arm.sh.x + arm.side * 0.19, arm.sh.y - 0.36,
+        arm.sh.z + s * 0.16 * a.face, sp, dt, { x: 0, y: 0, z: -a.face });
+    }
+  }
+
+  /* ---------------------------------------------------------------- orders */
+
+  function walkPath(a, path, arena) {
+    if (!path || path.length < 2) return false;
+    a.path = path.map(s => { const w = arena.world(s); return { x: w.x, y: w.y, z: w.z, s }; });
+    a.pathI = 0; a.mode = 'walk'; a.stepT = 0; a.foot = [null, null];
+    wake(a);
+    return true;
+  }
+
+  function faceToward(a, x, z) {
+    wake(a);
+    const dz = z - a.pos.z, dx = x - a.pos.x;
+    a.face = Math.abs(dz) >= Math.abs(dx) ? (dz >= 0 ? 1 : -1) : (dx >= 0 ? 1 : -1);
+    a.aimX = dx; a.aimZ = dz;
+  }
+
+  function strikeAt(a, target) {
+    a.mode = 'strike'; a.t = 0; a.swing = 0; a.swingAt = target;
+    wake(a);
+    faceToward(a, target.pos.x, target.pos.z);
+  }
+
+  /* A blow lands. The muscles lose the argument for a moment; if it is fatal
+     they lose it for good, and whatever the body does next is the solver's. */
+  function takeHit(a, fromX, fromZ, force, lethal, crit) {
+    const b = a.body;
+    let dx = a.pos.x - fromX, dz = a.pos.z - fromZ;
+    const d = Math.hypot(dx, dz) || 1;
+    dx /= d; dz /= d;
+    const up = lethal ? 2.2 : 1.1;
+    const kick = force * (crit ? 1.7 : 1) * (lethal ? 1.5 : 1);
+    const dt = 1 / 180;
+    for (const p of b.list) P.addVel(p, dx * kick, up * (lethal ? 1 : 0.6), dz * kick, dt);
+    // the head and chest take the brunt, which is what makes it read as a hit
+    P.addVel(b.parts.chest, dx * kick * 0.6, up * 0.4, dz * kick * 0.6, dt);
+    P.addVel(b.parts.head, dx * kick * 0.5, up * 0.5, dz * kick * 0.5, dt);
+    a.strength = lethal ? 0.05 : 0.22;
+    a.limp = lethal ? 999 : (crit ? 1.1 : 0.7);
+    a.mode = lethal ? 'dead' : 'hit';
+    a.restT = 0;
+    a.foot = [null, null];
+    wake(a);
+  }
+
+  /* ------------------------------------------------------------------ step */
+
+  /* A dozen ragdolls at 120 Hz is more than a phone should be asked to do for
+     eleven units that are standing perfectly still. A body that has come to
+     rest under its own pose is frozen until something happens to it — which is
+     every unit but the one whose turn it is. */
+  function settled(a, dt) {
+    const still = a.mode === 'pose' || a.mode === 'dead';
+    if (!still || a.limp > 0 || a.path || a.strength < 0.99) { a.calm = 0; a.anchor = null; return false; }
+    // A held pose never stops buzzing — the muscles are a control loop, not a
+    // pose, and they hunt around the target by a few millimetres for ever. So
+    // rest is judged by whether the body has actually GONE anywhere.
+    const p = a.body.parts.pelvis;
+    if (!a.anchor) { a.anchor = { x: p.x, y: p.y, z: p.z }; a.calm = 0; return false; }
+    if (Math.abs(p.x - a.anchor.x) + Math.abs(p.y - a.anchor.y) + Math.abs(p.z - a.anchor.z) > 0.05) {
+      a.anchor = { x: p.x, y: p.y, z: p.z }; a.calm = 0; return false;
+    }
+    a.calm = (a.calm || 0) + dt;
+    return a.calm > 0.6;
+  }
+
+  function wake(a) { a.rest = false; a.calm = 0; a.anchor = null; }
+
+  function step(a, dt, arena, level) {
+    const b = a.body, p = b.parts;
+    a.t += dt;
+    if (a.rest) {
+      if (a.mode === 'pose' || a.mode === 'dead') return;
+      a.rest = false;
+    }
+
+    if (a.mode === 'walk' && a.path) {
+      const tgt = a.path[Math.min(a.pathI + 1, a.path.length - 1)];
+      let dx = tgt.x - a.pos.x, dz = tgt.z - a.pos.z;
+      const dist = Math.hypot(dx, dz);
+      const speed = 3.4;
+      if (dist < 0.06) {
+        a.pathI++;
+        a.pos.y = tgt.y;
+        if (a.pathI >= a.path.length - 1) {
+          a.unit.surface = a.path[a.path.length - 1].s;
+          a.mode = 'pose'; a.path = null; a.foot = [null, null];
+        }
+      } else {
+        a.dirX = dx / dist; a.dirZ = dz / dist;
+        faceToward(a, tgt.x, tgt.z);
+        const move = Math.min(dist, speed * dt);
+        a.pos.x += a.dirX * move; a.pos.z += a.dirZ * move;
+        a.pos.y = lerp(a.pos.y, tgt.y, clamp(dt * 6, 0, 1));
+      }
+    }
+
+    if (a.mode === 'strike') {
+      a.swing = clamp(a.t / 0.42, 0, 1);
+      if (a.t > 0.5) { a.mode = 'pose'; a.swing = 0; }
+    }
+
+    if (a.limp > 0) {
+      a.limp -= dt;
+      if (a.limp <= 0 && a.mode !== 'dead') {
+        a.mode = 'rise'; a.restT = 0;
+      }
+    }
+    if (a.mode === 'rise') {
+      // get the feet back under and stand up: the same heave the runner uses
+      a.strength = clamp(a.strength + dt * 1.6, 0, 1);
+      a.restT += dt;
+      const gy = surfaceTop(a);
+      const legs = R.legs(b);
+      for (const L of legs) {
+        R.reachLeg(b, L, a.pos.x + L.side * STANCE, gy + R.L.plant, a.pos.z, 4 * a.strength, dt,
+          { x: 0, y: 0, z: a.face });
+      }
+      const err = (gy + HIP) - p.pelvis.y;
+      if (err > 0) {
+        const acc = clamp(err * 80, 0, 54) * a.strength;
+        for (const t of b.trunk) P.addVel(t, 0, acc * dt, 0, dt);
+      }
+      if ((a.restT > 0.5 && p.pelvis.y - gy > 0.55) || a.restT > 1.8) {
+        a.mode = 'pose'; a.strength = 1; a.foot = [null, null];
+      }
+    }
+
+    if (a.mode === 'pose' || a.mode === 'strike') {
+      a.strength = clamp(a.strength + dt * 2, 0, 1);
+      stand(a, dt, a.mode === 'strike' ? 0.10 + Math.sin(a.swing * Math.PI) * 0.34 : 0.08);
+      if (a.mode === 'strike' && a.swingAt) {
+        // the weapon arm drives through the target
+        const A = R.arms(b);
+        const arm = A[a.face > 0 ? 1 : 0];
+        const th = Math.sin(a.swing * Math.PI);
+        const tx = lerp(arm.sh.x, a.swingAt.pos.x, th * 0.45);
+        const tz = lerp(arm.sh.z, a.swingAt.pos.z, th * 0.45);
+        R.reachArm(b, arm, tx, arm.sh.y - 0.18 + th * 0.2, tz, 9, dt, { x: 0, y: 0, z: -a.face });
+      }
+    } else if (a.mode === 'walk') {
+      walk(a, dt, arena);
+    }
+
+    // the solver, every frame, for every body on the field
+    P.integrate(b, dt, 1);
+    const frame = R.frame(b);
+    for (let i = 0; i < 4; i++) { P.solveBones(b); P.solveHinges(b, frame); }
+    P.collide(b, level, dt);
+
+    // knocked off the edge: the arena kills, not the arithmetic
+    if (!a.fell && p.pelvis.y < surfaceTop(a) - 3.0) {
+      a.fell = true;
+      a.mode = 'dead'; a.strength = 0.05; a.limp = 999;
+    }
+    // The stance is anchored to the TILE, not to wherever the body has got
+    // to. Letting the pose target chase the pelvis makes a closed loop with no
+    // reference: every unit slowly wanders off its own square. Anchored, a
+    // unit that has been knocked across the floor picks itself up and lurches
+    // back to where it is supposed to be standing.
+    if (a.mode !== 'dead' && a.mode !== 'walk' && a.unit.surface) {
+      const w = arena.world(a.unit.surface);
+      const k = clamp(dt * 2.2, 0, 1);
+      a.pos.x = lerp(a.pos.x, w.x, k);
+      a.pos.y = lerp(a.pos.y, w.y, k);
+      a.pos.z = lerp(a.pos.z, w.z, k);
+    }
+    if (settled(a, dt)) {
+      a.rest = true;
+      for (const q of b.list) { q.px = q.x; q.py = q.y; q.pz = q.z; }
+    }
+  }
+
+  return { create, step, walkPath, strikeAt, takeHit, faceToward, wake, HIP, STANCE };
+})();
+
+/* ---- 06-battle.js ---- */
+/* IRONWAKE — the turn.
+   Player phase, enemy phase, and an action queue that lets a blow take the
+   time it needs: the swing, the impact, the body going over the rail. */
+K.battle = (function () {
+  const U = K.util, Un = K.units, A = K.actor;
+  const { clamp } = U;
+
+  /* A battle is built from a plan so a campaign can hand it veterans and a
+     harder line every wave; with no plan it builds the opening skirmish. */
+  function create(seed, plan) {
+    const arena = K.grid.Arena(seed || ((Math.random() * 1e9) | 0));
+    const b = {
+      arena, level: arena.collider(),
+      units: [], actors: new Map(), turn: 1, phase: 'player',
+      sel: null, reach: null, targets: [], hover: null,
+      busy: null, log: [], banner: null, over: null, focus: null,
+      aiT: 0, forecast: null, popups: [], fx: [], shake: 0, threat: []
+    };
+    b.occupiedFn = (s) => occupied(b, s);
+
+    const place = (u, x, z, y) => {
+      const s = arena.at(x, z, y === undefined ? 0 : y);
+      u.surface = s; s.occupant = u;
+      b.units.push(u);
+      b.actors.set(u.id, A.create(u, arena));
+      return u;
+    };
+
+    const HOME = [[2, 11], [3, 12], [1, 12], [2, 13], [3, 10], [1, 10]];
+    const P = (plan && plan.player) || K.camp.START;
+    P.forEach((spec, i) => {
+      const u = K.camp.restore(spec, 0);
+      const at = HOME[i % HOME.length];
+      place(u, at[0], at[1]);
+    });
+
+    const E = (plan && plan.enemy) || [
+      { cls: 'Reaver', name: 'GHAST', level: 3, x: 11, z: 2, y: 0 },
+      { cls: 'Halberd', name: 'BULWARK', level: 3, x: 10, z: 3, y: 0 },
+      { cls: 'Blade', name: 'SPINE', level: 2, x: 12, z: 3, y: 0 },
+      // the rampart pair hold what they were put there to hold, and only come
+      // off it when something walks into their reach
+      { cls: 'Archer', name: 'NEEDLE', level: 3, x: 11, z: 12, y: 1.5, guard: true, alert: 5 },
+      { cls: 'Reaver', name: 'MAUL', level: 3, x: 12, z: 11, y: 1.5, guard: true, alert: 4 }
+    ];
+    for (const spec of E) {
+      const u = Un.make(spec.cls, 1, spec.name, spec.level || 2);
+      u.guard = !!spec.guard;
+      u.alert = spec.alert || 4;
+      place(u, spec.x, spec.z, spec.y);
+    }
+
+    b.units.forEach(u => { u.acted = false; });
+    b.wave = (plan && plan.wave) || 1;
+    const mine = living(b, 0).length, theirs = living(b, 1).length;
+    b.banner = {
+      title: 'PLAYER PHASE',
+      sub: b.wave > 1 ? 'wave ' + b.wave + ' — ' + mine + ' against ' + theirs
+                      : 'four against five, and they hold the high ground',
+      t: 0
+    };
+    return b;
+  }
+
+  const actorOf = (b, u) => b.actors.get(u.id);
+  const living = (b, side) => b.units.filter(u => !u.dead && (side === undefined || u.side === side));
+
+  function occupied(b, s, except) {
+    return b.units.some(u => !u.dead && u.surface === s && u !== except);
+  }
+
+  function select(b, u) {
+    if (b.busy || b.phase !== 'player' || u.side !== 0 || u.acted || u.dead) return false;
+    b.sel = u;
+    b.reach = b.arena.reach(u.surface, u.mov, s => occupied(b, s, u));
+    b.targets = [];
+    b.forecast = null;
+    return true;
+  }
+
+  function clearSel(b) { b.sel = null; b.reach = null; b.targets = []; b.forecast = null; }
+
+  /* who can this unit hit from where it stands? */
+  function targetsFrom(b, u, surface) {
+    const save = u.surface; u.surface = surface;
+    const out = living(b, u.side === 0 ? 1 : 0).filter(e => Un.inRange(u, e, b.arena));
+    u.surface = save;
+    return out;
+  }
+
+  function moveTo(b, u, surface, then) {
+    if (!b.reach || !b.reach.has(surface.id) || occupied(b, surface, u)) return false;
+    const path = b.arena.pathTo(b.reach, surface);
+    if (!path) return false;
+    const act = actorOf(b, u);
+    u.surface.occupant = null;
+    A.walkPath(act, path, b.arena);
+    b.busy = { kind: 'move', u, act, surface, then: then ? 'attack' : null, target: then || null };
+    b.focus = act;
+    return true;
+  }
+
+  /* the exchange, played out with time between the blows */
+  function attack(b, att, def) {
+    const aA = actorOf(b, att), aD = actorOf(b, def);
+    const result = Un.resolve(att, def, b.arena);
+    b.busy = {
+      kind: 'fight', att, def, aA, aD, result, i: 0, t: 0, stage: 'wind',
+      lines: []
+    };
+    b.focus = aA;
+    A.faceToward(aA, aD.pos.x, aD.pos.z);
+    A.faceToward(aD, aA.pos.x, aA.pos.z);
+    return true;
+  }
+
+  function finishUnit(b, u) {
+    u.acted = true;
+    clearSel(b);
+    // level ups are earned in the field, as they should be
+    while (u.exp >= 100 && !u.dead) {
+      u.exp -= 100;
+      const gained = Un.grow(u, Math.random);
+      const act = actorOf(b, u);
+      if (act) popup(b, act, 'LEVEL ' + u.level, 'level', true);
+      note(b, u.name + ' reaches level ' + u.level + (gained.length ? ' — ' + gained.join(' ') : ' — nothing gained'), 'level');
+    }
+    if (!living(b, 0).some(x => !x.acted)) endPhase(b);
+    checkOver(b);
+  }
+
+  function note(b, text, kind) {
+    b.log.unshift({ text, kind: kind || 'info' });
+    b.log = b.log.slice(0, 30);
+  }
+
+  function endPhase(b) {
+    if (b.over) return;
+    clearSel(b);
+    if (b.phase === 'player') {
+      b.phase = 'enemy';
+      living(b, 1).forEach(u => { u.acted = false; });
+      b.banner = { title: 'ENEMY PHASE', sub: '', t: 0 };
+    } else {
+      b.phase = 'player';
+      b.turn++;
+      living(b, 0).forEach(u => { u.acted = false; });
+      b.banner = { title: 'PLAYER PHASE', sub: 'turn ' + b.turn, t: 0 };
+    }
+    b.aiT = 0.6;
+  }
+
+  function checkOver(b) {
+    if (b.over) return;
+    if (!living(b, 1).length) { b.over = 'win'; b.banner = { title: 'FIELD HELD', sub: 'every one of them is down', t: 0 }; }
+    else if (!living(b, 0).length) { b.over = 'loss'; b.banner = { title: 'OVERRUN', sub: 'the arena keeps what it takes', t: 0 }; }
+  }
+
+  /* ---------------------------------------------------------------- enemy */
+
+  function aiTurn(b) {
+    const me = living(b, 1).filter(u => !u.acted);
+    if (!me.length) { endPhase(b); return; }
+    const u = me[0];
+    const foes = living(b, 0);
+    if (!foes.length) { endPhase(b); return; }
+
+    // a guard does not abandon its ground for a target it cannot see coming
+    if (u.guard) {
+      const near = foes.some(f => b.arena.dist(u.surface, f.surface) <= u.alert);
+      if (!near) { u.acted = true; return; }
+    }
+    const reach = b.arena.reach(u.surface, u.mov, s => occupied(b, s, u));
+    let best = null;
+    for (const [, entry] of reach) {
+      const s = entry.s;
+      if (occupied(b, s, u)) continue;
+      for (const f of foes) {
+        const save = u.surface; u.surface = s;
+        const can = Un.inRange(u, f, b.arena);
+        const fc = can ? Un.forecast(u, f, b.arena) : null;
+        u.surface = save;
+        if (!can) continue;
+        // prefer a kill, then damage dealt, then damage avoided, then height
+        const score = (fc.lethal ? 1000 : 0) + fc.a.total * 10 - (fc.b ? fc.b.total * 6 : -20)
+          + (s.y - f.surface.y) * 4 + s.t.avoid * 0.4 - entry.cost * 0.2;
+        if (!best || score > best.score) best = { score, s, f, cost: entry.cost };
+      }
+    }
+    if (!best) {
+      // nobody in reach: walk at the closest enemy
+      let goal = null;
+      for (const [, entry] of reach) {
+        const s = entry.s;
+        if (occupied(b, s, u)) continue;
+        const d = Math.min(...foes.map(f => b.arena.dist(s, f.surface)));
+        const score = -d * 10 - entry.cost * 0.1 + s.t.avoid * 0.2;
+        if (!goal || score > goal.score) goal = { score, s };
+      }
+      if (goal && goal.s !== u.surface) {
+        const path = b.arena.pathTo(reach, goal.s);
+        u.surface.occupant = null;
+        A.walkPath(actorOf(b, u), path, b.arena);
+        b.busy = { kind: 'move', u, act: actorOf(b, u), surface: goal.s, then: 'wait' };
+        b.focus = actorOf(b, u);
+      } else { u.acted = true; }
+      return;
+    }
+    if (best.s !== u.surface) {
+      const path = b.arena.pathTo(reach, best.s);
+      u.surface.occupant = null;
+      A.walkPath(actorOf(b, u), path, b.arena);
+      b.busy = { kind: 'move', u, act: actorOf(b, u), surface: best.s, then: 'attack', target: best.f };
+      b.focus = actorOf(b, u);
+    } else {
+      attack(b, u, best.f);
+    }
+  }
+
+  /* ----------------------------------------------------------------- step */
+
+  /* small presentation helpers — the numbers and grit that sell a blow */
+  function popup(b, act, text, kind, big) {
+    const h = act.body.parts.head;
+    b.popups.push({ x: h.x, y: h.y + 0.3, z: h.z, text, kind: kind || 'hit', big: !!big, t: 0 });
+  }
+  function sparks(b, act, n, force) {
+    const c = act.body.parts.chest;
+    for (let i = 0; i < n; i++) {
+      b.fx.push({
+        x: c.x, y: c.y, z: c.z,
+        vx: (Math.random() - 0.5) * force, vy: Math.random() * force * 0.8 + 0.6,
+        vz: (Math.random() - 0.5) * force,
+        r: 0.03 + Math.random() * 0.04, t: 0, max: 0.4 + Math.random() * 0.4,
+        kind: Math.random() < 0.6 ? 'spark' : 'dust'
+      });
+    }
+  }
+
+  function step(b, dt) {
+    for (const [, a] of b.actors) A.step(a, dt, b.arena, b.level);
+    if (b.banner) { b.banner.t += dt; if (b.banner.t > 2.6) b.banner = null; }
+    b.shake = Math.max(0, b.shake - dt * 2.5);
+    for (let i = b.popups.length - 1; i >= 0; i--) {
+      const p = b.popups[i]; p.t += dt;
+      if (p.t > 1.5) b.popups.splice(i, 1);
+    }
+    for (let i = b.fx.length - 1; i >= 0; i--) {
+      const p = b.fx[i]; p.t += dt;
+      p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vy -= 9 * dt;
+      if (p.t > p.max) b.fx.splice(i, 1);
+    }
+
+    if (b.busy) {
+      const job = b.busy;
+      if (job.kind === 'move') {
+        if (job.act.mode !== 'walk') {
+          job.u.surface = job.surface;
+          job.surface.occupant = job.u;
+          b.busy = null;
+          if (job.then === 'attack' && job.target && !job.target.dead) attack(b, job.u, job.target);
+          else if (job.u.side === 1) job.u.acted = true;
+          else {
+            // player unit has arrived: offer what it can reach
+            b.targets = targetsFrom(b, job.u, job.surface);
+            b.sel = job.u;
+            b.reach = null;
+            if (!b.targets.length) finishUnit(b, job.u);
+          }
+        }
+      } else if (job.kind === 'fight') {
+        job.t += dt;
+        const blow = job.result.blows[job.i];
+        if (!blow) {
+          if (job.t > 0.5) {
+            b.busy = null;
+            const u = job.att;
+            if (u.side === 0) finishUnit(b, u); else { u.acted = true; checkOver(b); }
+          }
+        } else if (job.stage === 'wind') {
+          const src = blow.src === job.att ? job.aA : job.aD;
+          const dst = blow.src === job.att ? job.aD : job.aA;
+          A.strikeAt(src, dst);
+          job.stage = 'land'; job.t = 0;
+        } else if (job.stage === 'land' && job.t > 0.22) {
+          const src = blow.src === job.att ? job.aA : job.aD;
+          const dst = blow.src === job.att ? job.aD : job.aA;
+          if (blow.hit) {
+            const force = 1.2 + blow.dmg * 0.22 + (blow.crit ? 2.2 : 0);
+            A.takeHit(dst, src.pos.x, src.pos.z, force, blow.killed, blow.crit);
+            K.audio.impact(clamp(blow.dmg / 12, 0.2, 1));
+            popup(b, dst, (blow.crit ? '' : '') + blow.dmg, blow.crit ? 'crit' : 'hit', blow.crit || blow.killed);
+            sparks(b, dst, blow.crit ? 16 : 8, 1.4 + blow.dmg * 0.16);
+            b.shake = Math.min(1, b.shake + (blow.crit ? 0.7 : 0.28) + blow.dmg * 0.02);
+            note(b, blow.src.name + (blow.crit ? ' CRITS ' : ' hits ') + blow.dst.name
+              + ' for ' + blow.dmg + (blow.killed ? ' — down' : ''), blow.crit ? 'crit' : 'hit');
+          } else {
+            popup(b, dst, 'miss', 'miss');
+            note(b, blow.dst.name + ' evades ' + blow.src.name, 'miss');
+          }
+          if (blow.killed) {
+            blow.dst.surface.occupant = null;
+            checkOver(b);
+          }
+          job.i++; job.stage = 'wind'; job.t = 0;
+          if (blow.killed) job.t = -0.6;
+        }
+      }
+      return;
+    }
+
+    if (b.over) return;
+    if (b.phase === 'enemy') {
+      b.aiT -= dt;
+      if (b.aiT <= 0) { b.aiT = 0.45; aiTurn(b); }
+    }
+  }
+
+  return { create, step, select, clearSel, moveTo, attack, targetsFrom, finishUnit,
+           endPhase, living, actorOf, occupied, note, popup, aiTurn };
+})();
+
+/* ---- 07-campaign.js ---- */
+/* IRONWAKE — the run.
+   A single skirmish is a demo. What makes a tactics game worth opening twice
+   is that the people who survived it are the same people you take into the
+   next one, carrying what they learned and what they lost. Four units, no
+   reinforcements you did not earn, and a line of battles that gets heavier
+   every time. */
+K.camp = (function () {
+  const U = K.util, Un = K.units;
+  const { clamp } = U;
+  const KEY = 'ironwake.run.v2';
+
+  const START = [
+    { cls: 'Blade', name: 'VESS', level: 6 },
+    { cls: 'Halberd', name: 'ORD', level: 6 },
+    { cls: 'Archer', name: 'KITE', level: 6 },
+    { cls: 'Ember', name: 'SOLM', level: 6 }
+  ];
+  const RECRUITS = ['HALT', 'WREN', 'COBB', 'IDRIS', 'MARR', 'PELL', 'SAVE', 'TOLL', 'VANE', 'YEW'];
+  const FOES = ['GHAST', 'BULWARK', 'SPINE', 'NEEDLE', 'MAUL', 'CINDER', 'GRIST', 'HOLLOW', 'RASP', 'THRAW'];
+
+  function fresh() {
+    return { wave: 1, best: 0, runs: 0, roster: START.map(u => ({ ...u })), fallen: [], last: null };
+  }
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return fresh();
+      const s = JSON.parse(raw);
+      if (!s || !s.roster || !s.roster.length) return fresh();
+      return s;
+    } catch (e) { return fresh(); }
+  }
+  function save(s) {
+    try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* private mode */ }
+  }
+
+  const KEEP = ['hp', 'maxHp', 'str', 'mag', 'skl', 'spd', 'lck', 'def', 'res', 'mov', 'exp', 'level'];
+
+  /* a unit, flattened to what survives a battle */
+  function snapshot(u) {
+    const o = { cls: u.cls, name: u.name };
+    for (const k of KEEP) o[k] = u[k];
+    return o;
+  }
+
+  /* and back again: make() rolls its own growths, so the saved numbers are
+     written over the top — a veteran is its history, not its class */
+  function restore(spec, side) {
+    // A veteran is restored exactly as it was left. A name on a roster with no
+    // history behind it is somebody new, and rolls its levels like anyone else
+    // — copying a bare level onto level-one stats would quietly hand you four
+    // recruits wearing a veteran's rank.
+    const veteran = spec.maxHp !== undefined;
+    const u = Un.make(spec.cls, side, spec.name, veteran ? 1 : (spec.level || 1));
+    if (veteran) for (const k of KEEP) if (spec[k] !== undefined) u[k] = spec[k];
+    u.hp = u.maxHp;
+    return u;
+  }
+
+  /* the opposition for a given wave: more of them, and better, every time */
+  function enemyPlan(wave, rnd) {
+    const n = clamp(4 + Math.ceil(wave / 2), 5, 8);
+    const lvl = clamp(2 + Math.floor(wave * 1.4), 2, 20);
+    const spots = [
+      [11, 2, 0], [10, 3, 0], [12, 3, 0], [9, 2, 0], [12, 5, 0],
+      [11, 12, 1.5], [12, 11, 1.5], [10, 11, 1.5]
+    ];
+    const pool = ['Reaver', 'Halberd', 'Blade', 'Archer', 'Ember', 'Reaver', 'Blade'];
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const spot = spots[i % spots.length];
+      const cls = i === 0 ? 'Reaver' : i === 1 ? 'Halberd' : pool[Math.floor(rnd() * pool.length)];
+      out.push({
+        cls, name: FOES[i % FOES.length],
+        level: clamp(lvl + (i < 2 ? 1 : 0) - (i > 4 ? 1 : 0), 1, 24),
+        x: spot[0], z: spot[1], y: spot[2],
+        guard: spot[2] > 0, alert: 5
+      });
+    }
+    return out;
+  }
+
+  /* what the player brings: whoever is left, healed, plus a recruit if the
+     line has thinned — never back up to full strength for free */
+  function playerPlan(s) {
+    const out = s.roster.map(spec => ({ ...spec }));
+    if (out.length < 4 && s.wave > 1) {
+      const avg = Math.round(out.reduce((a, u) => a + u.level, 0) / Math.max(1, out.length));
+      const cls = ['Blade', 'Halberd', 'Archer', 'Ember', 'Reaver'][(s.wave * 3 + out.length) % 5];
+      out.push({ cls, name: RECRUITS[(s.wave + out.length) % RECRUITS.length], level: clamp(avg - 2, 1, 20), recruit: true });
+    }
+    return out;
+  }
+
+  /* the field is settled: bank the survivors, count the dead, move on */
+  function afterBattle(s, battle, won) {
+    const mine = battle.units.filter(u => u.side === 0);
+    const lost = mine.filter(u => u.dead).map(u => u.name);
+    s.last = {
+      won, wave: s.wave, lost,
+      survivors: mine.filter(u => !u.dead).map(u => ({ name: u.name, cls: u.cls, level: u.level, exp: u.exp }))
+    };
+    if (won) {
+      s.roster = mine.filter(u => !u.dead).map(snapshot);
+      s.fallen = (s.fallen || []).concat(lost);
+      s.best = Math.max(s.best || 0, s.wave);
+      s.wave++;
+      if (!s.roster.length) { s.runs = (s.runs || 0) + 1; const f = fresh(); f.best = s.best; f.runs = s.runs; Object.assign(s, f, { last: s.last }); }
+    } else {
+      s.runs = (s.runs || 0) + 1;
+      const best = s.best, runs = s.runs, last = s.last;
+      Object.assign(s, fresh(), { best, runs, last });
+    }
+    save(s);
+    return s.last;
+  }
+
+  return { fresh, load, save, snapshot, restore, enemyPlan, playerPlan, afterBattle, START };
+})();
+
+/* ---- 08-render.js ---- */
+/* IRONWAKE — the view.
+   The same software 3D renderer that carried the runner, turned on an arena:
+   perspective projection, near-plane clipping, a painter's sort and fog, all
+   in canvas2d. A tactics map has to be READ, not just seen — so the tiles
+   carry the information (where you can walk, who you can reach, how high the
+   ground is) and the bodies carry the drama. */
+K.render = (function () {
+  const U = K.util;
+  const { clamp, lerp } = U;
+
+  const NEAR = 0.30;
+  const FOG_NEAR = 14, FOG_FAR = 74;
+
+  const SKY = ['#101827', '#1b2438', '#2b3247', '#3a3140'];
+  const FOG = [43, 50, 71];
+
+  function rgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  function mix(a, b, t) {
+    return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  }
+  function css(c, a) {
+    return 'rgba(' + (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0) + ',' + (a === undefined ? 1 : a) + ')';
+  }
+  function hash(i) {
+    let h = Math.imul(i ^ 0x9e3779b9, 0x85ebca6b);
+    h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  }
+
+  const SIDE = [
+    { body: [232, 236, 246], accent: '#7fd8ff', ring: '#7fd8ff' },   // yours
+    { body: [226, 176, 168], accent: '#ff7d6b', ring: '#ff7d6b' }    // theirs
+  ];
+
+  /* ---------------------------------------------------------------- camera */
+
+  function Camera(arena) {
+    return {
+      x: 0, y: 0, z: 0,
+      tx: 0, ty: 0.9, tz: 0,        // what we look at
+      fx: 0, fy: 0.9, fz: 0,        // where we want to look
+      yaw: 2.35, pitch: 0.88, dist: 28,
+      wantYaw: 2.35, wantPitch: 0.88, wantDist: 28,
+      shake: 0, fov: 1
+    };
+  }
+
+  function camUpdate(cam, dt) {
+    cam.yaw = lerp(cam.yaw, cam.wantYaw, clamp(dt * 9, 0, 1));
+    cam.pitch = lerp(cam.pitch, clamp(cam.wantPitch, 0.16, 1.32), clamp(dt * 9, 0, 1));
+    cam.dist = lerp(cam.dist, clamp(cam.wantDist, 7, 40), clamp(dt * 6, 0, 1));
+    cam.tx = lerp(cam.tx, cam.fx, clamp(dt * 3.4, 0, 1));
+    cam.ty = lerp(cam.ty, cam.fy, clamp(dt * 3.4, 0, 1));
+    cam.tz = lerp(cam.tz, cam.fz, clamp(dt * 3.4, 0, 1));
+    const ch = Math.cos(cam.pitch);
+    cam.x = cam.tx - Math.sin(cam.yaw) * ch * cam.dist;
+    cam.y = cam.ty + Math.sin(cam.pitch) * cam.dist;
+    cam.z = cam.tz - Math.cos(cam.yaw) * ch * cam.dist;
+    cam.shake = Math.max(0, cam.shake - dt * 2.4);
+  }
+
+  function View(canvas) {
+    return { canvas, ctx: canvas.getContext('2d'), w: 0, h: 0, dpr: 1, f: 500, items: [], fog: FOG };
+  }
+
+  function resize(v) {
+    const r = v.canvas.getBoundingClientRect();
+    // fill rate is the whole cost of a software renderer: a phone at 3x is
+    // drawing nine times the pixels of a phone at 1x for no visible gain
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.7);
+    v.w = r.width; v.h = r.height; v.dpr = dpr;
+    v.canvas.width = Math.max(1, Math.round(r.width * dpr));
+    v.canvas.height = Math.max(1, Math.round(r.height * dpr));
+  }
+
+  function setCamera(v, cam, sx, sy) {
+    let fx = cam.tx - cam.x, fy = cam.ty - cam.y, fz = cam.tz - cam.z;
+    const fl = Math.hypot(fx, fy, fz) || 1;
+    fx /= fl; fy /= fl; fz /= fl;
+    let rx = -fz, ry = 0, rz = fx;                       // fwd x worldUp
+    const rl = Math.hypot(rx, ry, rz) || 1;
+    rx /= rl; ry /= rl; rz /= rl;
+    const ux = ry * fz - rz * fy, uy = rz * fx - rx * fz, uz = rx * fy - ry * fx;  // right x fwd
+    const fovY = 1.02 / (cam.fov || 1);
+    v.f = (v.h * 0.5) / Math.tan(fovY * 0.5);
+    v.cam = { x: cam.x, y: cam.y, z: cam.z, fx, fy, fz, rx, ry, rz, ux, uy, uz, sx: sx || 0, sy: sy || 0 };
+    const dfwd = fz, dup = uz;
+    v.horizonY = dfwd > 0.01 ? v.h * (0.5 + FRAME) - v.f * (dup / dfwd) : -v.h;
+  }
+
+  function proj(v, x, y, z) {
+    const c = v.cam;
+    const dx = x - c.x, dy = y - c.y, dz = z - c.z;
+    return {
+      cx: dx * c.rx + dy * c.ry + dz * c.rz,
+      cy: dx * c.ux + dy * c.uy + dz * c.uz,
+      cz: dx * c.fx + dy * c.fy + dz * c.fz
+    };
+  }
+  /* The board is framed a little below centre: the status bar lives at the top
+     of a phone and the far rank of a tactics map is the last thing that should
+     be hiding under it. */
+  const FRAME = 0.055;
+  function toScreen(v, p) {
+    const s = v.f / p.cz;
+    return { x: v.w / 2 + p.cx * s + v.cam.sx, y: v.h * (0.5 + FRAME) - p.cy * s + v.cam.sy, s, z: p.cz };
+  }
+  function screenOf(v, x, y, z) {
+    const p = proj(v, x, y, z);
+    if (p.cz < NEAR) return null;
+    return toScreen(v, p);
+  }
+
+  function clipNear(pts) {
+    const out = [];
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      const ain = a.cz > NEAR, bin = b.cz > NEAR;
+      if (ain) out.push(a);
+      if (ain !== bin) {
+        const t = (NEAR - a.cz) / (b.cz - a.cz);
+        out.push({ cx: a.cx + (b.cx - a.cx) * t, cy: a.cy + (b.cy - a.cy) * t, cz: NEAR });
+      }
+    }
+    return out;
+  }
+
+  function path(v, ctx, camPts) {
+    const pts = clipNear(camPts);
+    if (pts.length < 3) return false;
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const s = toScreen(v, pts[i]);
+      if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+    }
+    ctx.closePath();
+    return true;
+  }
+  function fillPoly(v, ctx, camPts, style) {
+    if (path(v, ctx, camPts)) { ctx.fillStyle = style; ctx.fill(); }
+  }
+  function strokePoly(v, ctx, camPts, style, w) {
+    if (path(v, ctx, camPts)) { ctx.strokeStyle = style; ctx.lineWidth = w; ctx.stroke(); }
+  }
+
+  /* ----------------------------------------------------------------- boxes */
+
+  const FACES = [
+    { i: [4, 5, 6, 7], n: [0, 1, 0], k: 1.00, side: -1 },
+    { i: [0, 1, 5, 4], n: [0, 0, -1], k: 0.74, side: 3 },
+    { i: [2, 3, 7, 6], n: [0, 0, 1], k: 0.44, side: 2 },
+    { i: [3, 0, 4, 7], n: [-1, 0, 0], k: 0.58, side: 1 },
+    { i: [1, 2, 6, 5], n: [1, 0, 0], k: 0.64, side: 0 }
+  ];
+
+  /* depth of the corner nearest the camera: a slab that stands between the
+     camera and a body must be painted after it, and a slab's centre is a
+     poor witness to that */
+  function boxDepth(v, b) {
+    const c = v.cam;
+    let best = 1e9;
+    for (let i = 0; i < 8; i++) {
+      const x = (i & 1) ? b.x1 : b.x0, y = (i & 2) ? b.y1 : b.y0, z = (i & 4) ? b.z1 : b.z0;
+      const d = (x - c.x) * c.fx + (y - c.y) * c.fy + (z - c.z) * c.fz;
+      if (d < best) best = d;
+    }
+    return best;
+  }
+
+  /* colour strings are the renderer's hidden cost: building a few thousand
+     rgba() strings a second is real work, and there are only a few dozen
+     distinct shades on the board */
+  const styleCache = new Map();
+  function shadeOf(base, k, fogT, fog, key) {
+    const bucket = Math.round(fogT * 8);
+    const ck = key + '|' + k + '|' + bucket;
+    let s = styleCache.get(ck);
+    if (s === undefined) {
+      s = css(mix(mix(base, [6, 7, 12], 1 - k), fog, (bucket / 8) * 0.9));
+      styleCache.set(ck, s);
+    }
+    return s;
+  }
+
+  function boxItem(v, b, base, opts) {
+    opts = opts || {};
+    const c = v.cam;
+    const depth = boxDepth(v, b);
+    if (depth > FOG_FAR + 40) return;
+    const cy = (b.y0 + b.y1) / 2;
+    const centre = ((b.x0 + b.x1) / 2 - c.x) * c.fx + (cy - c.y) * c.fy + ((b.z0 + b.z1) / 2 - c.z) * c.fz;
+    if (centre < -6) return;
+    const corners = [
+      [b.x0, b.y0, b.z0], [b.x1, b.y0, b.z0], [b.x1, b.y0, b.z1], [b.x0, b.y0, b.z1],
+      [b.x0, b.y1, b.z0], [b.x1, b.y1, b.z0], [b.x1, b.y1, b.z1], [b.x0, b.y1, b.z1]
+    ].map(p => proj(v, p[0], p[1], p[2]));
+    // screen-space cull: a tile nobody can see still costs five fills
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, near = false;
+    for (const p of corners) {
+      if (p.cz < NEAR) { near = true; continue; }
+      const s = v.f / p.cz;
+      const sx = v.w / 2 + p.cx * s, sy = v.h / 2 - p.cy * s;
+      if (sx < x0) x0 = sx; if (sx > x1) x1 = sx;
+      if (sy < y0) y0 = sy; if (sy > y1) y1 = sy;
+    }
+    if (!near) {
+      if (x1 < -24 || x0 > v.w + 24 || y1 < -24 || y0 > v.h + 24) return;
+    }
+    const fogT = clamp((centre - FOG_NEAR) / (FOG_FAR - FOG_NEAR), 0, 1);
+    v.items.push({
+      z: depth,
+      draw: (ctx) => {
+        for (const F of FACES) {
+          if (F.side >= 0 && opts.open && !opts.open[F.side]) continue;
+          const fx = F.n[0] > 0 ? b.x1 : F.n[0] < 0 ? b.x0 : (b.x0 + b.x1) / 2;
+          const fy = F.n[1] > 0 ? b.y1 : F.n[1] < 0 ? b.y0 : (b.y0 + b.y1) / 2;
+          const fz = F.n[2] > 0 ? b.z1 : F.n[2] < 0 ? b.z0 : (b.z0 + b.z1) / 2;
+          if ((fx - c.x) * F.n[0] + (fy - c.y) * F.n[1] + (fz - c.z) * F.n[2] > 0) continue;
+          fillPoly(v, ctx, F.i.map(i => corners[i]),
+            opts.key ? shadeOf(base, F.k, fogT, v.fog, opts.key) : css(mix(mix(base, [6, 7, 12], 1 - F.k), v.fog, fogT * 0.9)));
+        }
+        if (opts.edge) {
+          strokePoly(v, ctx, [corners[4], corners[5], corners[6], corners[7]],
+            css(mix(rgb(opts.edge), v.fog, fogT), opts.edgeA === undefined ? 0.30 : opts.edgeA), 1.1);
+        }
+      }
+    });
+  }
+
+  /* --------------------------------------------------------------- arena */
+
+  function tileQuad(v, arena, s, lift) {
+    const T = K.grid.TILE, w = arena.world(s), h = T / 2 - 0.03, y = s.y + (lift || 0);
+    return [
+      proj(v, w.x - h, y, w.z - h), proj(v, w.x + h, y, w.z - h),
+      proj(v, w.x + h, y, w.z + h), proj(v, w.x - h, y, w.z + h)
+    ];
+  }
+
+  function drawArena(v, g) {
+    const b = g.battle, arena = b.arena, T = K.grid.TILE;
+    for (const s of arena.surfaces) {
+      const w = arena.world(s);
+      const box = {
+        x0: w.x - T / 2, x1: w.x + T / 2,
+        y0: s.y - Math.max(0.18, s.solid), y1: s.y,
+        z0: w.z - T / 2, z1: w.z + T / 2
+      };
+      const tint = rgb(s.t.col);
+      const n = hash(s.id * 977);
+      boxItem(v, box, mix(tint, [255, 255, 255], 0.03 + Math.round(n * 3) * 0.017), {
+        open: s.open, key: s.terrain + (Math.round(n * 3)),
+        edge: s.terrain === 'bridge' || s.terrain === 'fort' || s.terrain === 'roof' ? '#8d9ab5' : '#6d7791',
+        edgeA: 0.22
+      });
+    }
+  }
+
+  /* the overlays are the game's language: where you may go, who you may hit */
+  function drawOverlays(v, g) {
+    const b = g.battle, arena = b.arena;
+    const t = g.t;
+    const puls = 0.5 + 0.5 * Math.sin(t * 3.4);
+
+    const T = K.grid.TILE;
+    const paint = (s, col, a, edge) => {
+      const q = tileQuad(v, arena, s, 0.035);
+      const w = arena.world(s);
+      const depth = boxDepth(v, {
+        x0: w.x - T / 2, x1: w.x + T / 2,
+        y0: s.y - Math.max(0.18, s.solid), y1: s.y,
+        z0: w.z - T / 2, z1: w.z + T / 2
+      });
+      v.items.push({
+        z: depth - 0.05,
+        draw: (ctx) => {
+          fillPoly(v, ctx, q, css(col, a));
+          if (edge) strokePoly(v, ctx, q, css(col, Math.min(1, a * 2.4)), 1.4);
+        }
+      });
+    };
+
+    if (b.reach && b.sel) {
+      const inRange = new Set();
+      for (const [, e] of b.reach) inRange.add(e.s.x + ',' + e.s.z);
+      for (const [, e] of b.reach) {
+        if (e.s === b.sel.surface) continue;
+        if (b.occupiedFn && b.occupiedFn(e.s)) continue;
+        // only the outside of the range gets an edge: a grid of outlines is
+        // noise, one silhouette is information
+        const rim = !inRange.has((e.s.x + 1) + ',' + e.s.z) || !inRange.has((e.s.x - 1) + ',' + e.s.z)
+          || !inRange.has(e.s.x + ',' + (e.s.z + 1)) || !inRange.has(e.s.x + ',' + (e.s.z - 1));
+        paint(e.s, [86, 178, 255], 0.20 + puls * 0.05, rim);
+      }
+    }
+    // tapping one of theirs asks the only question that matters before you
+    // step out: where can it reach me next turn?
+    if (g.threat && g.threat.length) {
+      const set = new Set(g.threat.map(s => s.x + ',' + s.z));
+      for (const s of g.threat) {
+        const rim = !set.has((s.x + 1) + ',' + s.z) || !set.has((s.x - 1) + ',' + s.z)
+          || !set.has(s.x + ',' + (s.z + 1)) || !set.has(s.x + ',' + (s.z - 1));
+        paint(s, [255, 122, 96], 0.16 + puls * 0.04, rim);
+      }
+    }
+    for (const u of b.targets || []) {
+      if (u.dead) continue;
+      paint(u.surface, [255, 96, 84], 0.30 + puls * 0.14, true);
+    }
+    if (g.hover) paint(g.hover, [244, 246, 255], 0.16 + puls * 0.08, true);
+
+    if (g.pathPreview && g.pathPreview.length > 1) {
+      const pts = g.pathPreview.map(s => { const w = arena.world(s); return { x: w.x, y: s.y + 0.06, z: w.z }; });
+      const depth = boxDepth(v, { x0: pts[0].x, x1: pts[0].x, y0: pts[0].y, y1: pts[0].y, z0: pts[0].z, z1: pts[0].z });
+      v.items.push({
+        z: depth - 0.12,
+        draw: (ctx) => {
+          ctx.lineWidth = 3.4; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+          ctx.strokeStyle = 'rgba(150,214,255,0.85)';
+          ctx.beginPath();
+          let started = false;
+          for (const p of pts) {
+            const s = screenOf(v, p.x, p.y, p.z);
+            if (!s) { started = false; continue; }
+            if (!started) { ctx.moveTo(s.x, s.y); started = true; } else ctx.lineTo(s.x, s.y);
+          }
+          ctx.stroke();
+          const last = pts[pts.length - 1];
+          const s = screenOf(v, last.x, last.y, last.z);
+          if (s) {
+            ctx.fillStyle = 'rgba(150,214,255,0.9)';
+            ctx.beginPath(); ctx.arc(s.x, s.y, Math.max(3, 0.16 * s.s), 0, 7); ctx.fill();
+          }
+        }
+      });
+    }
+  }
+
+  /* ---------------------------------------------------------------- bodies */
+
+  const LIMBS = [
+    ['hipL', 'kneeL', 0.090], ['kneeL', 'footL', 0.074], ['footL', 'toeL', 0.060],
+    ['hipR', 'kneeR', 0.090], ['kneeR', 'footR', 0.074], ['footR', 'toeR', 0.060],
+    ['shL', 'elbowL', 0.061], ['elbowL', 'handL', 0.051],
+    ['shR', 'elbowR', 0.061], ['elbowR', 'handR', 0.051],
+    ['hipL', 'hipR', 0.084], ['shL', 'shR', 0.094],
+    ['pelvis', 'chest', 0.124], ['chest', 'head', 0.067]
+  ];
+
+  function weaponHand(a) {
+    const p = a.body.parts;
+    return a.face > 0 ? p.handR : p.handL;
+  }
+
+  function drawWeapon(v, ctx, a, fogT, col) {
+    const u = a.unit, kind = u.weapon.kind;
+    const h = weaponHand(a), p = a.body.parts;
+    const el = a.face > 0 ? p.elbowR : p.elbowL;
+    let dx = h.x - el.x, dy = h.y - el.y + 0.16, dz = h.z - el.z;
+    const d = Math.hypot(dx, dy, dz) || 1;
+    dx /= d; dy /= d; dz /= d;
+    const len = kind === 'lance' ? 1.15 : kind === 'axe' ? 0.60 : kind === 'sword' ? 0.58 : 0.50;
+    const a0 = screenOf(v, h.x - dx * 0.10, h.y - dy * 0.10, h.z - dz * 0.10);
+    const a1 = screenOf(v, h.x + dx * len, h.y + dy * len, h.z + dz * len);
+    if (!a0 || !a1) return;
+    if (kind === 'tome') {
+      const gl = ctx.createRadialGradient(a0.x, a0.y, 0, a0.x, a0.y, Math.max(5, 0.5 * a0.s));
+      gl.addColorStop(0, 'rgba(255,190,120,0.85)');
+      gl.addColorStop(1, 'rgba(255,120,60,0)');
+      ctx.fillStyle = gl;
+      ctx.beginPath(); ctx.arc(a0.x, a0.y, Math.max(5, 0.5 * a0.s), 0, 7); ctx.fill();
+      return;
+    }
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = css(mix([18, 18, 26], v.fog, fogT), 0.9);
+    ctx.lineWidth = Math.max(2.4, (kind === 'lance' ? 0.05 : 0.07) * a0.s + 2);
+    ctx.beginPath(); ctx.moveTo(a0.x, a0.y); ctx.lineTo(a1.x, a1.y); ctx.stroke();
+    ctx.strokeStyle = css(mix(col, [255, 255, 255], 0.45), 0.95);
+    ctx.lineWidth = Math.max(1.2, (kind === 'lance' ? 0.03 : 0.045) * a0.s);
+    ctx.beginPath();
+    if (kind === 'bow') {
+      const mx = (a0.x + a1.x) / 2, my = (a0.y + a1.y) / 2;
+      ctx.moveTo(a0.x, a0.y);
+      ctx.quadraticCurveTo(mx + (a1.y - a0.y) * 0.4, my - (a1.x - a0.x) * 0.4, a1.x, a1.y);
+    } else {
+      ctx.moveTo(a0.x, a0.y); ctx.lineTo(a1.x, a1.y);
+    }
+    ctx.stroke();
+    if (kind === 'axe') {
+      ctx.fillStyle = css(mix(col, [255, 255, 255], 0.4), 0.95);
+      ctx.beginPath(); ctx.arc(a1.x, a1.y, Math.max(2.5, 0.12 * a1.s), 0, 7); ctx.fill();
+    }
+  }
+
+  function bodyItem(v, g, a) {
+    const P = a.body.parts;
+    const c = v.cam;
+    const pel = P.pelvis;
+    const depth = (pel.x - c.x) * c.fx + (pel.y - c.y) * c.fy + (pel.z - c.z) * c.fz;
+    if (depth < NEAR) return;
+    const fogT = clamp((depth - FOG_NEAR) / (FOG_FAR - FOG_NEAR), 0, 1);
+    const S = SIDE[a.unit.side];
+    const dead = a.unit.dead;
+    const skin = dead ? mix(S.body, [70, 66, 74], 0.55) : S.body;
+    const acc = rgb(S.accent);
+    v.items.push({
+      z: depth - 0.35,
+      draw: (ctx) => {
+        // shadow first, on whatever surface is under the hips
+        const gr = g.battle.level.groundAt(pel.x, pel.z, pel.y + 0.3);
+        if (gr) {
+          const s = screenOf(v, pel.x, gr.y + 0.03, pel.z);
+          if (s) {
+            const height = clamp(pel.y - gr.y, 0, 4);
+            ctx.save();
+            ctx.globalAlpha = clamp(0.30 - height * 0.05, 0.04, 0.30);
+            ctx.fillStyle = '#000';
+            const rx = (0.40 + height * 0.10) * s.s;
+            ctx.beginPath(); ctx.ellipse(s.x, s.y, rx, rx * 0.42, 0, 0, 7); ctx.fill();
+            ctx.restore();
+          }
+        }
+        // a ring under the unit: side, whether it has acted, whether it is picked
+        if (!dead) {
+          const gy = (gr ? gr.y : a.pos.y) + 0.035;
+          const sel = g.battle.sel === a.unit;
+          const spent = a.unit.acted;
+          const r = 0.62;
+          const pts = [];
+          for (let i = 0; i < 22; i++) {
+            const th = i / 22 * Math.PI * 2;
+            pts.push(proj(v, pel.x + Math.cos(th) * r, gy, pel.z + Math.sin(th) * r));
+          }
+          const puls = sel ? 0.55 + 0.45 * Math.sin(g.t * 5) : 1;
+          strokePoly(v, ctx, pts, css(spent ? [120, 126, 142] : rgb(S.ring), (spent ? 0.35 : 0.75) * puls), sel ? 3 : 1.8);
+          if (sel) fillPoly(v, ctx, pts, css(rgb(S.ring), 0.10));
+        }
+
+        // A stroke costs an order of magnitude more than a fill in a software
+        // canvas, and a body drawn limb by limb, outlined and filled, is
+        // twenty-eight of them. The segments are bucketed into a heavy group
+        // and a light one and each is stroked twice — four strokes a body, and
+        // the silhouette still reads.
+        const heavy = [], light = [];
+        let hz = 0, lz = 0;
+        for (const [p0, p1, w] of LIMBS) {
+          const pa = proj(v, P[p0].x, P[p0].y, P[p0].z), pb = proj(v, P[p1].x, P[p1].y, P[p1].z);
+          if (pa.cz < NEAR || pb.cz < NEAR) continue;
+          const seg = { z: (pa.cz + pb.cz) / 2, a: toScreen(v, pa), b: toScreen(v, pb), w };
+          if (w >= 0.08) { heavy.push(seg); hz += seg.z; } else { light.push(seg); lz += seg.z; }
+        }
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        const alpha = dead ? 0.72 : 1;
+        const ink = 'rgba(8,8,13,' + (0.85 * alpha) + ')';
+        const flesh = css(mix(mix(skin, [26, 24, 34], clamp((depth - 6) / 22, 0, 0.35)), v.fog, fogT * 0.7), alpha);
+        const scale = P.pelvis ? (v.f / Math.max(NEAR, depth)) : 1;
+        const bucket = (list, wide) => {
+          if (!list.length) return;
+          const w = Math.max(1.3, wide * 2 * scale);
+          ctx.beginPath();
+          for (const s of list) { ctx.moveTo(s.a.x, s.a.y); ctx.lineTo(s.b.x, s.b.y); }
+          ctx.strokeStyle = ink; ctx.lineWidth = w + Math.max(1.5, w * 0.30); ctx.stroke();
+          ctx.strokeStyle = flesh; ctx.lineWidth = w; ctx.stroke();
+        };
+        // whichever group is further away is laid down first
+        const heavyFirst = (heavy.length ? hz / heavy.length : 0) >= (light.length ? lz / light.length : 0);
+        if (heavyFirst) { bucket(heavy, 0.098); bucket(light, 0.060); }
+        else { bucket(light, 0.060); bucket(heavy, 0.098); }
+        const hp = screenOf(v, P.head.x, P.head.y, P.head.z);
+        if (hp) {
+          const r = Math.max(2, 0.125 * hp.s);
+          ctx.fillStyle = 'rgba(8,8,13,' + (0.85 * alpha) + ')';
+          ctx.beginPath(); ctx.arc(hp.x, hp.y, r + Math.max(1.5, r * 0.24), 0, 7); ctx.fill();
+          ctx.fillStyle = css(mix(skin, v.fog, fogT * 0.7), alpha);
+          ctx.beginPath(); ctx.arc(hp.x, hp.y, r, 0, 7); ctx.fill();
+          if (!dead) {
+            ctx.strokeStyle = css(mix(acc, [255, 255, 255], 0.3), 0.6);
+            ctx.lineWidth = Math.max(1, r * 0.24);
+            ctx.beginPath(); ctx.arc(hp.x, hp.y, r, -2.5, -0.4); ctx.stroke();
+          }
+        }
+        drawWeapon(v, ctx, a, fogT, acc);
+      }
+    });
+  }
+
+  /* ------------------------------------------------------------ billboards */
+
+  /* Canvas re-parses the font every time the string changes, and a size that
+     follows the perspective changes it every frame for every unit — which
+     turned out to cost more than the entire arena. Sizes are quantised so the
+     same handful of strings repeat. */
+  const FONT = [];
+  function font(px, weight) {
+    const n = Math.max(8, Math.min(34, Math.round(px / 2) * 2));
+    const k = (weight || 600) + '_' + n;
+    let s = FONT[k];
+    if (!s) { s = FONT[k] = (weight || 600) + ' ' + n + 'px "IBM Plex Mono", ui-monospace, monospace'; }
+    return s;
+  }
+
+  function billboards(v, ctx, g) {
+    const b = g.battle;
+    const list = [];
+    for (const u of b.units) {
+      const a = b.actors.get(u.id);
+      if (!a) continue;
+      const h = a.body.parts.head;
+      const s = screenOf(v, h.x, h.y + 0.42, h.z);
+      if (!s || s.z > 52) continue;
+      list.push({ u, a, s });
+    }
+    list.sort((p, q) => q.s.z - p.s.z);
+    for (const it of list) {
+      const { u, s } = it;
+      const w = clamp(1.05 * s.s, 22, 74), hgt = Math.max(3, w * 0.085);
+      const fade = clamp(1 - (s.z - 34) / 18, 0.25, 1);
+      ctx.globalAlpha = fade;
+      if (!u.dead) {
+        ctx.fillStyle = 'rgba(6,7,12,0.72)';
+        ctx.fillRect(s.x - w / 2 - 1, s.y - hgt - 1, w + 2, hgt + 2);
+        const frac = clamp(u.hp / u.maxHp, 0, 1);
+        ctx.fillStyle = u.side === 0
+          ? (frac > 0.5 ? '#7fe0b0' : frac > 0.25 ? '#ffd479' : '#ff7b6b')
+          : (frac > 0.5 ? '#ff9a86' : '#ff6a58');
+        ctx.fillRect(s.x - w / 2, s.y - hgt, w * frac, hgt);
+        // segment ticks make small chip damage legible
+        ctx.strokeStyle = 'rgba(8,9,14,0.6)'; ctx.lineWidth = 1;
+        const seg = Math.max(4, Math.round(u.maxHp / 5));
+        for (let i = seg; i < u.maxHp; i += seg) {
+          const x = s.x - w / 2 + w * (i / u.maxHp);
+          ctx.beginPath(); ctx.moveTo(x, s.y - hgt); ctx.lineTo(x, s.y); ctx.stroke();
+        }
+      }
+      ctx.textAlign = 'center';
+      ctx.font = font(clamp(0.30 * s.s, 8, 15));
+      ctx.fillStyle = u.dead ? 'rgba(150,152,166,0.8)'
+        : u.side === 0 ? 'rgba(226,238,255,0.95)' : 'rgba(255,206,196,0.95)';
+      ctx.fillText(u.dead ? '✕ ' + u.name : u.name, s.x, s.y - hgt - 5);
+      ctx.globalAlpha = 1;
+    }
+
+    // floating numbers: the only place a raw damage figure belongs
+    ctx.textAlign = 'center';
+    for (const p of g.battle.popups) {
+      const s = screenOf(v, p.x, p.y + p.t * 1.1, p.z);
+      if (!s) continue;
+      const a = clamp(1.5 - p.t, 0, 1) * clamp(p.t * 6, 0, 1);
+      ctx.globalAlpha = a;
+      ctx.font = font(clamp((p.big ? 0.52 : 0.38) * s.s, 11, p.big ? 34 : 24), 700);
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(4,5,9,0.8)';
+      ctx.strokeText(p.text, s.x, s.y);
+      ctx.fillStyle = p.kind === 'crit' ? '#ffd166' : p.kind === 'miss' ? '#a8b0c4'
+        : p.kind === 'heal' ? '#8affc0' : p.kind === 'level' ? '#9ad8ff' : '#ffffff';
+      ctx.fillText(p.text, s.x, s.y);
+      ctx.globalAlpha = 1;
+    }
+    ctx.textAlign = 'left';
+  }
+
+  /* ---------------------------------------------------------------- frame */
+
+  function frame(v, g, dt) {
+    const ctx = v.ctx;
+    ctx.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+    v.fog = FOG;
+    const cam = g.cam;
+    const sh = cam.shake;
+    setCamera(v, cam, (Math.random() - 0.5) * sh * 12, (Math.random() - 0.5) * sh * 12);
+
+    const hy = clamp(v.horizonY, -v.h * 2, v.h * 1.8);
+    const sky = ctx.createLinearGradient(0, hy - v.h * 1.2, 0, hy + v.h * 0.4);
+    sky.addColorStop(0, SKY[0]); sky.addColorStop(0.5, SKY[1]);
+    sky.addColorStop(0.85, SKY[2]); sky.addColorStop(1, SKY[3]);
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, v.w, v.h);
+    if (hy < v.h) {
+      const deep = ctx.createLinearGradient(0, hy, 0, v.h);
+      deep.addColorStop(0, css(mix(FOG, [10, 12, 20], 0.4), 0.95));
+      deep.addColorStop(1, 'rgba(6,7,12,1)');
+      ctx.fillStyle = deep; ctx.fillRect(0, hy, v.w, v.h - hy);
+    }
+
+    v.items.length = 0;
+    drawArena(v, g);
+    drawOverlays(v, g);
+    for (const [, a] of g.battle.actors) bodyItem(v, g, a);
+    for (const p of g.battle.fx) {
+      const cp = proj(v, p.x, p.y, p.z);
+      if (cp.cz < NEAR) continue;
+      v.items.push({
+        z: cp.cz - 0.4,
+        draw: (ctx2) => {
+          const s = toScreen(v, cp);
+          const a = clamp(1 - p.t / p.max, 0, 1);
+          ctx2.globalAlpha = a * (p.kind === 'spark' ? 0.95 : 0.4);
+          ctx2.fillStyle = p.kind === 'spark' ? '#ffd9a0' : '#cfd6e6';
+          ctx2.beginPath(); ctx2.arc(s.x, s.y, Math.max(0.8, p.r * s.s), 0, 7); ctx2.fill();
+          ctx2.globalAlpha = 1;
+        }
+      });
+    }
+
+    v.items.sort((a, b) => b.z - a.z);
+    for (const it of v.items) it.draw(ctx);
+
+    billboards(v, ctx, g);
+
+    const vg = ctx.createRadialGradient(v.w / 2, v.h * 0.5, v.h * 0.3, v.w / 2, v.h * 0.5, v.h * 0.98);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.5)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, v.w, v.h);
+  }
+
+  /* ----------------------------------------------------------------- pick */
+
+  /* A tap has to mean the tile the finger is over, on the level it looks like.
+     Projecting tile centres and taking the nearest gets a bridge confused with
+     the courtyard beneath it, so this casts the actual ray. */
+  function pick(v, sx, sy, arena) {
+    if (!v.cam) return null;
+    const c = v.cam;
+    const ax = (sx - v.w / 2) / v.f, ay = (v.h * (0.5 + FRAME) - sy) / v.f;
+    const dx = c.fx + c.rx * ax + c.ux * ay;
+    const dy = c.fy + c.ry * ax + c.uy * ay;
+    const dz = c.fz + c.rz * ax + c.uz * ay;
+    const T = K.grid.TILE;
+    let best = null;
+    for (const s of arena.surfaces) {
+      const w = arena.world(s);
+      const b = {
+        x0: w.x - T / 2, x1: w.x + T / 2,
+        y0: s.y - Math.max(0.18, s.solid), y1: s.y,
+        z0: w.z - T / 2, z1: w.z + T / 2
+      };
+      let t0 = 0, t1 = 1e9;
+      let ok = true;
+      const slab = (o, d, lo, hi) => {
+        if (Math.abs(d) < 1e-9) { if (o < lo || o > hi) ok = false; return; }
+        let a = (lo - o) / d, bb = (hi - o) / d;
+        if (a > bb) { const tmp = a; a = bb; bb = tmp; }
+        if (a > t0) t0 = a;
+        if (bb < t1) t1 = bb;
+        if (t0 > t1) ok = false;
+      };
+      slab(c.x, dx, b.x0, b.x1); if (!ok) continue;
+      slab(c.y, dy, b.y0, b.y1); if (!ok) continue;
+      slab(c.z, dz, b.z0, b.z1); if (!ok) continue;
+      if (t1 < 0) continue;
+      const t = t0 > 0 ? t0 : t1;
+      if (!best || t < best.t) best = { t, s };
+    }
+    return best ? best.s : null;
+  }
+
+  return { View, resize, frame, pick, Camera, camUpdate, screenOf, SIDE };
+})();
+
+/* ---- 09-audio.js ---- */
+/* KINESIS — sound, synthesised on the fly. No files to load, nothing to
+   wait for. Off until the player asks for it, because a game that starts
+   making noise on a phone is a game that gets closed. */
+K.audio = (function () {
+  let ctx = null, master = null, on = false, last = {};
+
+  function init() {
+    if (ctx) return true;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return false;
+      ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = 0.32;
+      master.connect(ctx.destination);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function enable(v) {
+    on = v;
+    if (v) { if (init() && ctx.state === 'suspended') ctx.resume(); }
+  }
+
+  function noiseBuffer(dur) {
+    const n = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    return buf;
+  }
+
+  function throttle(key, ms) {
+    const t = performance.now();
+    if (last[key] && t - last[key] < ms) return false;
+    last[key] = t; return true;
+  }
+
+  function noise(dur, freq, q, gain, type) {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(dur);
+    const f = ctx.createBiquadFilter();
+    f.type = type || 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(gain, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+    src.connect(f); f.connect(g); g.connect(master);
+    src.start();
+  }
+
+  function tone(f0, f1, dur, gain, type) {
+    const o = ctx.createOscillator();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(f0, ctx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), ctx.currentTime + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(gain, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+    o.connect(g); g.connect(master);
+    o.start(); o.stop(ctx.currentTime + dur + 0.02);
+  }
+
+  const api = {
+    enable, isOn: () => on,
+    step(v) { if (!on || !ctx || !throttle('step', 90)) return; noise(0.09, 900 + Math.random() * 500, 1.2, 0.05 + v * 0.06); },
+    impact(v) {
+      if (!on || !ctx || !throttle('impact', 60)) return;
+      noise(0.22, 240, 0.8, 0.10 + v * 0.28, 'lowpass');
+      tone(120 + v * 60, 40, 0.20, 0.10 + v * 0.2, 'sine');
+    },
+    jump() { if (!on || !ctx) return; noise(0.16, 500, 0.9, 0.07, 'highpass'); },
+    grab() { if (!on || !ctx) return; noise(0.10, 2200, 4, 0.10); tone(420, 620, 0.10, 0.06, 'triangle'); },
+    gate() {
+      if (!on || !ctx) return;
+      [392, 523, 659].forEach((f, i) => setTimeout(() => on && tone(f, f, 0.5, 0.09, 'triangle'), i * 90));
+    },
+    buy() { if (!on || !ctx) return; tone(660, 880, 0.08, 0.05, 'square'); },
+    down() { if (!on || !ctx) return; tone(180, 60, 0.5, 0.12, 'sawtooth'); }
+  };
+  return api;
+})();
+
+/* ---- 10-ui.js ---- */
+/* IRONWAKE — the readable half.
+   Everything a tactics game asks you to weigh is a number, and numbers belong
+   in DOM, not painted into a canvas at whatever size the perspective felt
+   like. The canvas shows the fight; this shows the decision. */
+K.ui = (function () {
+  const U = K.util, Un = K.units;
+  const { clamp } = U;
+  const $ = (id) => document.getElementById(id);
+  let el = {}, H = {};
+
+  function init(handlers) {
+    H = handlers;
+    el = {
+      phase: $('phase'), phaseB: $('phase').querySelector('b'), turn: $('turn'),
+      tallyMine: $('tallyMine'), tallyTheirs: $('tallyTheirs'),
+      banner: $('banner'), bannerB: $('banner').querySelector('b'), bannerS: $('banner').querySelector('span'),
+      card: $('card'), cName: $('cName'), cClass: $('cClass'), cHp: $('cHp'), cMax: $('cMax'),
+      cHpFill: $('cHpFill'), cStats: $('cStats'), cWeapon: $('cWeapon'), cTerrain: $('cTerrain'),
+      forecast: $('forecast'), fcA: $('fcA'), fcB: $('fcB'), fcVs: $('fcVs'),
+      btnAttack: $('btnAttack'), btnWait: $('btnWait'), btnCancel: $('btnCancel'), btnEnd: $('btnEnd'),
+      hint: $('hint'), log: $('log'), logBody: $('logBody'),
+      over: $('over'), overTitle: $('overTitle'), overSub: $('overSub'),
+      overList: $('overList'), btnAgain: $('btnAgain'), intro: $('intro'),
+      runStat: $('runStat')
+    };
+    $('btnStart').onclick = () => { el.intro.classList.add('hidden'); H.start && H.start(); };
+    $('btnAgain').onclick = () => { el.over.classList.add('hidden'); H.again && H.again(); };
+    $('btnLog').onclick = () => el.log.classList.toggle('hidden');
+    $('btnLogClose').onclick = () => el.log.classList.add('hidden');
+    $('btnWipe').onclick = (e) => {
+      const b = e.currentTarget;
+      if (b.dataset.armed) { el.log.classList.add('hidden'); b.textContent = 'ABANDON RUN'; delete b.dataset.armed; H.wipe && H.wipe(); }
+      else { b.textContent = 'SURE?'; b.dataset.armed = '1'; setTimeout(() => { b.textContent = 'ABANDON RUN'; delete b.dataset.armed; }, 3000); }
+    };
+    $('btnSound').onclick = (e) => {
+      const on = !K.audio.isOn();
+      K.audio.enable(on);
+      e.currentTarget.classList.toggle('off', !on);
+    };
+    $('btnSound').classList.add('off');
+    el.btnAttack.onclick = () => H.attack && H.attack();
+    el.btnWait.onclick = () => H.wait && H.wait();
+    el.btnCancel.onclick = () => H.cancel && H.cancel();
+    el.btnEnd.onclick = () => H.end && H.end();
+  }
+
+  const STAT_ROWS = [['STR', 'str'], ['MAG', 'mag'], ['SKL', 'skl'], ['SPD', 'spd'],
+                     ['LCK', 'lck'], ['DEF', 'def'], ['RES', 'res'], ['MOV', 'mov']];
+
+  function unitCard(u) {
+    if (!u) { el.card.classList.add('hidden'); return; }
+    el.card.classList.remove('hidden');
+    el.cName.textContent = u.name;
+    el.cName.style.color = u.side === 0 ? 'var(--mine)' : 'var(--theirs)';
+    el.cClass.textContent = u.cls + ' · lv ' + u.level + (u.dead ? ' · down' : u.acted ? ' · spent' : '');
+    el.cHp.textContent = u.hp; el.cMax.textContent = u.maxHp;
+    const frac = clamp(u.hp / u.maxHp, 0, 1);
+    el.cHpFill.style.width = (frac * 100).toFixed(1) + '%';
+    el.cHpFill.style.background = frac > 0.5 ? 'var(--good)' : frac > 0.25 ? 'var(--warn)' : 'var(--theirs)';
+    let html = '';
+    for (const [label, key] of STAT_ROWS) html += '<div>' + label + '<b>' + u[key] + '</b></div>';
+    html += '<div>AS<b>' + Un.AS(u) + '</b></div>';
+    html += '<div>EXP<b>' + u.exp + '</b></div>';
+    el.cStats.innerHTML = html;
+    el.cWeapon.textContent = u.weapon.name + ' · mt ' + u.weapon.mt + ' · rng ' +
+      (u.weapon.rng[0] === u.weapon.rng[1] ? u.weapon.rng[0] : u.weapon.rng.join('-'));
+    const s = u.surface;
+    el.cTerrain.textContent = s
+      ? s.t.name + (s.t.avoid ? ' +' + s.t.avoid + ' avo' : '') + (s.t.def ? ' +' + s.t.def + ' def' : '') +
+        (s.y > 0.1 ? ' · +' + s.y.toFixed(1) + 'm' : '')
+      : '';
+  }
+
+  function sideHtml(u, s, cls, willDie) {
+    if (!s) return '<div class="n">' + u.name + '</div><div class="hp">' + u.hp + ' hp</div>' +
+      '<div class="row"><span>no answer</span></div>';
+    return '<div class="n">' + u.name + '</div>' +
+      '<div class="hp">' + u.hp + '/' + u.maxHp + ' hp' + (willDie ? ' <b class="kill">· falls</b>' : '') + '</div>' +
+      '<div class="row"><span>dmg</span><b class="dmg">' + s.dmg + (s.hits > 1 ? ' ×2' : '') + '</b></div>' +
+      '<div class="row"><span>hit</span><b>' + s.acc + '%</b></div>' +
+      '<div class="row"><span>crit</span><b>' + s.crit + '%</b></div>';
+  }
+
+  function forecast(pair, arena) {
+    if (!pair) { el.forecast.classList.add('hidden'); return null; }
+    // the odds are the odds from where the attacker will be standing, not
+    // from where it happens to be standing while you think about it
+    const save = pair.att.surface;
+    if (pair.spot) pair.att.surface = pair.spot;
+    const f = Un.forecast(pair.att, pair.def, arena);
+    pair.att.surface = save;
+    el.forecast.classList.remove('hidden');
+    const defDies = f.a.total >= pair.def.hp;
+    const attDies = f.b && f.b.total >= pair.att.hp;
+    el.fcA.className = 'fcside ' + (pair.att.side === 0 ? 'mine' : 'theirs');
+    el.fcB.className = 'fcside ' + (pair.def.side === 0 ? 'mine' : 'theirs') + (f.b ? '' : ' none');
+    el.fcA.innerHTML = sideHtml(pair.att, f.a, '', attDies);
+    el.fcB.innerHTML = sideHtml(pair.def, f.b, '', defDies);
+    const tri = f.a.tri > 0 ? '<span class="tri up">triangle +</span>'
+      : f.a.tri < 0 ? '<span class="tri down">triangle −</span>' : '';
+    const high = f.a.high > 0.2 ? '<span class="tri up">high ground</span>'
+      : f.a.high < -0.2 ? '<span class="tri down">below them</span>' : '';
+    el.fcVs.innerHTML = 'vs' + tri + high;
+    return f;
+  }
+
+  function log(entries) {
+    let html = '';
+    for (const e of entries) html += '<div class="' + e.kind + '">' + e.text + '</div>';
+    el.logBody.innerHTML = html;
+  }
+
+  let lastLog = 0, lastBanner = null;
+
+  /* pushed once per frame — cheap because every write is guarded */
+  function sync(g) {
+    const b = g.battle;
+    el.phaseB.textContent = b.phase === 'player' ? 'PLAYER' : 'ENEMY';
+    el.phase.classList.toggle('enemy', b.phase === 'enemy');
+    el.turn.textContent = 'turn ' + b.turn + (b.wave > 1 ? ' · wave ' + b.wave : '');
+    el.tallyMine.textContent = K.battle.living(b, 0).length;
+    el.tallyTheirs.textContent = K.battle.living(b, 1).length;
+
+    if (b.banner !== lastBanner) {
+      lastBanner = b.banner;
+      if (b.banner) {
+        el.bannerB.textContent = b.banner.title;
+        el.bannerS.textContent = b.banner.sub || '';
+        el.banner.className = 'show ' + (b.banner.title.indexOf('ENEMY') === 0 ? 'enemy' : 'mine');
+      } else el.banner.className = '';
+    }
+
+    // the forecast owns the bottom of the screen while it is up
+    unitCard(g.pair ? null : g.cardUnit);
+    g.fc = forecast(g.pair, b.arena);
+
+    const busy = !!b.busy, mine = b.phase === 'player' && !b.over && !busy;
+    el.btnAttack.classList.toggle('hidden', !(mine && g.pair));
+    el.btnWait.classList.toggle('hidden', !(mine && b.sel && !b.reach));
+    el.btnCancel.classList.toggle('hidden', !(mine && b.sel && b.reach));
+    el.btnEnd.classList.toggle('hidden', !mine || !!b.sel);
+
+    if (b.log.length !== lastLog) { lastLog = b.log.length; log(b.log); }
+    if (g.run) el.runStat.textContent = 'run ' + ((g.run.runs || 0) + 1) + ' · best wave ' + (g.run.best || 0);
+
+    el.hint.textContent = b.over ? ''
+      : busy ? ''
+      : b.phase === 'enemy' ? 'they move'
+      : g.pair ? 'STRIKE to commit, or pick another'
+      : b.sel && !b.reach ? 'pick a target, or WAIT'
+      : b.sel ? 'blue to move · red to strike · tap them again to hold'
+      : 'tap one of yours · drag to look · pinch to zoom';
+
+    if (b.over && g.summary && el.over.classList.contains('hidden')) {
+      const s = g.summary, won = b.over === 'win';
+      el.overTitle.textContent = won ? 'FIELD HELD' : 'OVERRUN';
+      el.overTitle.style.color = won ? 'var(--good)' : 'var(--theirs)';
+      el.overSub.textContent = won
+        ? 'wave ' + s.wave + ' taken on turn ' + b.turn
+        : 'wave ' + s.wave + ' broke the line · best ' + (g.run.best || 0);
+      let html = '';
+      for (const u of s.survivors) {
+        html += '<div class="up"><span>' + u.name + ' · ' + u.cls + '</span><b>lv ' + u.level + '</b></div>';
+      }
+      for (const name of s.lost) html += '<div class="gone"><span>' + name + '</span><b>fallen</b></div>';
+      el.overList.innerHTML = html;
+      el.btnAgain.textContent = won ? 'PRESS ON' : 'BEGIN AGAIN';
+      el.over.classList.remove('hidden');
+    }
+  }
+
+  return { init, sync, unitCard };
+})();
+
+/* ---- 11-main.js ---- */
+/* IRONWAKE — the shell.
+   Boot, the fixed-step loop, the camera, and the one hard input problem a
+   3D tactics game has on a phone: telling a tap on a tile apart from a drag
+   of the world, on a map where two tiles can sit above each other. */
+(function () {
+  const R = K.render, B = K.battle, U = K.util, Un = K.units;
+  const { clamp, lerp } = U;
+
+  const canvas = document.getElementById('view');
+  const view = R.View(canvas);
+
+  const g = {
+    battle: null, cam: null, view,
+    t: 0, hover: null, pathPreview: null, cardUnit: null, pair: null,
+    threat: [], running: false, baseDist: 21
+  };
+  window.G = g;   // the console is a legitimate debugging surface
+
+  function newBattle(seed) {
+    const run = g.run;
+    const rnd = U.rng((run.wave * 7919 + (run.runs || 0) * 104729) >>> 0);
+    g.battle = B.create(seed, {
+      wave: run.wave,
+      player: K.camp.playerPlan(run),
+      enemy: run.wave === 1 && (run.runs || 0) === 0 ? null : K.camp.enemyPlan(run.wave, rnd)
+    });
+    g.summary = null;
+    g.cam = R.Camera(g.battle.arena);
+    g.baseDist = 21;
+    g.cam.wantDist = g.baseDist;
+    g.hover = null; g.pathPreview = null; g.cardUnit = null; g.pair = null; g.threat = [];
+    const c = centreOf(g.battle);
+    g.cam.tx = g.cam.fx = c.x; g.cam.ty = g.cam.fy = c.y; g.cam.tz = g.cam.fz = c.z;
+    R.camUpdate(g.cam, 1);
+  }
+
+  /* At rest the camera sits between your line and the middle of the board:
+     close enough that the units you command are the subject, wide enough that
+     you can see what is coming for them. */
+  function centreOf(b) {
+    const mine = B.living(b, 0);
+    if (!mine.length) return { x: 0, y: 1.4, z: 0 };
+    let x = 0, y = 0, z = 0;
+    for (const u of mine) { const w = b.arena.world(u.surface); x += w.x; y += w.y; z += w.z; }
+    const k = 0.45;
+    return { x: lerp(x / mine.length, 0, k), y: y / mine.length + 1.1, z: lerp(z / mine.length, 0, k) };
+  }
+
+  const unitOn = (b, s) => b.units.find(u => !u.dead && u.surface === s) || null;
+
+  /* where should this unit stand to hit that one? cheapest tile that reaches,
+     preferring cover, height, and a weak answer */
+  function bestApproach(b, u, foe) {
+    if (!b.reach) return null;
+    let best = null;
+    for (const [, e] of b.reach) {
+      const s = e.s;
+      if (s !== u.surface && B.occupied(b, s, u)) continue;
+      const save = u.surface; u.surface = s;
+      const can = Un.inRange(u, foe, b.arena);
+      const fc = can ? Un.forecast(u, foe, b.arena) : null;
+      u.surface = save;
+      if (!can) continue;
+      const score = fc.a.total * 8 - (fc.b ? fc.b.total * 5 : -14)
+        + fc.a.crit * 0.3 + s.t.avoid * 0.5 + (s.y - foe.surface.y) * 3 - e.cost * 1.2;
+      if (!best || score > best.score) best = { score, s };
+    }
+    return best;
+  }
+
+  /* every tile an enemy could strike next turn — the question you actually
+     ask before you step out from behind a wall */
+  function threatOf(b, u) {
+    const reach = b.arena.reach(u.surface, u.mov, s => B.occupied(b, s, u));
+    const out = new Set(), lo = u.weapon.rng[0], hi = u.weapon.rng[1];
+    for (const [, e] of reach) {
+      for (const s of b.arena.surfaces) {
+        const d = b.arena.dist(e.s, s);
+        if (d >= lo && d <= hi) out.add(s);
+      }
+    }
+    return [...out];
+  }
+
+  /* ------------------------------------------------------------------ taps */
+
+  /* A finger lands on a BODY, not on the tile behind it. Casting the tap ray
+     straight at the map picks up whatever is a metre further out, which is how
+     you end up selecting the tile behind the unit you meant to pick, so units
+     are hit-tested in screen space first. */
+  function unitAt(sx, sy) {
+    const b = g.battle;
+    let best = null;
+    for (const u of b.units) {
+      if (u.dead) continue;
+      const a = B.actorOf(b, u);
+      if (!a) continue;
+      const c = a.body.parts.chest;
+      const p = R.screenOf(view, c.x, c.y, c.z);
+      if (!p) continue;
+      const d = Math.hypot(p.x - sx, p.y - sy);
+      const r = Math.max(20, 0.5 * p.s);
+      if (d < r && (!best || d < best.d)) best = { u, d };
+    }
+    return best ? best.u : null;
+  }
+
+  function tap(sx, sy) {
+    const b = g.battle;
+    const hit = unitAt(sx, sy);
+    const s = hit ? hit.surface : R.pick(view, sx, sy, b.arena);
+    if (!s) { if (!b.sel) { g.cardUnit = null; g.threat = []; } return; }
+    const u = hit || unitOn(b, s);
+
+    if (b.over) return;
+    if (b.busy || b.phase !== 'player') { if (u) g.cardUnit = u; return; }
+
+    // a target is already proposed: tapping it again is the commit
+    if (g.pair) {
+      if (u === g.pair.def) { commit(); return; }
+      g.pair = null; g.pathPreview = null;
+      // fall through: the tap also means whatever it would have meant
+    }
+
+    // the unit has moved and is choosing who to hit
+    if (b.sel && !b.reach) {
+      if (u && b.targets.indexOf(u) >= 0) {
+        g.pair = { att: b.sel, def: u, spot: b.sel.surface }; g.cardUnit = u;
+        K.audio.buy();
+      } else if (u) g.cardUnit = u;
+      return;
+    }
+
+    // the unit is choosing where to go
+    if (b.sel && b.reach) {
+      if (u === b.sel) {                       // hold this ground
+        b.targets = B.targetsFrom(b, b.sel, b.sel.surface);
+        b.reach = null; g.pathPreview = null;
+        if (!b.targets.length) B.finishUnit(b, b.sel);
+        return;
+      }
+      if (u && u.side === 1) {
+        // A tap on an enemy PROPOSES the attack: it shows where you would end
+        // up and what the exchange looks like. Committing is a second,
+        // deliberate act — nobody should lose a unit to a stray tap.
+        const spot = bestApproach(b, b.sel, u);
+        if (spot) {
+          const save = b.sel.surface; b.sel.surface = spot.s;
+          g.pair = { att: b.sel, def: u, spot: spot.s };
+          b.sel.surface = save;
+          g.cardUnit = u;
+          g.pathPreview = spot.s === b.sel.surface ? null : b.arena.pathTo(b.reach, spot.s);
+          K.audio.buy();
+        } else { g.cardUnit = u; g.threat = threatOf(b, u); }
+        return;
+      }
+      if (u && u.side === 0 && !u.acted) { B.select(b, u); g.cardUnit = u; g.threat = []; return; }
+      if (b.reach.has(s.id) && !B.occupied(b, s, b.sel)) {
+        B.moveTo(b, b.sel, s);
+        g.pathPreview = null;
+        return;
+      }
+      B.clearSel(b); g.cardUnit = null; g.pathPreview = null;
+      return;
+    }
+
+    // nothing selected
+    if (u) {
+      g.cardUnit = u;
+      if (u.side === 0 && !u.acted) { B.select(b, u); g.threat = []; K.audio.buy(); }
+      else g.threat = threatOf(b, u);
+    } else { g.cardUnit = null; g.threat = []; }
+  }
+
+  /* the second tap: walk there if we have to, then swing */
+  function commit() {
+    const b = g.battle;
+    if (!g.pair || b.busy) return;
+    const { att, def, spot } = g.pair;
+    g.pair = null; g.pathPreview = null; b.targets = [];
+    if (spot && spot !== att.surface && b.reach) B.moveTo(b, att, spot, def);
+    else B.attack(b, att, def);
+  }
+
+  /* --------------------------------------------------------------- pointer */
+
+  const ptrs = new Map();
+  let dragging = false, downT = 0, downX = 0, downY = 0, pinch0 = 0, dist0 = 0;
+
+  function localPos(e) {
+    const r = canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    canvas.setPointerCapture(e.pointerId);
+    const p = localPos(e);
+    ptrs.set(e.pointerId, p);
+    if (ptrs.size === 1) { dragging = false; downT = performance.now(); downX = p.x; downY = p.y; }
+    if (ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()];
+      pinch0 = Math.hypot(a.x - b.x, a.y - b.y);
+      dist0 = g.cam.wantDist;
+      dragging = true;
+    }
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    const p = localPos(e);
+    const prev = ptrs.get(e.pointerId);
+    if (!prev) {                                  // a mouse simply hovering
+      hoverAt(p.x, p.y);
+      return;
+    }
+    ptrs.set(e.pointerId, p);
+    if (ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch0 > 8) {
+        g.baseDist = clamp(dist0 * (pinch0 / Math.max(8, d)), 8, 38);
+        g.cam.wantDist = g.baseDist;
+      }
+      return;
+    }
+    const dx = p.x - prev.x, dy = p.y - prev.y;
+    if (!dragging && Math.hypot(p.x - downX, p.y - downY) > 9) dragging = true;
+    if (dragging) {
+      g.cam.wantYaw -= dx * 0.0075;
+      g.cam.wantPitch = clamp(g.cam.wantPitch + dy * 0.0055, 0.14, 1.32);
+    }
+  });
+
+  function endPointer(e) {
+    const p = localPos(e);
+    const had = ptrs.has(e.pointerId);
+    ptrs.delete(e.pointerId);
+    if (!had) return;
+    if (ptrs.size === 0 && !dragging && performance.now() - downT < 600) {
+      if (g.running) tap(p.x, p.y);
+    }
+    if (ptrs.size === 0) dragging = false;
+  }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  window.addEventListener('wheel', (e) => {
+    if (!g.cam) return;
+    g.baseDist = clamp(g.baseDist + e.deltaY * 0.012, 8, 38);
+    g.cam.wantDist = g.baseDist;
+  }, { passive: true });
+
+  function hoverAt(sx, sy) {
+    const b = g.battle;
+    if (!b || b.busy) return;
+    const hit = unitAt(sx, sy);
+    const s = hit ? hit.surface : R.pick(view, sx, sy, b.arena);
+    g.hover = s;
+    if (g.pair) return;
+    g.pathPreview = null;
+    if (s && b.sel && b.reach && b.reach.has(s.id) && !B.occupied(b, s, b.sel)) {
+      g.pathPreview = b.arena.pathTo(b.reach, s);
+    }
+  }
+
+  /* ---------------------------------------------------------------- camera */
+
+  function driveCamera(dt) {
+    const b = g.battle, cam = g.cam;
+    let want = null, close = null;
+    if (b.busy && b.busy.kind === 'fight') {
+      const a = b.busy.aA, d = b.busy.aD;
+      want = { x: (a.pos.x + d.pos.x) / 2, y: (a.body.parts.chest.y + d.body.parts.chest.y) / 2, z: (a.pos.z + d.pos.z) / 2 };
+      close = Math.min(g.baseDist, 13.5);
+    } else if (b.busy && b.busy.act) {
+      const a = b.busy.act;
+      want = { x: a.pos.x, y: a.body.parts.chest.y, z: a.pos.z };
+      close = Math.min(g.baseDist, 17);
+    } else if (b.sel) {
+      const a = B.actorOf(b, b.sel);
+      if (a) want = { x: a.pos.x, y: a.pos.y + 0.9, z: a.pos.z };
+    } else if (b.phase === 'enemy' && b.focus) {
+      want = { x: b.focus.pos.x, y: b.focus.pos.y + 0.9, z: b.focus.pos.z };
+    } else if (g.cardUnit && !g.cardUnit.dead) {
+      // looking one of theirs up should also look AT them
+      const a = B.actorOf(b, g.cardUnit);
+      if (a) want = { x: a.pos.x, y: a.pos.y + 0.9, z: a.pos.z };
+    }
+    if (!want) {
+      want = centreOf(b);
+    }
+    cam.fx = want.x; cam.fy = want.y; cam.fz = want.z;
+    cam.wantDist = close || g.baseDist;
+    cam.shake = Math.max(cam.shake, b.shake);
+    R.camUpdate(cam, dt);
+  }
+
+  /* ------------------------------------------------------------------ loop */
+
+  let last = 0, acc = 0;
+  const STEP = 1 / 120;
+
+  function loop(now) {
+    requestAnimationFrame(loop);
+    const t = now / 1000;
+    let dt = last ? Math.min(0.1, t - last) : 0.016;
+    last = t;
+    g.t += dt;
+
+    if (g.running) {
+      acc += dt;
+      let n = 0;
+      const s0 = performance.now();
+      while (acc >= STEP && n < 6) { B.step(g.battle, STEP); acc -= STEP; n++; }
+      g.simMs = g.simMs ? g.simMs * 0.92 + (performance.now() - s0) * 0.08 : (performance.now() - s0);
+      if (acc > 0.3) acc = 0;
+      driveCamera(dt);
+      // keep the selection card honest without the player having to re-tap
+      if (g.battle.sel && !g.cardUnit) g.cardUnit = g.battle.sel;
+      if (g.pair && (g.pair.def.dead || g.pair.att.dead || g.battle.busy)) { g.pair = null; g.pathPreview = null; }
+      // the moment a field is settled, the run banks it
+      if (g.battle.over && !g.summary) {
+        g.summary = K.camp.afterBattle(g.run, g.battle, g.battle.over === 'win');
+      }
+    }
+
+    if (view.w !== canvas.getBoundingClientRect().width) R.resize(view);
+    const t0 = performance.now();
+    R.frame(view, g, dt);
+    // a running estimate of how much of the frame this costs, so the cost of
+    // a change is a number rather than an opinion
+    g.drawMs = g.drawMs ? g.drawMs * 0.92 + (performance.now() - t0) * 0.08 : (performance.now() - t0);
+    K.ui.sync(g);
+  }
+
+  /* ------------------------------------------------------------------ boot */
+
+  K.ui.init({
+    start: () => { g.running = true; },
+    again: () => { newBattle(); g.running = true; },
+    wipe: () => { g.run = K.camp.fresh(); K.camp.save(g.run); newBattle(); g.running = true; },
+    attack: () => commit(),
+    wait: () => { const b = g.battle; if (b.sel) B.finishUnit(b, b.sel); g.pair = null; g.cardUnit = null; },
+    cancel: () => { B.clearSel(g.battle); g.pair = null; g.cardUnit = null; g.pathPreview = null; },
+    end: () => { B.endPhase(g.battle); g.cardUnit = null; g.pair = null; }
+  });
+
+  g.run = K.camp.load();
+  newBattle();
+  R.resize(view);
+  window.addEventListener('resize', () => R.resize(view));
+  window.addEventListener('orientationchange', () => setTimeout(() => R.resize(view), 220));
+  requestAnimationFrame(loop);
+})();
+
+</script>

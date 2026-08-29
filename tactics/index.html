@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0e16">
+<title>IRONWAKE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="view"></canvas>
+
+  <div id="top">
+    <div class="pill" id="phase"><b>PLAYER</b><span id="turn">turn 1</span></div>
+    <div class="pill" id="tally"><span class="mine" id="tallyMine">4</span><i>vs</i><span class="theirs" id="tallyTheirs">5</span></div>
+    <div class="spacer"></div>
+    <button class="icon" id="btnLog" title="Field log">≡</button>
+    <button class="icon" id="btnSound" title="Sound">♪</button>
+  </div>
+
+  <div id="banner"><b></b><span></span></div>
+
+  <div id="card" class="panel hidden">
+    <div class="cardhead">
+      <div>
+        <b id="cName">VESS</b>
+        <span id="cClass">Blade · lv 3</span>
+      </div>
+      <div class="hpwrap">
+        <div class="hpnum"><b id="cHp">20</b><i>/<span id="cMax">20</span></i></div>
+        <div class="hpbar"><div id="cHpFill"></div></div>
+      </div>
+    </div>
+    <div class="stats" id="cStats"></div>
+    <div class="cardfoot"><span id="cWeapon">Iron Sword</span><span id="cTerrain">stone</span></div>
+  </div>
+
+  <div id="forecast" class="panel hidden">
+    <div class="fcside" id="fcA"></div>
+    <div class="fcvs" id="fcVs">→</div>
+    <div class="fcside" id="fcB"></div>
+  </div>
+
+  <div id="actions">
+    <button id="btnAttack" class="act strike hidden">STRIKE</button>
+    <button id="btnWait" class="act hidden">WAIT</button>
+    <button id="btnCancel" class="act ghost hidden">CANCEL</button>
+    <button id="btnEnd" class="act ghost">END TURN</button>
+  </div>
+
+  <div id="hint">tap a unit · drag to look</div>
+
+  <div id="log" class="hidden">
+    <div class="loghead">FIELD LOG<button class="icon" id="btnLogClose">✕</button></div>
+    <div id="logBody"></div>
+    <div id="logFoot"><span id="runStat">run 1 · best wave 0</span><button id="btnWipe">ABANDON RUN</button></div>
+  </div>
+
+  <div id="over" class="hidden">
+    <div class="overbox">
+      <b id="overTitle">FIELD HELD</b>
+      <span id="overSub"></span>
+      <div id="overList"></div>
+      <button id="btnAgain">PRESS ON</button>
+    </div>
+  </div>
+
+  <div id="intro">
+    <div class="introbox">
+      <h1>IRONWAKE</h1>
+      <p class="sub">a tactics arena where every blow is simulated</p>
+      <ul>
+        <li><b>Tap</b> one of yours, then a blue tile to move — or an enemy to close and strike.</li>
+        <li>Height, terrain and the weapon triangle all count. So does the drop.</li>
+        <li>Survivors carry their levels into the next wave. The fallen do not come back.</li>
+        <li>Nothing here is animation: a killing blow throws a body, and a bridge has no rail.</li>
+      </ul>
+      <button id="btnStart">TAKE THE FIELD</button>
+    </div>
+  </div>
+</div>
+
+<script src="src/00-util.js"></script>
+<script src="src/01-physics.js"></script>
+<script src="src/02-ragdoll.js"></script>
+<script src="src/03-grid.js"></script>
+<script src="src/04-units.js"></script>
+<script src="src/05-actor.js"></script>
+<script src="src/06-battle.js"></script>
+<script src="src/07-campaign.js"></script>
+<script src="src/08-render.js"></script>
+<script src="src/09-audio.js"></script>
+<script src="src/10-ui.js"></script>
+<script src="src/11-main.js"></script>
+</body>
+</html>
