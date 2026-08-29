@@ -69,6 +69,8 @@ K.battle = (function () {
       const u = Un.make(spec.cls, 1, spec.name, spec.level || 2);
       u.guard = !!spec.guard;
       u.alert = spec.alert || 4;
+      if (spec.weapon && Un.WEAPONS[spec.weapon]) u.weapon = Un.WEAPONS[spec.weapon];
+      if (spec.boss) { u.boss = true; u.maxHp += 8; u.hp = u.maxHp; }
       // a guard wants high ground; if there is none left it joins the line
       place(u, (u.guard ? next(held) : null) || next(theirs) || next(held));
     }
@@ -77,10 +79,12 @@ K.battle = (function () {
     b.wave = wave;
     b.title = arena.title;
     const us = living(b, 0).length, them = living(b, 1).length;
+    const boss = b.units.find(u => u.boss);
     b.banner = {
-      title: 'PLAYER PHASE',
-      sub: wave > 1 ? 'wave ' + wave + ' · ' + arena.title + ' · ' + us + ' against ' + them
-                    : 'four against five, and they hold the high ground',
+      title: boss ? 'THE LAST FIELD' : 'PLAYER PHASE',
+      sub: boss ? boss.name + ' holds ' + arena.title + ' · ' + us + ' against ' + them
+        : wave > 1 ? 'wave ' + wave + ' of ' + K.camp.RUN + ' · ' + arena.title + ' · ' + us + ' against ' + them
+          : 'four against five, and they hold the high ground',
       t: 0
     };
     return b;

@@ -462,15 +462,18 @@ K.render = (function () {
           const gy = (gr ? gr.y : a.pos.y) + 0.035;
           const sel = g.battle.sel === a.unit;
           const spent = a.unit.acted;
-          const r = 0.62;
+          const r = a.unit.boss ? 0.82 : 0.62;
           const pts = [];
           for (let i = 0; i < 22; i++) {
             const th = i / 22 * Math.PI * 2;
             pts.push(proj(v, pel.x + Math.cos(th) * r, gy, pel.z + Math.sin(th) * r));
           }
           const puls = sel ? 0.55 + 0.45 * Math.sin(g.t * 5) : 1;
-          strokePoly(v, ctx, pts, css(spent ? [120, 126, 142] : rgb(S.ring), (spent ? 0.35 : 0.75) * puls), sel ? 3 : 1.8);
-          if (sel) fillPoly(v, ctx, pts, css(rgb(S.ring), 0.10));
+          const ring = a.unit.boss ? [255, 209, 102] : rgb(S.ring);
+          strokePoly(v, ctx, pts, css(spent ? [120, 126, 142] : ring, (spent ? 0.35 : 0.75) * puls),
+            sel ? 3 : a.unit.boss ? 2.6 : 1.8);
+          if (sel) fillPoly(v, ctx, pts, css(ring, 0.10));
+          if (a.unit.boss) fillPoly(v, ctx, pts, css(ring, 0.07 + 0.05 * Math.sin(g.t * 2.2)));
         }
 
         // A stroke costs an order of magnitude more than a fill in a software
@@ -570,11 +573,33 @@ K.render = (function () {
           ctx.beginPath(); ctx.moveTo(x, s.y - hgt); ctx.lineTo(x, s.y); ctx.stroke();
         }
       }
-      ctx.textAlign = 'center';
-      ctx.font = font(clamp(0.30 * s.s, 8, 15));
+      ctx.globalAlpha = 1;
+    }
+
+    /* Names, nearest first, and a name that would land on top of one already
+       drawn is dropped. Nine bodies at a spawn point turn a row of labels into
+       a smear, and a smear is worse than no label at all — the ring and the
+       bar still say whose it is and how it is doing. */
+    ctx.textAlign = 'center';
+    const claimed = [];
+    const order = list.slice().sort((p, q) =>
+      (q.u.boss ? 1e6 : 0) - (p.u.boss ? 1e6 : 0) + (p.s.z - q.s.z));
+    for (const it of order) {
+      const { u, s } = it;
+      const w = clamp(1.05 * s.s, 22, 74), hgt = Math.max(3, w * 0.085);
+      const size = clamp(0.30 * s.s, 8, 15);
+      ctx.font = font(size);
+      const text = u.dead ? '✕ ' + u.name : u.name;
+      const half = ctx.measureText(text).width / 2 + 3;
+      const y = s.y - hgt - 5;
+      const box = { x0: s.x - half, x1: s.x + half, y0: y - size, y1: y + 3 };
+      if (claimed.some(c => box.x0 < c.x1 && box.x1 > c.x0 && box.y0 < c.y1 && box.y1 > c.y0)) continue;
+      claimed.push(box);
+      ctx.globalAlpha = clamp(1 - (s.z - 34) / 18, 0.25, 1);
       ctx.fillStyle = u.dead ? 'rgba(150,152,166,0.8)'
-        : u.side === 0 ? 'rgba(226,238,255,0.95)' : 'rgba(255,206,196,0.95)';
-      ctx.fillText(u.dead ? '✕ ' + u.name : u.name, s.x, s.y - hgt - 5);
+        : u.boss ? '#ffd166'
+          : u.side === 0 ? 'rgba(226,238,255,0.95)' : 'rgba(255,206,196,0.95)';
+      ctx.fillText(text, s.x, y);
       ctx.globalAlpha = 1;
     }
 

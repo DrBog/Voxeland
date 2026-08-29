@@ -257,3 +257,95 @@ test('a battle on any layout closes and ends', () => {
     assert.ok(b.turn < 40, name + ' dragged to turn ' + b.turn);
   }
 });
+
+test('a weapon upgrade is a trade, not a gift', () => {
+  const K = load(), Un = K.units;
+  for (const [cls, line] of Object.entries(Un.ARSENAL)) {
+    for (let i = 1; i < line.length; i++) {
+      const was = Un.WEAPONS[line[i - 1]], now = Un.WEAPONS[line[i]];
+      assert.ok(now.mt > was.mt, cls + ': ' + now.name + ' hits harder');
+      assert.ok(now.hit < was.hit, cls + ': and less often');
+      assert.ok(now.wt > was.wt, cls + ': and weighs more');
+    }
+    assert.equal(Un.upgrade(cls, line[line.length - 1]), null, cls + ' has a top of the line');
+    assert.equal(Un.upgrade(cls, line[0]), line[1]);
+  }
+  // weight is not decoration: a heavy weapon costs attack speed
+  const a = Un.make('Blade', 0, 'A', 5), b = Un.make('Blade', 0, 'B', 5);
+  b.str = a.str; b.spd = a.spd;
+  b.weapon = Un.WEAPONS.silver_sword;
+  assert.ok(Un.AS(b) < Un.AS(a), 'silver slows you down');
+});
+
+test('a field won buys a choice, and the choice sticks', () => {
+  const K = load(8);
+  const run = K.camp.fresh();
+  const offers = K.camp.offers(run, K.util.rng(2));
+  assert.ok(offers.length === 3, 'three offers');
+  assert.equal(new Set(offers.map(o => o.kind)).size, 3, 'three different kinds');
+  for (const o of offers) { assert.ok(o.label && o.detail, o.kind + ' explains itself'); }
+
+  const arm = offers.find(o => o.kind === 'arm');
+  if (arm) {
+    const before = run.roster.find(u => u.name === arm.unit).weapon;
+    K.camp.take(run, arm);
+    assert.notEqual(run.roster.find(u => u.name === arm.unit).weapon, before, 'the weapon changed hands');
+  }
+  const r2 = K.camp.fresh();
+  const hp = r2.roster.map(u => u.maxHp);
+  K.camp.take(r2, { kind: 'rally', amount: 3 });
+  r2.roster.forEach((u, i) => assert.equal(u.maxHp, hp[i] + 3, 'everybody ate'));
+  const r3 = K.camp.fresh();
+  const n = r3.roster.length;
+  K.camp.take(r3, { kind: 'recruit', cls: 'Blade', name: 'NEWBLOOD', level: 4 });
+  assert.equal(r3.roster.length, n + 1);
+  assert.ok(r3.roster[n].maxHp > 0, 'a recruit arrives with real numbers');
+  const r4 = K.camp.fresh();
+  const str = r4.roster[0].str;
+  K.camp.take(r4, { kind: 'drill', unit: r4.roster[0].name, stat: 'str', amount: 2 });
+  assert.equal(r4.roster[0].str, str + 2);
+});
+
+test('the last field has somebody in charge of it', () => {
+  const K = load(9);
+  const plan = K.camp.enemyPlan(K.camp.RUN, K.util.rng(3));
+  const boss = plan.find(u => u.boss);
+  assert.ok(boss, 'a commander holds the final wave');
+  assert.ok(boss.level > Math.max(...plan.filter(u => !u.boss).map(u => u.level)), 'and outranks the line');
+  assert.equal(K.units.ARSENAL[boss.cls].indexOf(boss.weapon), 2, 'carrying the best of its kind');
+  assert.ok(!K.camp.enemyPlan(1, K.util.rng(3)).some(u => u.boss), 'wave one does not');
+
+  const b = K.battle.create(55, { wave: K.camp.RUN, player: K.camp.playerPlan(K.camp.fresh()), enemy: plan });
+  const inField = b.units.find(u => u.boss);
+  assert.ok(inField && inField.surface, 'and it is actually on the board');
+  assert.ok(inField.maxHp > Math.max(...b.units.filter(u => u.side === 1 && !u.boss).map(u => u.maxHp)),
+    'harder to put down than its own line');
+});
+
+test('a run can be finished, and finishing it is recorded', () => {
+  const K = load(10);
+  const run = K.camp.fresh();
+  run.wave = K.camp.RUN;
+  const b = K.battle.create(12, { wave: K.camp.RUN, player: K.camp.playerPlan(run), enemy: K.camp.enemyPlan(K.camp.RUN, K.util.rng(1)) });
+  b.units.filter(u => u.side === 1).forEach(u => { u.dead = true; });
+  const summary = K.camp.afterBattle(run, b, true);
+  assert.equal(summary.final, true, 'the last wave knows it was the last');
+  assert.equal(run.wins, 1, 'the win is counted');
+  assert.equal(run.wave, 1, 'and the next run starts at the beginning');
+  assert.equal(run.best, K.camp.RUN);
+  assert.equal(run.roster.length, 4, 'with a fresh four');
+});
+
+test('a weapon a unit was given is the weapon it fights with', () => {
+  const K = load(11);
+  const run = K.camp.fresh();
+  const name = run.roster[0].name;
+  K.camp.take(run, { kind: 'arm', unit: name, weapon: 'silver_sword' });
+  const b = K.battle.create(13, { wave: 2, player: K.camp.playerPlan(run), enemy: K.camp.enemyPlan(2, K.util.rng(1)) });
+  const u = b.units.find(x => x.name === name);
+  assert.equal(u.weapon.name, 'Silver Sword', 'it carried it onto the field');
+  // and back out again
+  const snap = K.camp.snapshot(u);
+  assert.equal(snap.weapon, 'silver_sword');
+  assert.equal(K.camp.restore(snap, 0).weapon.name, 'Silver Sword');
+});

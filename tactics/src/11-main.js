@@ -376,7 +376,13 @@
       driveCamera(dt);
       if (g.battle.sel && !g.cardUnit) g.cardUnit = g.battle.sel;
       if (g.pair && (g.pair.def.dead || g.pair.att.dead || g.battle.busy)) { g.pair = null; g.pathPreview = null; }
-      if (g.battle.over && !g.summary) g.summary = K.camp.afterBattle(g.run, g.battle, g.battle.over === 'win');
+      if (g.battle.over && !g.summary) {
+        const won = g.battle.over === 'win';
+        g.summary = K.camp.afterBattle(g.run, g.battle, won);
+        // a field won buys a choice; a run finished buys the record
+        g.offers = won && !g.summary.final ? K.camp.offers(g.run, U.rng((g.run.wave * 6151 + (g.run.runs || 0) * 97) >>> 0)) : null;
+        g.taken = null;
+      }
     }
 
     const t0 = performance.now();
@@ -389,7 +395,12 @@
 
   K.ui.init({
     start: () => { g.running = true; measure(); },
-    again: () => { newBattle(); g.running = true; },
+    again: () => {
+      if (g.offers && g.taken !== null) K.camp.take(g.run, g.offers[g.taken]);
+      g.offers = null; g.taken = null;
+      newBattle(); g.running = true;
+    },
+    spoil: (i) => { g.taken = i; },
     wipe: () => { g.run = K.camp.fresh(); K.camp.save(g.run); newBattle(); g.running = true; },
     attack: () => commit(),
     wait: () => { const b = g.battle; if (b.sel) B.finishUnit(b, b.sel); g.pair = null; g.cardUnit = null; },

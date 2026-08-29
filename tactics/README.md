@@ -46,7 +46,13 @@ be knocked off, and enough ground between the lines for a first turn. A map
 that fails any of those is rerolled, and the last wave's ground sits out of the
 next draw.
 
-Survivors carry their levels into the next wave. The fallen do not come back.
+A run is eight fields. Survivors carry their levels and their weapons into
+the next one and the fallen do not come back, so the line you finish with is
+the line that survived what you did with it. Each field won hands you one
+choice of three — a weapon, a recruit, drill for one unit, rations for all of
+them — and every one of them is a trade: steel hits harder than iron, misses
+more often, and weighs enough to cost a fast unit its second attack. The last
+field has somebody in charge of it.
 
 ## Playing it
 
@@ -71,7 +77,7 @@ Survivors carry their levels into the next wave. The fallen do not come back.
 | `src/04-units.js` | classes, weapons, and the arithmetic of a duel |
 | `src/05-actor.js` | pose, march, swing — and the handover to physics on a hit |
 | `src/06-battle.js` | turns, the action queue, enemy AI |
-| `src/07-campaign.js` | the run: survivors, recruits, waves, the save |
+| `src/07-campaign.js` | the run: survivors, spoils, waves, the commander, the save |
 | `src/08-render.js` | software 3D renderer in canvas2d |
 | `src/09-audio.js` | synthesised sound, off until asked |
 | `src/10-ui.js` | the readable half: cards, forecast, log |

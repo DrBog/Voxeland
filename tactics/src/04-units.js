@@ -6,15 +6,42 @@ K.units = (function () {
   const U = K.util;
   const { clamp } = U;
 
+  /* Three tiers, and the tiers cost you something: steel and silver hit far
+     harder and hit less often, and they are heavy, which is how a weapon
+     upgrade can genuinely be the wrong choice for a fast unit. */
   const WEAPONS = {
     iron_sword:  { name: 'Iron Sword',  kind: 'sword', mt: 5, hit: 90, crit: 5,  rng: [1, 1], wt: 5 },
     steel_sword: { name: 'Steel Sword', kind: 'sword', mt: 8, hit: 80, crit: 3,  rng: [1, 1], wt: 9 },
+    silver_sword:{ name: 'Silver Sword',kind: 'sword', mt: 11, hit: 78, crit: 6, rng: [1, 1], wt: 12 },
     iron_lance:  { name: 'Iron Lance',  kind: 'lance', mt: 6, hit: 85, crit: 3,  rng: [1, 1], wt: 7 },
+    steel_lance: { name: 'Steel Lance', kind: 'lance', mt: 9, hit: 76, crit: 2,  rng: [1, 1], wt: 11 },
+    silver_lance:{ name: 'Silver Lance',kind: 'lance', mt: 12, hit: 74, crit: 4, rng: [1, 1], wt: 14 },
     iron_axe:    { name: 'Iron Axe',    kind: 'axe',   mt: 7, hit: 75, crit: 3,  rng: [1, 1], wt: 9 },
+    steel_axe:   { name: 'Steel Axe',   kind: 'axe',   mt: 10, hit: 68, crit: 2, rng: [1, 1], wt: 12 },
+    silver_axe:  { name: 'Silver Axe',  kind: 'axe',   mt: 13, hit: 66, crit: 4, rng: [1, 1], wt: 15 },
     hand_axe:    { name: 'Hand Axe',    kind: 'axe',   mt: 6, hit: 65, crit: 2,  rng: [1, 2], wt: 10 },
     short_bow:   { name: 'Short Bow',   kind: 'bow',   mt: 5, hit: 85, crit: 5,  rng: [2, 2], wt: 6 },
-    fire:        { name: 'Fire',        kind: 'tome',  mt: 5, hit: 90, crit: 0,  rng: [1, 2], wt: 5, magic: true }
+    steel_bow:   { name: 'Steel Bow',   kind: 'bow',   mt: 8, hit: 78, crit: 4,  rng: [2, 2], wt: 9 },
+    silver_bow:  { name: 'Silver Bow',  kind: 'bow',   mt: 10, hit: 76, crit: 7, rng: [2, 2], wt: 11 },
+    fire:        { name: 'Fire',        kind: 'tome',  mt: 5, hit: 90, crit: 0,  rng: [1, 2], wt: 5, magic: true },
+    elfire:      { name: 'Elfire',      kind: 'tome',  mt: 8, hit: 84, crit: 2,  rng: [1, 2], wt: 8, magic: true },
+    arcfire:     { name: 'Arcfire',     kind: 'tome',  mt: 11, hit: 80, crit: 4, rng: [1, 2], wt: 11, magic: true }
   };
+
+  /* what each class can be handed next, in order */
+  const ARSENAL = {
+    Blade:   ['iron_sword', 'steel_sword', 'silver_sword'],
+    Halberd: ['iron_lance', 'steel_lance', 'silver_lance'],
+    Reaver:  ['iron_axe', 'steel_axe', 'silver_axe'],
+    Archer:  ['short_bow', 'steel_bow', 'silver_bow'],
+    Ember:   ['fire', 'elfire', 'arcfire']
+  };
+  function upgrade(cls, current) {
+    const line = ARSENAL[cls] || [];
+    const i = line.indexOf(current);
+    return i >= 0 && i < line.length - 1 ? line[i + 1] : null;
+  }
+  const keyOf = (w) => Object.keys(WEAPONS).find(k => WEAPONS[k] === w) || null;
 
   /* sword beats axe beats lance beats sword */
   const BEATS = { sword: 'axe', axe: 'lance', lance: 'sword' };
@@ -155,5 +182,6 @@ K.units = (function () {
     return { forecast: f, blows };
   }
 
-  return { WEAPONS, CLASSES, make, grow, strike, forecast, resolve, inRange, triangle, AS };
+  return { WEAPONS, ARSENAL, CLASSES, make, grow, strike, forecast, resolve, inRange,
+           triangle, AS, upgrade, keyOf };
 })();

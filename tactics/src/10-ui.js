@@ -24,10 +24,20 @@ K.ui = (function () {
       hint: $('hint'), log: $('log'), logBody: $('logBody'), runStat: $('runStat'),
       sheet: $('sheet'), sName: $('sName'), sStats: $('sStats'), sWeapon: $('sWeapon'), sTag: $('sTag'),
       over: $('over'), overTitle: $('overTitle'), overSub: $('overSub'),
-      overList: $('overList'), btnAgain: $('btnAgain'), intro: $('intro')
+      overList: $('overList'), btnAgain: $('btnAgain'), intro: $('intro'),
+      spoils: $('spoils'), spoilList: $('spoilList')
     };
     $('btnStart').onclick = () => { el.intro.classList.add('hidden'); H.start && H.start(); };
-    $('btnAgain').onclick = () => { el.over.classList.add('hidden'); H.again && H.again(); };
+    $('btnAgain').onclick = () => {
+      // a field's spoils are not something to walk past by accident
+      if (!el.spoils.classList.contains('hidden') && !el.spoilList.querySelector('.picked')) {
+        el.spoils.classList.add('nag');
+        setTimeout(() => el.spoils.classList.remove('nag'), 700);
+        return;
+      }
+      el.over.classList.add('hidden');
+      H.again && H.again();
+    };
     $('btnLog').onclick = () => el.log.classList.toggle('hidden');
     $('btnLogClose').onclick = () => el.log.classList.add('hidden');
     $('btnFit').onclick = () => H.fit && H.fit();
@@ -136,6 +146,25 @@ K.ui = (function () {
     return f;
   }
 
+  /* the choice between fields: three offers, one tap, no take-backs */
+  function spoils(g, show) {
+    if (!show || !g.offers || !g.offers.length) { el.spoils.classList.add('hidden'); return; }
+    el.spoils.classList.remove('hidden');
+    el.spoilList.innerHTML = '';
+    g.offers.forEach((o, i) => {
+      const b = document.createElement('button');
+      b.className = 'spoil ' + o.kind;
+      b.innerHTML = '<b>' + o.label + '</b><span>' + o.detail + '</span>';
+      b.onclick = () => {
+        for (const other of el.spoilList.children) other.classList.remove('picked');
+        b.classList.add('picked');
+        el.btnAgain.textContent = 'PRESS ON';
+        H.spoil && H.spoil(i);
+      };
+      el.spoilList.appendChild(b);
+    });
+  }
+
   function log(entries) {
     let html = '';
     for (const e of entries) html += '<div class="' + e.kind + '">' + e.text + '</div>';
@@ -186,16 +215,19 @@ K.ui = (function () {
 
     if (b.over && g.summary && el.over.classList.contains('hidden')) {
       const s = g.summary, won = b.over === 'win';
-      el.overTitle.textContent = won ? 'FIELD HELD' : 'OVERRUN';
-      el.overTitle.style.color = won ? 'var(--good)' : 'var(--theirs)';
-      el.overSub.textContent = won
-        ? 'wave ' + s.wave + ' taken on turn ' + b.turn
-        : 'wave ' + s.wave + ' broke the line · best ' + (g.run.best || 0);
+      const done = won && s.final;
+      el.overTitle.textContent = done ? 'THE RUN IS YOURS' : won ? 'FIELD HELD' : 'OVERRUN';
+      el.overTitle.style.color = done ? 'var(--warn)' : won ? 'var(--good)' : 'var(--theirs)';
+      el.overSub.textContent = done
+        ? 'all ' + K.camp.RUN + ' fields taken · ' + s.survivors.length + ' walked off it'
+        : won ? 'wave ' + s.wave + ' of ' + K.camp.RUN + ' taken on turn ' + b.turn
+          : 'wave ' + s.wave + ' broke the line · best ' + (g.run.best || 0);
+      spoils(g, won && !done);
       let html = '';
       for (const u of s.survivors) html += '<div class="up"><span>' + u.name + ' · ' + u.cls + '</span><b>lv ' + u.level + '</b></div>';
       for (const name of s.lost) html += '<div class="gone"><span>' + name + '</span><b>fallen</b></div>';
       el.overList.innerHTML = html;
-      el.btnAgain.textContent = won ? 'PRESS ON' : 'BEGIN AGAIN';
+      el.btnAgain.textContent = done ? 'BEGIN AGAIN' : won ? 'CHOOSE ONE' : 'BEGIN AGAIN';
       el.over.classList.remove('hidden');
     }
   }

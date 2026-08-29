@@ -172,14 +172,34 @@ html, body {
 .overbox, .introbox {
   text-align: center; padding: 24px 22px; max-width: 340px;
   border: 1px solid var(--edge); border-radius: 16px; background: rgba(12,15,24,0.94);
+  /* a long roster and three offers must never push the button off a phone */
+  max-height: 88vh; overflow-y: auto;
 }
 .overbox b { display: block; font-size: 21px; letter-spacing: 0.2em; }
 .overbox span { display: block; font-size: 11px; color: var(--dim); margin: 8px 0 12px; }
 #overList { text-align: left; margin: 0 0 16px; }
-#overList div { font-size: 11px; color: var(--dim); line-height: 1.7; display: flex; justify-content: space-between; gap: 12px; }
+#overList div { font-size: 11px; color: var(--dim); line-height: 1.45; display: flex; justify-content: space-between; gap: 12px; }
 #overList div b { color: var(--ink); font-weight: 600; font-size: 11px; letter-spacing: 0.06em; }
 #overList div.gone { color: var(--theirs); }
 #overList div.up b { color: var(--good); }
+#spoils { margin: 4px 0 16px; }
+.spoilhead { font-size: 9px; letter-spacing: 0.24em; color: var(--dim); text-align: left; margin-bottom: 7px;
+  transition: color .2s; }
+#spoils.nag .spoilhead { color: var(--warn); }
+#spoilList { display: flex; flex-direction: column; gap: 6px; }
+.spoil {
+  font-family: inherit; text-align: left; cursor: pointer; width: 100%;
+  background: rgba(127,216,255,0.07); border: 1px solid var(--edge); border-radius: 10px;
+  padding: 9px 11px; color: var(--ink);
+}
+.spoil b { display: block; font-size: 11.5px; letter-spacing: 0.04em; }
+.spoil span { display: block; font-size: 10px; color: var(--dim); margin-top: 3px; }
+.spoil.arm { border-color: rgba(255,209,102,0.4); }
+.spoil.arm b { color: var(--warn); }
+.spoil.recruit { border-color: rgba(127,216,255,0.4); }
+.spoil.recruit b { color: var(--mine); }
+.spoil.rally b, .spoil.drill b { color: var(--good); }
+.spoil.picked { background: rgba(138,255,192,0.12); border-color: var(--good); }
 .introbox h1 { margin: 0; font-size: 28px; letter-spacing: 0.32em; font-weight: 700; }
 .introbox .sub { color: var(--dim); font-size: 11px; margin: 8px 0 16px; letter-spacing: 0.04em; }
 .introbox ul { text-align: left; padding-left: 16px; margin: 0 0 18px; }
@@ -256,6 +276,10 @@ html, body {
       <b id="overTitle">FIELD HELD</b>
       <span id="overSub"></span>
       <div id="overList"></div>
+      <div id="spoils" class="hidden">
+        <div class="spoilhead">TAKE ONE</div>
+        <div id="spoilList"></div>
+      </div>
       <button id="btnAgain">PRESS ON</button>
     </div>
   </div>
@@ -268,7 +292,8 @@ html, body {
         <li><b>Tap</b> one of yours, then a blue tile to move — or an enemy to line up a strike.</li>
         <li><b>Drag</b> to move the camera, pinch to zoom, ⤢ for the whole board.</li>
         <li>Height, terrain and the weapon triangle all count. So does the drop.</li>
-        <li>Survivors carry their levels into the next wave. The fallen do not come back.</li>
+        <li>Eight fields to a run. Survivors carry their levels and their weapons; the
+            fallen do not come back, and the last field has somebody in charge of it.</li>
       </ul>
       <button id="btnStart">TAKE THE FIELD</button>
     </div>
@@ -1400,15 +1425,42 @@ K.units = (function () {
   const U = K.util;
   const { clamp } = U;
 
+  /* Three tiers, and the tiers cost you something: steel and silver hit far
+     harder and hit less often, and they are heavy, which is how a weapon
+     upgrade can genuinely be the wrong choice for a fast unit. */
   const WEAPONS = {
     iron_sword:  { name: 'Iron Sword',  kind: 'sword', mt: 5, hit: 90, crit: 5,  rng: [1, 1], wt: 5 },
     steel_sword: { name: 'Steel Sword', kind: 'sword', mt: 8, hit: 80, crit: 3,  rng: [1, 1], wt: 9 },
+    silver_sword:{ name: 'Silver Sword',kind: 'sword', mt: 11, hit: 78, crit: 6, rng: [1, 1], wt: 12 },
     iron_lance:  { name: 'Iron Lance',  kind: 'lance', mt: 6, hit: 85, crit: 3,  rng: [1, 1], wt: 7 },
+    steel_lance: { name: 'Steel Lance', kind: 'lance', mt: 9, hit: 76, crit: 2,  rng: [1, 1], wt: 11 },
+    silver_lance:{ name: 'Silver Lance',kind: 'lance', mt: 12, hit: 74, crit: 4, rng: [1, 1], wt: 14 },
     iron_axe:    { name: 'Iron Axe',    kind: 'axe',   mt: 7, hit: 75, crit: 3,  rng: [1, 1], wt: 9 },
+    steel_axe:   { name: 'Steel Axe',   kind: 'axe',   mt: 10, hit: 68, crit: 2, rng: [1, 1], wt: 12 },
+    silver_axe:  { name: 'Silver Axe',  kind: 'axe',   mt: 13, hit: 66, crit: 4, rng: [1, 1], wt: 15 },
     hand_axe:    { name: 'Hand Axe',    kind: 'axe',   mt: 6, hit: 65, crit: 2,  rng: [1, 2], wt: 10 },
     short_bow:   { name: 'Short Bow',   kind: 'bow',   mt: 5, hit: 85, crit: 5,  rng: [2, 2], wt: 6 },
-    fire:        { name: 'Fire',        kind: 'tome',  mt: 5, hit: 90, crit: 0,  rng: [1, 2], wt: 5, magic: true }
+    steel_bow:   { name: 'Steel Bow',   kind: 'bow',   mt: 8, hit: 78, crit: 4,  rng: [2, 2], wt: 9 },
+    silver_bow:  { name: 'Silver Bow',  kind: 'bow',   mt: 10, hit: 76, crit: 7, rng: [2, 2], wt: 11 },
+    fire:        { name: 'Fire',        kind: 'tome',  mt: 5, hit: 90, crit: 0,  rng: [1, 2], wt: 5, magic: true },
+    elfire:      { name: 'Elfire',      kind: 'tome',  mt: 8, hit: 84, crit: 2,  rng: [1, 2], wt: 8, magic: true },
+    arcfire:     { name: 'Arcfire',     kind: 'tome',  mt: 11, hit: 80, crit: 4, rng: [1, 2], wt: 11, magic: true }
   };
+
+  /* what each class can be handed next, in order */
+  const ARSENAL = {
+    Blade:   ['iron_sword', 'steel_sword', 'silver_sword'],
+    Halberd: ['iron_lance', 'steel_lance', 'silver_lance'],
+    Reaver:  ['iron_axe', 'steel_axe', 'silver_axe'],
+    Archer:  ['short_bow', 'steel_bow', 'silver_bow'],
+    Ember:   ['fire', 'elfire', 'arcfire']
+  };
+  function upgrade(cls, current) {
+    const line = ARSENAL[cls] || [];
+    const i = line.indexOf(current);
+    return i >= 0 && i < line.length - 1 ? line[i + 1] : null;
+  }
+  const keyOf = (w) => Object.keys(WEAPONS).find(k => WEAPONS[k] === w) || null;
 
   /* sword beats axe beats lance beats sword */
   const BEATS = { sword: 'axe', axe: 'lance', lance: 'sword' };
@@ -1549,7 +1601,8 @@ K.units = (function () {
     return { forecast: f, blows };
   }
 
-  return { WEAPONS, CLASSES, make, grow, strike, forecast, resolve, inRange, triangle, AS };
+  return { WEAPONS, ARSENAL, CLASSES, make, grow, strike, forecast, resolve, inRange,
+           triangle, AS, upgrade, keyOf };
 })();
 
 /* ---- 05-actor.js ---- */
@@ -2029,6 +2082,8 @@ K.battle = (function () {
       const u = Un.make(spec.cls, 1, spec.name, spec.level || 2);
       u.guard = !!spec.guard;
       u.alert = spec.alert || 4;
+      if (spec.weapon && Un.WEAPONS[spec.weapon]) u.weapon = Un.WEAPONS[spec.weapon];
+      if (spec.boss) { u.boss = true; u.maxHp += 8; u.hp = u.maxHp; }
       // a guard wants high ground; if there is none left it joins the line
       place(u, (u.guard ? next(held) : null) || next(theirs) || next(held));
     }
@@ -2037,10 +2092,12 @@ K.battle = (function () {
     b.wave = wave;
     b.title = arena.title;
     const us = living(b, 0).length, them = living(b, 1).length;
+    const boss = b.units.find(u => u.boss);
     b.banner = {
-      title: 'PLAYER PHASE',
-      sub: wave > 1 ? 'wave ' + wave + ' · ' + arena.title + ' · ' + us + ' against ' + them
-                    : 'four against five, and they hold the high ground',
+      title: boss ? 'THE LAST FIELD' : 'PLAYER PHASE',
+      sub: boss ? boss.name + ' holds ' + arena.title + ' · ' + us + ' against ' + them
+        : wave > 1 ? 'wave ' + wave + ' of ' + K.camp.RUN + ' · ' + arena.title + ' · ' + us + ' against ' + them
+          : 'four against five, and they hold the high ground',
       t: 0
     };
     return b;
@@ -2335,7 +2392,8 @@ K.battle = (function () {
 K.camp = (function () {
   const U = K.util, Un = K.units;
   const { clamp } = U;
-  const KEY = 'ironwake.run.v2';
+  const KEY = 'ironwake.run.v3';
+  const RUN = 8;                 // a run you can finish, not a treadmill
 
   const START = [
     { cls: 'Blade', name: 'VESS', level: 6 },
@@ -2346,8 +2404,14 @@ K.camp = (function () {
   const RECRUITS = ['HALT', 'WREN', 'COBB', 'IDRIS', 'MARR', 'PELL', 'SAVE', 'TOLL', 'VANE', 'YEW'];
   const FOES = ['GHAST', 'BULWARK', 'SPINE', 'NEEDLE', 'MAUL', 'CINDER', 'GRIST', 'HOLLOW', 'RASP', 'THRAW'];
 
+  /* The roster holds one shape and one only: a full record, stats rolled.
+     Two shapes — a bare "level 6 Blade" and a veteran's actual numbers — is
+     how a reward ends up adding three to an undefined maximum. */
   function fresh() {
-    return { wave: 1, best: 0, runs: 0, roster: START.map(u => ({ ...u })), fallen: [], last: null };
+    return {
+      wave: 1, best: 0, runs: 0, wins: 0, fallen: [], last: null,
+      roster: START.map(s => snapshot(Un.make(s.cls, 0, s.name, s.level)))
+    };
   }
 
   function load() {
@@ -2367,7 +2431,7 @@ K.camp = (function () {
 
   /* a unit, flattened to what survives a battle */
   function snapshot(u) {
-    const o = { cls: u.cls, name: u.name };
+    const o = { cls: u.cls, name: u.name, weapon: Un.keyOf(u.weapon) };
     for (const k of KEEP) o[k] = u[k];
     return o;
   }
@@ -2382,6 +2446,8 @@ K.camp = (function () {
     const veteran = spec.maxHp !== undefined;
     const u = Un.make(spec.cls, side, spec.name, veteran ? 1 : (spec.level || 1));
     if (veteran) for (const k of KEEP) if (spec[k] !== undefined) u[k] = spec[k];
+    if (spec.weapon && Un.WEAPONS[spec.weapon]) u.weapon = Un.WEAPONS[spec.weapon];
+    if (spec.boss) { u.boss = true; u.maxHp += 8; }
     u.hp = u.maxHp;
     return u;
   }
@@ -2389,21 +2455,120 @@ K.camp = (function () {
   /* the opposition for a given wave: more of them, and better, every time */
   /* Who they field, not where they stand — the arena decides that, because
      from here on the arena is different every time. */
+  const CAPTAINS = ['THE IRONWAKE', 'ASH OF THE WALL', 'VEIL', 'THE LONG COUNT', 'HOLLOWKING'];
+
+  /* Who they field, not where they stand — the arena decides that, because
+     from here on the arena is different every time. */
   function enemyPlan(wave, rnd) {
     const n = clamp(4 + Math.ceil(wave / 2), 5, 8);
     const lvl = clamp(2 + Math.floor(wave * 1.4), 2, 20);
     const pool = ['Reaver', 'Halberd', 'Blade', 'Archer', 'Ember', 'Reaver', 'Blade'];
+    const arm = wave >= 6 ? 2 : wave >= 3 ? 1 : 0;     // they upgrade too
     const out = [];
     for (let i = 0; i < n; i++) {
       const cls = i === 0 ? 'Reaver' : i === 1 ? 'Halberd' : pool[Math.floor(rnd() * pool.length)];
+      const line = Un.ARSENAL[cls];
       out.push({
         cls, name: FOES[i % FOES.length],
         level: clamp(lvl + (i < 2 ? 1 : 0) - (i > 4 ? 1 : 0), 1, 24),
+        weapon: line[Math.min(arm, line.length - 1)],
         // the last two of any wave hold the high ground
         guard: i >= n - 2, alert: 5
       });
     }
+    // The last field of a run has somebody in charge of it. A run that cannot
+    // be finished is a score attack wearing a campaign's clothes.
+    if (wave >= RUN) {
+      const cls = ['Reaver', 'Halberd', 'Blade'][Math.floor(rnd() * 3)];
+      out.unshift({
+        cls, name: CAPTAINS[Math.floor(rnd() * CAPTAINS.length)],
+        level: clamp(lvl + 4, 4, 26),
+        weapon: Un.ARSENAL[cls][2],
+        boss: true, guard: false, alert: 9
+      });
+    }
     return out;
+  }
+
+  /* ------------------------------------------------------------- the spoils
+
+     A wave won hands you one choice out of three. Every one of them is a real
+     trade — a weapon that is heavier than the one it replaces, a body that
+     starts green, a stat that goes to one unit and not another — because a
+     reward you would never refuse is not a decision. */
+  const STATS = [['str', 'STR'], ['skl', 'SKL'], ['spd', 'SPD'], ['def', 'DEF'], ['lck', 'LCK']];
+
+  function offers(s, rnd) {
+    const out = [];
+    const roster = s.roster;
+
+    // a weapon for whoever is still carrying the older iron
+    const armable = roster
+      .map(u => ({ u, next: Un.upgrade(u.cls, u.weapon || Un.CLASSES[u.cls].weapon) }))
+      .filter(o => o.next);
+    if (armable.length) {
+      const pick = armable[Math.floor(rnd() * armable.length)];
+      const w = Un.WEAPONS[pick.next], old = Un.WEAPONS[pick.u.weapon || Un.CLASSES[pick.u.cls].weapon];
+      out.push({
+        kind: 'arm', unit: pick.u.name, weapon: pick.next,
+        label: pick.u.name + ' takes the ' + w.name,
+        detail: 'mt ' + old.mt + '→' + w.mt + ' · hit ' + old.hit + '→' + w.hit + ' · weight ' + old.wt + '→' + w.wt
+      });
+    }
+
+    // a recruit, if the line has thinned
+    if (roster.length < 5) {
+      const cls = ['Blade', 'Halberd', 'Archer', 'Ember', 'Reaver'][Math.floor(rnd() * 5)];
+      const avg = Math.round(roster.reduce((a, u) => a + u.level, 0) / Math.max(1, roster.length));
+      const name = RECRUITS[Math.floor(rnd() * RECRUITS.length)];
+      out.push({
+        kind: 'recruit', cls, name, level: clamp(avg - 1, 1, 20),
+        label: name + ' joins as a ' + cls,
+        detail: 'level ' + clamp(avg - 1, 1, 20) + ' · ' + Un.CLASSES[cls].tag
+      });
+    }
+
+    // drill: two points of one stat into one unit
+    const who = roster[Math.floor(rnd() * roster.length)];
+    const st = STATS[Math.floor(rnd() * STATS.length)];
+    out.push({
+      kind: 'drill', unit: who.name, stat: st[0], amount: 2,
+      label: who.name + ' drills ' + st[1],
+      detail: '+2 ' + st[1] + ' for the rest of the run'
+    });
+
+    // rations: everybody a little tougher
+    out.push({
+      kind: 'rally', amount: 3,
+      label: 'The whole line eats',
+      detail: '+3 max HP each · ' + roster.length + ' of you'
+    });
+
+    // three, never the same kind twice
+    const seen = new Set(), three = [];
+    for (const o of out) { if (seen.has(o.kind)) continue; seen.add(o.kind); three.push(o); }
+    while (three.length > 3) three.pop();
+    return three;
+  }
+
+  function take(s, offer) {
+    if (!offer) return s;
+    const find = (name) => s.roster.find(u => u.name === name);
+    if (offer.kind === 'arm') {
+      const u = find(offer.unit);
+      if (u) u.weapon = offer.weapon;
+    } else if (offer.kind === 'recruit') {
+      const u = Un.make(offer.cls, 0, offer.name, offer.level);
+      s.roster.push(snapshot(u));
+    } else if (offer.kind === 'drill') {
+      const u = find(offer.unit);
+      if (u) u[offer.stat] = (u[offer.stat] || 0) + offer.amount;
+    } else if (offer.kind === 'rally') {
+      for (const u of s.roster) { u.maxHp += offer.amount; u.hp = u.maxHp; }
+    }
+    s.offers = null;
+    save(s);
+    return s;
   }
 
   /* what the player brings: whoever is left, healed, plus a recruit if the
@@ -2431,18 +2596,29 @@ K.camp = (function () {
       s.roster = mine.filter(u => !u.dead).map(snapshot);
       s.fallen = (s.fallen || []).concat(lost);
       s.best = Math.max(s.best || 0, s.wave);
-      s.wave++;
-      if (!s.roster.length) { s.runs = (s.runs || 0) + 1; const f = fresh(); f.best = s.best; f.runs = s.runs; Object.assign(s, f, { last: s.last }); }
+      s.last.final = s.wave >= RUN;
+      if (s.wave >= RUN) {
+        // the run is finished, and finished is a thing you can be
+        s.wins = (s.wins || 0) + 1;
+        s.runs = (s.runs || 0) + 1;
+        const best = s.best, runs = s.runs, wins = s.wins, last = s.last;
+        Object.assign(s, fresh(), { best, runs, wins, last });
+      } else {
+        s.wave++;
+        s.offers = null;
+      }
+      if (!s.roster.length) { s.runs = (s.runs || 0) + 1; const f = fresh(); f.best = s.best; f.runs = s.runs; f.wins = s.wins; Object.assign(s, f, { last: s.last }); }
     } else {
       s.runs = (s.runs || 0) + 1;
-      const best = s.best, runs = s.runs, last = s.last;
-      Object.assign(s, fresh(), { best, runs, last });
+      const best = s.best, runs = s.runs, wins = s.wins, last = s.last;
+      Object.assign(s, fresh(), { best, runs, wins, last });
     }
     save(s);
     return s.last;
   }
 
-  return { fresh, load, save, snapshot, restore, enemyPlan, playerPlan, afterBattle, START };
+  return { fresh, load, save, snapshot, restore, enemyPlan, playerPlan, afterBattle,
+           offers, take, START, RUN };
 })();
 
 /* ---- 08-render.js ---- */
@@ -2910,15 +3086,18 @@ K.render = (function () {
           const gy = (gr ? gr.y : a.pos.y) + 0.035;
           const sel = g.battle.sel === a.unit;
           const spent = a.unit.acted;
-          const r = 0.62;
+          const r = a.unit.boss ? 0.82 : 0.62;
           const pts = [];
           for (let i = 0; i < 22; i++) {
             const th = i / 22 * Math.PI * 2;
             pts.push(proj(v, pel.x + Math.cos(th) * r, gy, pel.z + Math.sin(th) * r));
           }
           const puls = sel ? 0.55 + 0.45 * Math.sin(g.t * 5) : 1;
-          strokePoly(v, ctx, pts, css(spent ? [120, 126, 142] : rgb(S.ring), (spent ? 0.35 : 0.75) * puls), sel ? 3 : 1.8);
-          if (sel) fillPoly(v, ctx, pts, css(rgb(S.ring), 0.10));
+          const ring = a.unit.boss ? [255, 209, 102] : rgb(S.ring);
+          strokePoly(v, ctx, pts, css(spent ? [120, 126, 142] : ring, (spent ? 0.35 : 0.75) * puls),
+            sel ? 3 : a.unit.boss ? 2.6 : 1.8);
+          if (sel) fillPoly(v, ctx, pts, css(ring, 0.10));
+          if (a.unit.boss) fillPoly(v, ctx, pts, css(ring, 0.07 + 0.05 * Math.sin(g.t * 2.2)));
         }
 
         // A stroke costs an order of magnitude more than a fill in a software
@@ -3018,11 +3197,33 @@ K.render = (function () {
           ctx.beginPath(); ctx.moveTo(x, s.y - hgt); ctx.lineTo(x, s.y); ctx.stroke();
         }
       }
-      ctx.textAlign = 'center';
-      ctx.font = font(clamp(0.30 * s.s, 8, 15));
+      ctx.globalAlpha = 1;
+    }
+
+    /* Names, nearest first, and a name that would land on top of one already
+       drawn is dropped. Nine bodies at a spawn point turn a row of labels into
+       a smear, and a smear is worse than no label at all — the ring and the
+       bar still say whose it is and how it is doing. */
+    ctx.textAlign = 'center';
+    const claimed = [];
+    const order = list.slice().sort((p, q) =>
+      (q.u.boss ? 1e6 : 0) - (p.u.boss ? 1e6 : 0) + (p.s.z - q.s.z));
+    for (const it of order) {
+      const { u, s } = it;
+      const w = clamp(1.05 * s.s, 22, 74), hgt = Math.max(3, w * 0.085);
+      const size = clamp(0.30 * s.s, 8, 15);
+      ctx.font = font(size);
+      const text = u.dead ? '✕ ' + u.name : u.name;
+      const half = ctx.measureText(text).width / 2 + 3;
+      const y = s.y - hgt - 5;
+      const box = { x0: s.x - half, x1: s.x + half, y0: y - size, y1: y + 3 };
+      if (claimed.some(c => box.x0 < c.x1 && box.x1 > c.x0 && box.y0 < c.y1 && box.y1 > c.y0)) continue;
+      claimed.push(box);
+      ctx.globalAlpha = clamp(1 - (s.z - 34) / 18, 0.25, 1);
       ctx.fillStyle = u.dead ? 'rgba(150,152,166,0.8)'
-        : u.side === 0 ? 'rgba(226,238,255,0.95)' : 'rgba(255,206,196,0.95)';
-      ctx.fillText(u.dead ? '✕ ' + u.name : u.name, s.x, s.y - hgt - 5);
+        : u.boss ? '#ffd166'
+          : u.side === 0 ? 'rgba(226,238,255,0.95)' : 'rgba(255,206,196,0.95)';
+      ctx.fillText(text, s.x, y);
       ctx.globalAlpha = 1;
     }
 
@@ -3307,10 +3508,20 @@ K.ui = (function () {
       hint: $('hint'), log: $('log'), logBody: $('logBody'), runStat: $('runStat'),
       sheet: $('sheet'), sName: $('sName'), sStats: $('sStats'), sWeapon: $('sWeapon'), sTag: $('sTag'),
       over: $('over'), overTitle: $('overTitle'), overSub: $('overSub'),
-      overList: $('overList'), btnAgain: $('btnAgain'), intro: $('intro')
+      overList: $('overList'), btnAgain: $('btnAgain'), intro: $('intro'),
+      spoils: $('spoils'), spoilList: $('spoilList')
     };
     $('btnStart').onclick = () => { el.intro.classList.add('hidden'); H.start && H.start(); };
-    $('btnAgain').onclick = () => { el.over.classList.add('hidden'); H.again && H.again(); };
+    $('btnAgain').onclick = () => {
+      // a field's spoils are not something to walk past by accident
+      if (!el.spoils.classList.contains('hidden') && !el.spoilList.querySelector('.picked')) {
+        el.spoils.classList.add('nag');
+        setTimeout(() => el.spoils.classList.remove('nag'), 700);
+        return;
+      }
+      el.over.classList.add('hidden');
+      H.again && H.again();
+    };
     $('btnLog').onclick = () => el.log.classList.toggle('hidden');
     $('btnLogClose').onclick = () => el.log.classList.add('hidden');
     $('btnFit').onclick = () => H.fit && H.fit();
@@ -3419,6 +3630,25 @@ K.ui = (function () {
     return f;
   }
 
+  /* the choice between fields: three offers, one tap, no take-backs */
+  function spoils(g, show) {
+    if (!show || !g.offers || !g.offers.length) { el.spoils.classList.add('hidden'); return; }
+    el.spoils.classList.remove('hidden');
+    el.spoilList.innerHTML = '';
+    g.offers.forEach((o, i) => {
+      const b = document.createElement('button');
+      b.className = 'spoil ' + o.kind;
+      b.innerHTML = '<b>' + o.label + '</b><span>' + o.detail + '</span>';
+      b.onclick = () => {
+        for (const other of el.spoilList.children) other.classList.remove('picked');
+        b.classList.add('picked');
+        el.btnAgain.textContent = 'PRESS ON';
+        H.spoil && H.spoil(i);
+      };
+      el.spoilList.appendChild(b);
+    });
+  }
+
   function log(entries) {
     let html = '';
     for (const e of entries) html += '<div class="' + e.kind + '">' + e.text + '</div>';
@@ -3469,16 +3699,19 @@ K.ui = (function () {
 
     if (b.over && g.summary && el.over.classList.contains('hidden')) {
       const s = g.summary, won = b.over === 'win';
-      el.overTitle.textContent = won ? 'FIELD HELD' : 'OVERRUN';
-      el.overTitle.style.color = won ? 'var(--good)' : 'var(--theirs)';
-      el.overSub.textContent = won
-        ? 'wave ' + s.wave + ' taken on turn ' + b.turn
-        : 'wave ' + s.wave + ' broke the line · best ' + (g.run.best || 0);
+      const done = won && s.final;
+      el.overTitle.textContent = done ? 'THE RUN IS YOURS' : won ? 'FIELD HELD' : 'OVERRUN';
+      el.overTitle.style.color = done ? 'var(--warn)' : won ? 'var(--good)' : 'var(--theirs)';
+      el.overSub.textContent = done
+        ? 'all ' + K.camp.RUN + ' fields taken · ' + s.survivors.length + ' walked off it'
+        : won ? 'wave ' + s.wave + ' of ' + K.camp.RUN + ' taken on turn ' + b.turn
+          : 'wave ' + s.wave + ' broke the line · best ' + (g.run.best || 0);
+      spoils(g, won && !done);
       let html = '';
       for (const u of s.survivors) html += '<div class="up"><span>' + u.name + ' · ' + u.cls + '</span><b>lv ' + u.level + '</b></div>';
       for (const name of s.lost) html += '<div class="gone"><span>' + name + '</span><b>fallen</b></div>';
       el.overList.innerHTML = html;
-      el.btnAgain.textContent = won ? 'PRESS ON' : 'BEGIN AGAIN';
+      el.btnAgain.textContent = done ? 'BEGIN AGAIN' : won ? 'CHOOSE ONE' : 'BEGIN AGAIN';
       el.over.classList.remove('hidden');
     }
   }
@@ -3865,7 +4098,13 @@ K.ui = (function () {
       driveCamera(dt);
       if (g.battle.sel && !g.cardUnit) g.cardUnit = g.battle.sel;
       if (g.pair && (g.pair.def.dead || g.pair.att.dead || g.battle.busy)) { g.pair = null; g.pathPreview = null; }
-      if (g.battle.over && !g.summary) g.summary = K.camp.afterBattle(g.run, g.battle, g.battle.over === 'win');
+      if (g.battle.over && !g.summary) {
+        const won = g.battle.over === 'win';
+        g.summary = K.camp.afterBattle(g.run, g.battle, won);
+        // a field won buys a choice; a run finished buys the record
+        g.offers = won && !g.summary.final ? K.camp.offers(g.run, U.rng((g.run.wave * 6151 + (g.run.runs || 0) * 97) >>> 0)) : null;
+        g.taken = null;
+      }
     }
 
     const t0 = performance.now();
@@ -3878,7 +4117,12 @@ K.ui = (function () {
 
   K.ui.init({
     start: () => { g.running = true; measure(); },
-    again: () => { newBattle(); g.running = true; },
+    again: () => {
+      if (g.offers && g.taken !== null) K.camp.take(g.run, g.offers[g.taken]);
+      g.offers = null; g.taken = null;
+      newBattle(); g.running = true;
+    },
+    spoil: (i) => { g.taken = i; },
     wipe: () => { g.run = K.camp.fresh(); K.camp.save(g.run); newBattle(); g.running = true; },
     attack: () => commit(),
     wait: () => { const b = g.battle; if (b.sel) B.finishUnit(b, b.sel); g.pair = null; g.cardUnit = null; },
