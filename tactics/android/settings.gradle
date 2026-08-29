@@ -1,0 +1,12 @@
+/* IRONWAKE ships as its own tiny Gradle project rather than a module of
+   Voxeland: the game is a self-contained page, and the wrapper around it has
+   no business in the build of anything else. */
+pluginManagement {
+    repositories { google(); mavenCentral(); gradlePluginPortal() }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories { google(); mavenCentral() }
+}
+rootProject.name = "Ironwake"
+include ':app'

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the run is worth keeping across a reinstall -->
+<full-backup-content>
+    <include domain="database" path="." />
+    <include domain="file" path="." />
+</full-backup-content>
