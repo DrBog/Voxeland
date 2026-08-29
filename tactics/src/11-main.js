@@ -27,6 +27,7 @@
     const rnd = U.rng((run.wave * 7919 + (run.runs || 0) * 104729) >>> 0);
     g.battle = B.create(null, {
       wave: run.wave,
+      avoid: run.lastLayout,
       player: K.camp.playerPlan(run),
       enemy: run.wave === 1 && (run.runs || 0) === 0 ? null : K.camp.enemyPlan(run.wave, rnd)
     });

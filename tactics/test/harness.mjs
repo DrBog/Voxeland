@@ -77,11 +77,16 @@ function playerMove(K, b, u) {
     else K.battle.moveTo(b, u, best.s, best.f);
     return;
   }
+  // close by the route, the way the real AI does
+  let near = foes[0], nd = 1e9;
+  for (const f of foes) { const d = b.arena.dist(u.surface, f.surface); if (d < nd) { nd = d; near = f; } }
+  const field = b.arena.costsFrom(near.surface);
   let goal = null;
   for (const [, e] of b.reach) {
     const s = e.s;
     if (K.battle.occupied(b, s, u)) continue;
-    const d = Math.min(...foes.map(f => b.arena.dist(s, f.surface)));
+    const d = field.get(s.id);
+    if (d === undefined) continue;
     const score = -d * 10 - e.cost * 0.1;
     if (!goal || score > goal.score) goal = { score, s };
   }

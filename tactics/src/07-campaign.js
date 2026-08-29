@@ -59,23 +59,20 @@ K.camp = (function () {
   }
 
   /* the opposition for a given wave: more of them, and better, every time */
+  /* Who they field, not where they stand — the arena decides that, because
+     from here on the arena is different every time. */
   function enemyPlan(wave, rnd) {
     const n = clamp(4 + Math.ceil(wave / 2), 5, 8);
     const lvl = clamp(2 + Math.floor(wave * 1.4), 2, 20);
-    const spots = [
-      [11, 2, 0], [10, 3, 0], [12, 3, 0], [9, 2, 0], [12, 5, 0],
-      [11, 12, 1.5], [12, 11, 1.5], [10, 11, 1.5]
-    ];
     const pool = ['Reaver', 'Halberd', 'Blade', 'Archer', 'Ember', 'Reaver', 'Blade'];
     const out = [];
     for (let i = 0; i < n; i++) {
-      const spot = spots[i % spots.length];
       const cls = i === 0 ? 'Reaver' : i === 1 ? 'Halberd' : pool[Math.floor(rnd() * pool.length)];
       out.push({
         cls, name: FOES[i % FOES.length],
         level: clamp(lvl + (i < 2 ? 1 : 0) - (i > 4 ? 1 : 0), 1, 24),
-        x: spot[0], z: spot[1], y: spot[2],
-        guard: spot[2] > 0, alert: 5
+        // the last two of any wave hold the high ground
+        guard: i >= n - 2, alert: 5
       });
     }
     return out;
@@ -95,6 +92,7 @@ K.camp = (function () {
 
   /* the field is settled: bank the survivors, count the dead, move on */
   function afterBattle(s, battle, won) {
+    s.lastLayout = battle.arena ? battle.arena.layout : null;
     const mine = battle.units.filter(u => u.side === 0);
     const lost = mine.filter(u => u.dead).map(u => u.name);
     s.last = {

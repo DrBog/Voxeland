@@ -876,7 +876,14 @@ K.rag = (function () {
    courtyard, and a unit has to be able to stand on either. So a tile is a
    COLUMN holding any number of walkable surfaces, each with its own height,
    terrain and cover. Movement, ranging and line of sight all work on
-   surfaces, which is what makes a genuinely multi-level arena possible. */
+   surfaces, which is what makes a genuinely multi-level arena possible.
+
+   Maps are built, not drawn: a small kit of operations (ground, block, span,
+   stairway, pit) and a handful of archetypes that compose them. A generated
+   map is worthless if it is unfair or if half of it cannot be walked to, so
+   nothing reaches the player until it has been checked — both lines placed,
+   every spawn and every held position connected, real height, a real drop,
+   and the two sides far enough apart to have a first turn. */
 K.grid = (function () {
   const U = K.util;
   const { clamp } = U;
@@ -885,6 +892,7 @@ K.grid = (function () {
   const CLIMB = 0.62;            // step up you can take without a cost
   const DROP = 1.25;             // and the most you will drop of your own will
   const HOP = 1.5;               // gap you can cross for extra movement
+  const HEAD = 1.7;              // headroom a standing body needs
 
   const TERRAIN = {
     stone:  { name: 'stone',  cost: 1, avoid: 0,  def: 0, col: '#4a4f60' },
@@ -896,11 +904,12 @@ K.grid = (function () {
     fort:   { name: 'rampart',cost: 2, avoid: 20, def: 2, col: '#6a5a64' }
   };
 
-  function key(x, z, i) { return x + ',' + z + ',' + i; }
+  /* ------------------------------------------------------------------ build */
 
-  function Arena(seed) {
+  function Arena(seed, layoutName) {
     const rnd = U.rng(seed);
-    const a = { w: 14, d: 14, cols: new Map(), surfaces: [], props: [], seed };
+    const name = LAYOUTS[layoutName] ? layoutName : 'courtyard';
+    const a = { w: 14, d: 14, cols: new Map(), surfaces: [], props: [], seed, layout: name };
 
     function col(x, z) {
       const k = x + ',' + z;
@@ -908,6 +917,8 @@ K.grid = (function () {
       if (!c) { c = []; a.cols.set(k, c); }
       return c;
     }
+    function reindex(c) { c.sort((p, q) => p.y - q.y); c.forEach((v, i) => { v.i = i; }); }
+
     /* add a walkable surface to a column; `solid` is how far down it fills */
     function put(x, z, y, terrain, solid) {
       if (x < 0 || z < 0 || x >= a.w || z >= a.d) return null;
@@ -918,49 +929,94 @@ K.grid = (function () {
         i: c.length, id: 0, occupant: null
       };
       c.push(s);
-      c.sort((p, q) => p.y - q.y);
-      c.forEach((v, i) => { v.i = i; });
+      reindex(c);
       a.surfaces.push(s);
       return s;
+    }
+    function drop(x, z, pred) {
+      const c = col(x, z);
+      for (let i = c.length - 1; i >= 0; i--) {
+        if (pred && !pred(c[i])) continue;
+        const s = c.splice(i, 1)[0];
+        const j = a.surfaces.indexOf(s);
+        if (j >= 0) a.surfaces.splice(j, 1);
+      }
+      reindex(c);
     }
     a.put = put;
     a.col = (x, z) => a.cols.get(x + ',' + z) || [];
 
-    /* ---- the arena itself: a courtyard, two roofs, a bridge over the middle,
-       a rampart on the high side and a pit you can be knocked into */
-    for (let x = 0; x < a.w; x++) {
-      for (let z = 0; z < a.d; z++) {
-        const edge = x === 0 || z === 0 || x === a.w - 1 || z === a.d - 1;
-        const pit = x >= 6 && x <= 8 && z >= 6 && z <= 8;
-        if (pit) continue;                                  // the drop
-        // the building and the rampart are solid masses, not roofed rooms:
-        // nothing walks under them, so nothing is built under them
-        if (x >= 1 && x <= 4 && z >= 1 && z <= 4) continue;
-        if (x >= 9 && x <= 12 && z >= 9 && z <= 12) continue;
-        const t = edge ? 'stone' : (rnd() < 0.18 ? 'grass' : 'stone');
-        put(x, z, 0, t, 3);
+    /* ---- the kit every layout is written in ---------------------------- */
+    const inb = (x, z) => x >= 0 && z >= 0 && x < a.w && z < a.d;
+    const kit = {
+      rnd,
+      /* the courtyard floor everything else is cut out of */
+      ground(turf) {
+        for (let x = 0; x < a.w; x++) for (let z = 0; z < a.d; z++) {
+          const edge = x === 0 || z === 0 || x === a.w - 1 || z === a.d - 1;
+          put(x, z, 0, edge ? 'stone' : (rnd() < (turf === undefined ? 0.18 : turf) ? 'grass' : 'stone'), 3);
+        }
+      },
+      /* a solid mass: nothing walks under a building, so nothing is left there */
+      block(x0, z0, x1, z1, y, terrain) {
+        for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+          if (!inb(x, z)) continue;
+          drop(x, z, s => s.y < y - 0.05);
+          put(x, z, y, terrain || 'roof', y);
+        }
+      },
+      /* a hole with nothing under it — the arena's own weapon */
+      pit(x0, z0, x1, z1) {
+        for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+          if (!inb(x, z)) continue;
+          drop(x, z, s => s.solid >= 1);
+        }
+      },
+      /* a walkway with air beneath it */
+      span(x0, z0, x1, z1, y, terrain) {
+        const dx = Math.sign(x1 - x0), dz = Math.sign(z1 - z0);
+        const n = Math.max(Math.abs(x1 - x0), Math.abs(z1 - z0));
+        for (let i = 0; i <= n; i++) {
+          const x = x0 + dx * i, z = z0 + dz * i;
+          if (!inb(x, z)) continue;
+          if (a.col(x, z).some(s => Math.abs(s.y - y) < 0.06)) continue;
+          put(x, z, y, terrain || 'bridge', 0.25);
+        }
+      },
+      /* A flight of steps from one height to another, laid along a direction.
+         The rise per step is whatever keeps it inside CLIMB, so a stair built
+         by the kit is always walkable in both directions — which is the whole
+         point of building maps out of a kit instead of by hand. */
+      stairway(x, z, dx, dz, from, to, terrain) {
+        const n = Math.max(1, Math.ceil(Math.abs(to - from) / CLIMB));
+        let last = null;
+        for (let i = 1; i <= n; i++) {
+          const y = from + (to - from) * (i / n);
+          const tx = x + dx * (i - 1), tz = z + dz * (i - 1);
+          if (!inb(tx, tz)) break;
+          // a landing that already exists at this height IS the step
+          const there = a.col(tx, tz).find(s => Math.abs(s.y - y) < 0.08);
+          if (there) { last = there; continue; }
+          drop(tx, tz, s => s.y < y - 0.05 && s.solid >= 1);
+          last = put(tx, tz, y, terrain || 'stair', y);
+        }
+        return last;
+      },
+      scatter(n, terrain) {
+        for (let i = 0; i < n; i++) {
+          const x = 1 + Math.floor(rnd() * (a.w - 2)), z = 1 + Math.floor(rnd() * (a.d - 2));
+          const c = a.col(x, z);
+          if (c.length === 1 && c[0].y === 0) { c[0].terrain = terrain || 'rubble'; c[0].t = TERRAIN[terrain || 'rubble']; }
+        }
+      },
+      rect(x0, z0, x1, z1) {
+        const out = [];
+        for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) if (inb(x, z)) out.push([x, z]);
+        return out;
       }
-    }
-    // West building: two storeys. Every rise on the stair is inside CLIMB, so
-    // the route up is walkable in both directions — a staircase you can only
-    // fall down is a bug, not a level.
-    for (let x = 1; x <= 4; x++) for (let z = 1; z <= 4; z++) put(x, z, 2.2, 'roof', 2.2);
-    put(5, 4, 0.55, 'stair', 0.55); put(5, 3, 1.10, 'stair', 1.10);
-    put(5, 2, 1.65, 'stair', 1.65); put(5, 1, 2.20, 'stair', 2.20);
-    // east rampart, one storey, with its own short flight up from the middle
-    for (let x = 9; x <= 12; x++) for (let z = 9; z <= 12; z++) put(x, z, 1.5, 'fort', 1.5);
-    put(9, 8, 0.50, 'stair', 0.50); put(10, 8, 1.00, 'stair', 1.00);
-    // The bridge: off the roof at (4,4), across the pit, down onto the rampart.
-    // It lands on a low ramp tile so the crossing works from both ends.
-    for (let z = 5; z <= 9; z++) put(7, z, 2.2, 'bridge', 0.25);
-    put(6, 5, 2.2, 'bridge', 0.25); put(5, 5, 2.2, 'bridge', 0.25); put(4, 5, 2.2, 'bridge', 0.25);
-    put(8, 9, 2.2, 'bridge', 0.25); put(9, 9, 1.95, 'bridge', 0.45);
-    // scattered cover
-    for (let n = 0; n < 14; n++) {
-      const x = 1 + Math.floor(rnd() * (a.w - 2)), z = 1 + Math.floor(rnd() * (a.d - 2));
-      const c = a.col(x, z);
-      if (c.length === 1 && c[0].y === 0) { c[0].terrain = 'rubble'; c[0].t = TERRAIN.rubble; }
-    }
+    };
+
+    const plan = LAYOUTS[name](kit, rnd, a);
     a.surfaces.forEach((s, i) => { s.id = i; });
 
     /* Which sides of each slab can actually be seen? In a solid courtyard
@@ -984,6 +1040,12 @@ K.grid = (function () {
 
     /* ---- movement graph */
     const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+    /* is there room to stand here, or is something sitting on your head? */
+    a.standable = function (s) {
+      return !a.col(s.x, s.z).some(o => o.y > s.y + 0.1 && o.y < s.y + HEAD);
+    };
+
     a.neighbours = function (s) {
       const out = [];
       for (const [dx, dz] of DIRS) {
@@ -994,9 +1056,7 @@ K.grid = (function () {
           // and no free ride down, either: if you could step off a roof the
           // stairs would be decoration and the bridge would mean nothing
           if (rise < -DROP) continue;
-          // is something directly overhead in the way?
-          const head = a.col(s.x + dx, s.z + dz).find(o => o.y > n.y + 0.1 && o.y < n.y + 1.7);
-          if (head) continue;
+          if (!a.standable(n)) continue;                     // no headroom
           // a stair is a stair: it costs what it costs, without the climbing
           // surcharge that makes hauling yourself over a wall expensive
           const cost = n.t.cost + (rise > 0.35 && n.terrain !== 'stair' ? 1 : 0) + (rise < -0.65 ? 1 : 0);
@@ -1028,6 +1088,44 @@ K.grid = (function () {
       return best;
     };
 
+    /* What every tile costs to walk to from here, with no movement limit —
+       the map's own opinion of distance. Straight-line distance is a lie on a
+       map with a rift in it: it will happily send a unit to the edge of a hole
+       to stand and look at somebody six feet and one long walk away. */
+    a.costsFrom = function (from) {
+      const best = new Map([[from.id, 0]]);
+      const q = [{ s: from, cost: 0 }];
+      let head = 0;
+      while (head < q.length) {
+        // small graph, and it is only walked once per unit per turn
+        let bi = head;
+        for (let i = head + 1; i < q.length; i++) if (q[i].cost < q[bi].cost) bi = i;
+        const tmp = q[head]; q[head] = q[bi]; q[bi] = tmp;
+        const cur = q[head++];
+        if (cur.cost > (best.get(cur.s.id) === undefined ? 1e9 : best.get(cur.s.id))) continue;
+        for (const n of a.neighbours(cur.s)) {
+          const c = cur.cost + n.cost;
+          const prev = best.get(n.s.id);
+          if (prev === undefined || c < prev) { best.set(n.s.id, c); q.push({ s: n.s, cost: c }); }
+        }
+      }
+      return best;
+    };
+
+    /* everything you could walk to given all the time in the world */
+    a.flood = function (from) {
+      const seen = new Set([from.id]);
+      const q = [from];
+      while (q.length) {
+        const cur = q.pop();
+        for (const n of a.neighbours(cur)) {
+          if (seen.has(n.s.id)) continue;
+          seen.add(n.s.id); q.push(n.s);
+        }
+      }
+      return seen;
+    };
+
     a.pathTo = function (reachMap, target) {
       const out = [];
       let cur = reachMap.get(target.id);
@@ -1054,6 +1152,43 @@ K.grid = (function () {
       const c = a.col(s.x, s.z);
       return !c.some(o => o.y < s.y - 0.1);
     };
+
+    /* Every tile you can stand on with a hole beside it. This is the arena's
+       own weapon — the tiles where a hard enough blow is lethal whatever the
+       arithmetic said — and a map without enough of them is just a grid. */
+    a.hazards = function () {
+      const out = [];
+      for (const s of a.surfaces) {
+        if (!a.standable(s)) continue;
+        for (const [dx, dz] of DIRS) {
+          const nx = s.x + dx, nz = s.z + dz;
+          if (nx <= 0 || nz <= 0 || nx >= a.w - 1 || nz >= a.d - 1) continue;
+          if (a.col(nx, nz).length === 0) { out.push(s); break; }
+        }
+      }
+      return out;
+    };
+
+    /* ---- where the two lines form up */
+    const pick = (cells, high) => {
+      const out = [];
+      for (const [x, z] of cells) {
+        const c = a.col(x, z);
+        if (!c.length) continue;
+        const s = high ? c[c.length - 1] : c[0];
+        if (!a.standable(s)) continue;
+        // a line forms up on solid ground, never on a plank over a hole
+        if (!high && s.solid < 1) continue;
+        out.push(s);
+      }
+      return out;
+    };
+    a.spawns = {
+      player: pick(plan.player, false),
+      enemy: pick(plan.enemy, false),
+      guard: pick(plan.guard || [], true)
+    };
+    a.title = plan.title || name;
 
     /* The arena as something the physics solver can hit: every surface is a
        slab, bucketed by z so collision stays cheap with a dozen bodies. */
@@ -1101,7 +1236,159 @@ K.grid = (function () {
     return a;
   }
 
-  return { TILE, CLIMB, DROP, HOP, TERRAIN, Arena };
+  /* --------------------------------------------------------------- layouts */
+
+  const LAYOUTS = {
+    /* the original: a walled house, a rampart, and a bridge over a hole */
+    courtyard(k) {
+      k.ground();
+      k.block(1, 1, 4, 4, 2.2, 'roof');
+      k.stairway(5, 4, 0, -1, 0, 2.2);
+      k.block(9, 9, 12, 12, 1.5, 'fort');
+      k.stairway(9, 8, 1, 0, 0, 1.0);
+      k.pit(6, 6, 8, 8);
+      k.span(7, 5, 7, 9, 2.2);
+      k.span(4, 5, 6, 5, 2.2);
+      k.span(8, 9, 8, 9, 2.2);
+      k.span(9, 9, 9, 9, 1.95);
+      k.scatter(14);
+      return {
+        title: 'the courtyard',
+        player: k.rect(1, 10, 3, 13),
+        enemy: k.rect(9, 1, 12, 4),
+        guard: k.rect(9, 9, 12, 12)
+      };
+    },
+
+    /* a rift down the middle: one low plank, one high crossing, and the long
+       way round the ends — every approach costs you something */
+    chasm(k) {
+      k.ground(0.26);
+      k.pit(6, 2, 7, 11);
+      k.span(6, 4, 7, 4, 0.35);
+      k.block(4, 7, 5, 9, 1.7, 'fort');
+      k.block(8, 7, 9, 9, 1.7, 'fort');
+      k.span(6, 8, 7, 8, 1.7);
+      k.stairway(1, 8, 1, 0, 0, 1.7);
+      k.stairway(12, 8, -1, 0, 0, 1.7);
+      k.scatter(16);
+      return {
+        title: 'the rift',
+        player: k.rect(0, 10, 3, 13),
+        enemy: k.rect(10, 0, 13, 3),
+        guard: k.rect(8, 7, 9, 9)
+      };
+    },
+
+    /* a keep in the middle with a moat either side: whoever holds the roof
+       holds the battle, and the only ways up are two flights of steps */
+    citadel(k) {
+      k.ground(0.22);
+      k.block(4, 4, 9, 9, 1.2, 'fort');
+      k.block(5, 5, 8, 8, 2.4, 'roof');
+      k.pit(3, 3, 3, 10);
+      k.pit(10, 3, 10, 10);
+      k.stairway(6, 2, 0, 1, 0, 1.2);
+      k.stairway(7, 11, 0, -1, 0, 1.2);
+      // two planks over the moat: a flank for anyone willing to cross a
+      // one-tile bridge with a drop on both sides of it
+      k.span(3, 6, 3, 6, 0.6);
+      k.span(10, 7, 10, 7, 0.6);
+      k.stairway(4, 6, 1, 0, 1.2, 2.4);
+      k.stairway(9, 7, -1, 0, 1.2, 2.4);
+      k.scatter(12);
+      return {
+        title: 'the keep',
+        player: k.rect(3, 12, 10, 13),
+        enemy: k.rect(3, 0, 10, 1),
+        // they hold the north face of the roof; the south of it is yours to take
+        guard: k.rect(5, 5, 8, 6)
+      };
+    },
+
+    /* two towers and a walkway between them, with the floor missing under
+       parts of it — the fastest route across is also the one with no rail */
+    spires(k) {
+      k.ground(0.20);
+      k.block(1, 2, 3, 4, 2.6, 'roof');
+      k.block(10, 9, 12, 11, 2.6, 'roof');
+      k.span(4, 3, 10, 3, 2.6);
+      k.span(11, 3, 11, 8, 2.6);
+      k.pit(5, 2, 6, 4);
+      k.pit(9, 6, 11, 7);
+      k.stairway(5, 5, -1, 0, 0, 2.6);
+      k.stairway(8, 12, 1, 0, 0, 2.6);
+      k.scatter(14);
+      return {
+        title: 'the spires',
+        player: k.rect(0, 10, 3, 13),
+        enemy: k.rect(9, 0, 13, 2),
+        guard: k.rect(10, 9, 12, 11)
+      };
+    }
+  };
+
+  /* -------------------------------------------------------------- checking */
+
+  /* Everything that has to be true before a map is allowed in front of a
+     player. A generator without one of these is a random map generator; with
+     one it is a level designer that works quickly. */
+  function check(a) {
+    const sp = a.spawns;
+    if (sp.player.length < 5) return 'nowhere for your line to stand';
+    if (sp.enemy.length < 8) return 'nowhere for theirs';
+    if (sp.guard.length < 2) return 'no high ground to hold';
+
+    const reachable = a.flood(sp.player[0]);
+    for (const s of sp.player) if (!reachable.has(s.id)) return 'your own line is cut in two';
+    for (const s of sp.enemy) if (!reachable.has(s.id)) return 'the enemy cannot be reached';
+    for (const s of sp.guard) if (!reachable.has(s.id)) return 'the high ground cannot be climbed';
+
+    const standable = a.surfaces.filter(s => a.standable(s));
+    if (reachable.size < standable.length * 0.6) return 'too much of the map is stranded';
+
+    // the two lines need room to form up and a turn or two to close, and
+    // nobody holding high ground may start inside your opening move
+    let near = 99, held = 99;
+    for (const p of sp.player) {
+      for (const e of sp.enemy) near = Math.min(near, a.dist(p, e));
+      for (const g of sp.guard) held = Math.min(held, a.dist(p, g));
+    }
+    if (near < 8) return 'the lines start on top of each other';
+    // a guard wakes at five tiles, so six is the line between "they hold that
+    // hill" and "you are shot at before you have moved"
+    if (held < 6) return 'their high ground overlooks your start';
+
+    // and it has to be a THREE dimensional arena, or none of this was worth it
+    const levels = new Set(a.surfaces.map(s => Math.round(s.y * 4)));
+    if (levels.size < 3) return 'the map is flat';
+    if (a.hazards().length < 6) return 'nothing to be knocked into';
+    return null;
+  }
+
+  /* build until one passes; a map that never passes is a bug, and falling
+     back to the hand-built arena is better than shipping a broken board */
+  function make(seed, opts) {
+    const all = Object.keys(LAYOUTS);
+    // two fields in a row on the same ground is the one thing a generator is
+    // for avoiding, so last wave's map sits out of the draw
+    const names = (opts && opts.avoid && all.length > 1)
+      ? all.filter(n => n !== opts.avoid) : all;
+    const rnd = U.rng((seed || 1) >>> 0);
+    let last = null;
+    for (let t = 0; t < 16; t++) {
+      const name = (opts && opts.layout) || names[Math.floor(rnd() * names.length)];
+      const a = Arena(((seed || 1) + t * 7919) >>> 0, name);
+      const bad = check(a);
+      if (!bad) { a.tries = t; return a; }
+      a.problem = bad; last = a;
+    }
+    const fb = Arena(seed || 1, 'courtyard');
+    fb.fallback = last ? last.problem : 'unknown';
+    return fb;
+  }
+
+  return { TILE, CLIMB, DROP, HOP, HEAD, TERRAIN, Arena, LAYOUTS, make, check };
 })();
 
 /* ---- 04-units.js ---- */
@@ -1681,7 +1968,13 @@ K.battle = (function () {
   /* A battle is built from a plan so a campaign can hand it veterans and a
      harder line every wave; with no plan it builds the opening skirmish. */
   function create(seed, plan) {
-    const arena = K.grid.Arena(seed || ((Math.random() * 1e9) | 0));
+    const wave = (plan && plan.wave) || 1;
+    // the first field is the one everybody sees first, so it is the built one;
+    // after that the generator picks, and every map it hands over has been
+    // checked for connection, height, a drop and room to form up
+    const arena = K.grid.make(seed || ((Math.random() * 1e9) | 0),
+      wave === 1 && !(plan && plan.layout) ? { layout: 'courtyard' }
+        : { layout: plan && plan.layout, avoid: plan && plan.avoid });
     const b = {
       arena, level: arena.collider(),
       units: [], actors: new Map(), turn: 1, phase: 'player',
@@ -1691,45 +1984,63 @@ K.battle = (function () {
     };
     b.occupiedFn = (s) => occupied(b, s);
 
-    const place = (u, x, z, y) => {
-      const s = arena.at(x, z, y === undefined ? 0 : y);
+    const place = (u, s) => {
+      if (!s) return u;
       u.surface = s; s.occupant = u;
       b.units.push(u);
       b.actors.set(u.id, A.create(u, arena));
       return u;
     };
 
-    const HOME = [[2, 11], [3, 12], [1, 12], [2, 13], [3, 10], [1, 10]];
+    /* Form up: the tiles nearest the other side go to whoever is placed first,
+       and a roster runs melee-first, so the line ends up with blades in front
+       of bows without anybody having to say so. */
+    const centre = (list) => {
+      if (!list.length) return { x: arena.w / 2, z: arena.d / 2 };
+      let x = 0, z = 0;
+      for (const s of list) { x += s.x; z += s.z; }
+      return { x: x / list.length, z: z / list.length };
+    };
+    const order = (list, toward) => list.slice().sort((p, q) =>
+      (Math.abs(p.x - toward.x) + Math.abs(p.z - toward.z)) -
+      (Math.abs(q.x - toward.x) + Math.abs(q.z - toward.z)));
+    const mine = order(arena.spawns.player, centre(arena.spawns.enemy));
+    const theirs = order(arena.spawns.enemy, centre(arena.spawns.player));
+    const held = arena.spawns.guard.slice();
+    const taken = new Set();
+    const next = (pool) => {
+      for (const s of pool) { if (!taken.has(s.id) && !s.occupant) { taken.add(s.id); return s; } }
+      return null;
+    };
+
     const P = (plan && plan.player) || K.camp.START;
-    P.forEach((spec, i) => {
-      const u = K.camp.restore(spec, 0);
-      const at = HOME[i % HOME.length];
-      place(u, at[0], at[1]);
-    });
+    P.forEach((spec) => place(K.camp.restore(spec, 0), next(mine)));
 
     const E = (plan && plan.enemy) || [
-      { cls: 'Reaver', name: 'GHAST', level: 3, x: 11, z: 2, y: 0 },
-      { cls: 'Halberd', name: 'BULWARK', level: 3, x: 10, z: 3, y: 0 },
-      { cls: 'Blade', name: 'SPINE', level: 2, x: 12, z: 3, y: 0 },
-      // the rampart pair hold what they were put there to hold, and only come
-      // off it when something walks into their reach
-      { cls: 'Archer', name: 'NEEDLE', level: 3, x: 11, z: 12, y: 1.5, guard: true, alert: 5 },
-      { cls: 'Reaver', name: 'MAUL', level: 3, x: 12, z: 11, y: 1.5, guard: true, alert: 4 }
+      { cls: 'Reaver', name: 'GHAST', level: 3 },
+      { cls: 'Halberd', name: 'BULWARK', level: 3 },
+      { cls: 'Blade', name: 'SPINE', level: 2 },
+      // the pair on the high ground hold what they were put there to hold,
+      // and only come off it when something walks into their reach
+      { cls: 'Archer', name: 'NEEDLE', level: 3, guard: true, alert: 5 },
+      { cls: 'Reaver', name: 'MAUL', level: 3, guard: true, alert: 4 }
     ];
     for (const spec of E) {
       const u = Un.make(spec.cls, 1, spec.name, spec.level || 2);
       u.guard = !!spec.guard;
       u.alert = spec.alert || 4;
-      place(u, spec.x, spec.z, spec.y);
+      // a guard wants high ground; if there is none left it joins the line
+      place(u, (u.guard ? next(held) : null) || next(theirs) || next(held));
     }
 
     b.units.forEach(u => { u.acted = false; });
-    b.wave = (plan && plan.wave) || 1;
-    const mine = living(b, 0).length, theirs = living(b, 1).length;
+    b.wave = wave;
+    b.title = arena.title;
+    const us = living(b, 0).length, them = living(b, 1).length;
     b.banner = {
       title: 'PLAYER PHASE',
-      sub: b.wave > 1 ? 'wave ' + b.wave + ' — ' + mine + ' against ' + theirs
-                      : 'four against five, and they hold the high ground',
+      sub: wave > 1 ? 'wave ' + wave + ' · ' + arena.title + ' · ' + us + ' against ' + them
+                    : 'four against five, and they hold the high ground',
       t: 0
     };
     return b;
@@ -1809,6 +2120,7 @@ K.battle = (function () {
 
   function endPhase(b) {
     if (b.over) return;
+    b.fields = null;              // everybody has moved; the routes are stale
     clearSel(b);
     if (b.phase === 'player') {
       b.phase = 'enemy';
@@ -1830,6 +2142,22 @@ K.battle = (function () {
   }
 
   /* ---------------------------------------------------------------- enemy */
+
+  /* how far every tile is from the enemy this unit should be walking at,
+     measured along the ground a unit can actually walk */
+  function approachField(b, u, foes) {
+    let near = null, nd = 1e9;
+    for (const f of foes) {
+      const d = b.arena.dist(u.surface, f.surface);
+      if (d < nd) { nd = d; near = f; }
+    }
+    if (!near) return new Map();
+    if (!b.fields) b.fields = new Map();
+    const key = near.surface.id;
+    let field = b.fields.get(key);
+    if (!field) { field = b.arena.costsFrom(near.surface); b.fields.set(key, field); }
+    return field;
+  }
 
   function aiTurn(b) {
     const me = living(b, 1).filter(u => !u.acted);
@@ -1861,12 +2189,16 @@ K.battle = (function () {
       }
     }
     if (!best) {
-      // nobody in reach: walk at the closest enemy
+      // Nobody in reach: close on the nearest foe BY THE ROUTE, not by the
+      // crow. On a map with a chasm across it the two are different answers,
+      // and the crow's answer parks an army on the wrong side of a hole.
+      const field = approachField(b, u, foes);
       let goal = null;
       for (const [, entry] of reach) {
         const s = entry.s;
         if (occupied(b, s, u)) continue;
-        const d = Math.min(...foes.map(f => b.arena.dist(s, f.surface)));
+        const d = field.get(s.id);
+        if (d === undefined) continue;                 // no route from there
         const score = -d * 10 - entry.cost * 0.1 + s.t.avoid * 0.2;
         if (!goal || score > goal.score) goal = { score, s };
       }
@@ -2055,23 +2387,20 @@ K.camp = (function () {
   }
 
   /* the opposition for a given wave: more of them, and better, every time */
+  /* Who they field, not where they stand — the arena decides that, because
+     from here on the arena is different every time. */
   function enemyPlan(wave, rnd) {
     const n = clamp(4 + Math.ceil(wave / 2), 5, 8);
     const lvl = clamp(2 + Math.floor(wave * 1.4), 2, 20);
-    const spots = [
-      [11, 2, 0], [10, 3, 0], [12, 3, 0], [9, 2, 0], [12, 5, 0],
-      [11, 12, 1.5], [12, 11, 1.5], [10, 11, 1.5]
-    ];
     const pool = ['Reaver', 'Halberd', 'Blade', 'Archer', 'Ember', 'Reaver', 'Blade'];
     const out = [];
     for (let i = 0; i < n; i++) {
-      const spot = spots[i % spots.length];
       const cls = i === 0 ? 'Reaver' : i === 1 ? 'Halberd' : pool[Math.floor(rnd() * pool.length)];
       out.push({
         cls, name: FOES[i % FOES.length],
         level: clamp(lvl + (i < 2 ? 1 : 0) - (i > 4 ? 1 : 0), 1, 24),
-        x: spot[0], z: spot[1], y: spot[2],
-        guard: spot[2] > 0, alert: 5
+        // the last two of any wave hold the high ground
+        guard: i >= n - 2, alert: 5
       });
     }
     return out;
@@ -2091,6 +2420,7 @@ K.camp = (function () {
 
   /* the field is settled: bank the survivors, count the dead, move on */
   function afterBattle(s, battle, won) {
+    s.lastLayout = battle.arena ? battle.arena.layout : null;
     const mine = battle.units.filter(u => u.side === 0);
     const lost = mine.filter(u => u.dead).map(u => u.name);
     s.last = {
@@ -3186,6 +3516,7 @@ K.ui = (function () {
     const rnd = U.rng((run.wave * 7919 + (run.runs || 0) * 104729) >>> 0);
     g.battle = B.create(null, {
       wave: run.wave,
+      avoid: run.lastLayout,
       player: K.camp.playerPlan(run),
       enemy: run.wave === 1 && (run.runs || 0) === 0 ? null : K.camp.enemyPlan(run.wave, rnd)
     });

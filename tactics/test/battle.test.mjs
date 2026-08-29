@@ -18,15 +18,21 @@ test('the arena is genuinely multi-level: a bridge over an empty column', () => 
 test('you cannot step onto a roof, you have to take the stair', () => {
   const K = load();
   const a = K.grid.Arena(3);
-  const ground = a.at(5, 1, 0);
-  const roof = a.at(4, 1, 2.2);
-  assert.ok(roof && roof.y > 2);
-  const direct = a.neighbours(ground).some(n => n.s === roof);
-  assert.equal(direct, false, 'a 2.2 m wall is not a step');
-  const reach = a.reach(a.at(5, 4, 0), 8);
-  const viaStair = reach.get(a.at(4, 3, 2.2).id);
-  assert.ok(viaStair, 'but the stair gets you up there');
-  const path = a.pathTo(reach, a.at(4, 3, 2.2));
+  // no tile anywhere is a shortcut up a wall or a free ride off one
+  for (const s of a.surfaces) {
+    for (const n of a.neighbours(s)) {
+      const rise = n.s.y - s.y;
+      assert.ok(rise <= K.grid.CLIMB + 0.03, 'a wall is not a step (' + rise.toFixed(2) + 'm)');
+      assert.ok(rise >= -K.grid.DROP, 'and a roof is not a slide');
+    }
+  }
+  // the roof is still reachable, and the route is a walk of single tiles
+  const floor = a.at(5, 6, 0), roof = a.at(2, 2, 2.2);
+  assert.ok(roof.y > 2 && floor.y === 0);
+  const reach = a.reach(floor, 40);
+  assert.ok(reach.get(roof.id), 'the stair gets you up there');
+  const path = a.pathTo(reach, roof);
+  assert.ok(path.some(s => s.terrain === 'stair'), 'and the way up is the stair');
   for (let i = 1; i < path.length; i++) {
     const d = Math.abs(path[i].x - path[i - 1].x) + Math.abs(path[i].z - path[i - 1].z);
     assert.equal(d, 1, 'every step of a path is one tile');
@@ -200,4 +206,54 @@ test('a planned wave builds and plays', () => {
   assert.equal(anyNaN(K, b), null);
   assert.ok(b.over === 'win' || b.over === 'loss', 'the wave resolves, got ' + b.over);
   assert.equal(b.wave, 4);
+});
+
+test('every layout is a playable board, not just a shape', () => {
+  const K = load();
+  for (const name of Object.keys(K.grid.LAYOUTS)) {
+    const a = K.grid.Arena(31, name);
+    assert.equal(K.grid.check(a), null, name + ': ' + K.grid.check(a));
+    assert.ok(a.spawns.guard.every(s => s.y > 0.4), name + ' puts its guards on high ground');
+    const walkable = a.flood(a.spawns.player[0]);
+    for (const s of a.spawns.guard) assert.ok(walkable.has(s.id), name + ': the high ground is climbable');
+    assert.ok(a.hazards().length >= 6, name + ' has somewhere to be knocked into');
+  }
+});
+
+test('the generator never hands over a board it has not checked', () => {
+  const K = load();
+  const seen = {};
+  for (let s = 1; s <= 60; s++) {
+    const a = K.grid.make(s * 37);
+    assert.ok(!a.fallback, 'seed ' + s + ' fell back: ' + a.fallback);
+    assert.equal(K.grid.check(a), null, 'seed ' + s + ' shipped broken');
+    seen[a.layout] = (seen[a.layout] || 0) + 1;
+  }
+  assert.equal(Object.keys(seen).length, Object.keys(K.grid.LAYOUTS).length, 'every layout gets used');
+});
+
+test('two waves running never land on the same ground', () => {
+  const K = load();
+  for (let s = 1; s <= 20; s++) {
+    const first = K.grid.make(s * 11);
+    const next = K.grid.make(s * 11 + 5, { avoid: first.layout });
+    assert.notEqual(next.layout, first.layout, 'seed ' + s + ' repeated ' + first.layout);
+  }
+});
+
+test('a battle on any layout closes and ends', () => {
+  for (const name of Object.keys(load().grid.LAYOUTS)) {
+    const K = load(17);
+    const run = K.camp.fresh();
+    const plan = {
+      wave: 2, layout: name,
+      player: K.camp.playerPlan(run),
+      enemy: K.camp.enemyPlan(2, K.util.rng(4))
+    };
+    const { b } = play(K, { seed: 77, seconds: 500, plan });
+    assert.equal(b.arena.layout, name);
+    assert.equal(anyNaN(K, b), null, name + ' broke a body');
+    assert.ok(b.over === 'win' || b.over === 'loss', name + ' never resolved (turn ' + b.turn + ')');
+    assert.ok(b.turn < 40, name + ' dragged to turn ' + b.turn);
+  }
 });

@@ -35,6 +35,17 @@ stand on either. Movement is Dijkstra over surfaces with climb and drop limits
 and a headroom check, so a two-storey roof has to be taken by the stairs, and
 high ground is worth taking — it adds to hit and to damage.
 
+Every wave after the first is fought on new ground. Maps are built rather than
+drawn: a kit of operations (ground, block, span, stairway, pit) and four
+archetypes that compose them — a courtyard, a rift, a keep, two towers and the
+walkway between them. A stairway lays whatever rise keeps each step inside the
+climb limit, so a route the kit builds is walkable in both directions by
+construction. Nothing reaches the player unchecked: both lines placed, every
+spawn and every held position connected, three real heights, six tiles you can
+be knocked off, and enough ground between the lines for a first turn. A map
+that fails any of those is rerolled, and the last wave's ground sits out of the
+next draw.
+
 Survivors carry their levels into the next wave. The fallen do not come back.
 
 ## Playing it

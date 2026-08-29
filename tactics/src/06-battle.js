@@ -8,7 +8,13 @@ K.battle = (function () {
   /* A battle is built from a plan so a campaign can hand it veterans and a
      harder line every wave; with no plan it builds the opening skirmish. */
   function create(seed, plan) {
-    const arena = K.grid.Arena(seed || ((Math.random() * 1e9) | 0));
+    const wave = (plan && plan.wave) || 1;
+    // the first field is the one everybody sees first, so it is the built one;
+    // after that the generator picks, and every map it hands over has been
+    // checked for connection, height, a drop and room to form up
+    const arena = K.grid.make(seed || ((Math.random() * 1e9) | 0),
+      wave === 1 && !(plan && plan.layout) ? { layout: 'courtyard' }
+        : { layout: plan && plan.layout, avoid: plan && plan.avoid });
     const b = {
       arena, level: arena.collider(),
       units: [], actors: new Map(), turn: 1, phase: 'player',
@@ -18,45 +24,63 @@ K.battle = (function () {
     };
     b.occupiedFn = (s) => occupied(b, s);
 
-    const place = (u, x, z, y) => {
-      const s = arena.at(x, z, y === undefined ? 0 : y);
+    const place = (u, s) => {
+      if (!s) return u;
       u.surface = s; s.occupant = u;
       b.units.push(u);
       b.actors.set(u.id, A.create(u, arena));
       return u;
     };
 
-    const HOME = [[2, 11], [3, 12], [1, 12], [2, 13], [3, 10], [1, 10]];
+    /* Form up: the tiles nearest the other side go to whoever is placed first,
+       and a roster runs melee-first, so the line ends up with blades in front
+       of bows without anybody having to say so. */
+    const centre = (list) => {
+      if (!list.length) return { x: arena.w / 2, z: arena.d / 2 };
+      let x = 0, z = 0;
+      for (const s of list) { x += s.x; z += s.z; }
+      return { x: x / list.length, z: z / list.length };
+    };
+    const order = (list, toward) => list.slice().sort((p, q) =>
+      (Math.abs(p.x - toward.x) + Math.abs(p.z - toward.z)) -
+      (Math.abs(q.x - toward.x) + Math.abs(q.z - toward.z)));
+    const mine = order(arena.spawns.player, centre(arena.spawns.enemy));
+    const theirs = order(arena.spawns.enemy, centre(arena.spawns.player));
+    const held = arena.spawns.guard.slice();
+    const taken = new Set();
+    const next = (pool) => {
+      for (const s of pool) { if (!taken.has(s.id) && !s.occupant) { taken.add(s.id); return s; } }
+      return null;
+    };
+
     const P = (plan && plan.player) || K.camp.START;
-    P.forEach((spec, i) => {
-      const u = K.camp.restore(spec, 0);
-      const at = HOME[i % HOME.length];
-      place(u, at[0], at[1]);
-    });
+    P.forEach((spec) => place(K.camp.restore(spec, 0), next(mine)));
 
     const E = (plan && plan.enemy) || [
-      { cls: 'Reaver', name: 'GHAST', level: 3, x: 11, z: 2, y: 0 },
-      { cls: 'Halberd', name: 'BULWARK', level: 3, x: 10, z: 3, y: 0 },
-      { cls: 'Blade', name: 'SPINE', level: 2, x: 12, z: 3, y: 0 },
-      // the rampart pair hold what they were put there to hold, and only come
-      // off it when something walks into their reach
-      { cls: 'Archer', name: 'NEEDLE', level: 3, x: 11, z: 12, y: 1.5, guard: true, alert: 5 },
-      { cls: 'Reaver', name: 'MAUL', level: 3, x: 12, z: 11, y: 1.5, guard: true, alert: 4 }
+      { cls: 'Reaver', name: 'GHAST', level: 3 },
+      { cls: 'Halberd', name: 'BULWARK', level: 3 },
+      { cls: 'Blade', name: 'SPINE', level: 2 },
+      // the pair on the high ground hold what they were put there to hold,
+      // and only come off it when something walks into their reach
+      { cls: 'Archer', name: 'NEEDLE', level: 3, guard: true, alert: 5 },
+      { cls: 'Reaver', name: 'MAUL', level: 3, guard: true, alert: 4 }
     ];
     for (const spec of E) {
       const u = Un.make(spec.cls, 1, spec.name, spec.level || 2);
       u.guard = !!spec.guard;
       u.alert = spec.alert || 4;
-      place(u, spec.x, spec.z, spec.y);
+      // a guard wants high ground; if there is none left it joins the line
+      place(u, (u.guard ? next(held) : null) || next(theirs) || next(held));
     }
 
     b.units.forEach(u => { u.acted = false; });
-    b.wave = (plan && plan.wave) || 1;
-    const mine = living(b, 0).length, theirs = living(b, 1).length;
+    b.wave = wave;
+    b.title = arena.title;
+    const us = living(b, 0).length, them = living(b, 1).length;
     b.banner = {
       title: 'PLAYER PHASE',
-      sub: b.wave > 1 ? 'wave ' + b.wave + ' — ' + mine + ' against ' + theirs
-                      : 'four against five, and they hold the high ground',
+      sub: wave > 1 ? 'wave ' + wave + ' · ' + arena.title + ' · ' + us + ' against ' + them
+                    : 'four against five, and they hold the high ground',
       t: 0
     };
     return b;
@@ -136,6 +160,7 @@ K.battle = (function () {
 
   function endPhase(b) {
     if (b.over) return;
+    b.fields = null;              // everybody has moved; the routes are stale
     clearSel(b);
     if (b.phase === 'player') {
       b.phase = 'enemy';
@@ -157,6 +182,22 @@ K.battle = (function () {
   }
 
   /* ---------------------------------------------------------------- enemy */
+
+  /* how far every tile is from the enemy this unit should be walking at,
+     measured along the ground a unit can actually walk */
+  function approachField(b, u, foes) {
+    let near = null, nd = 1e9;
+    for (const f of foes) {
+      const d = b.arena.dist(u.surface, f.surface);
+      if (d < nd) { nd = d; near = f; }
+    }
+    if (!near) return new Map();
+    if (!b.fields) b.fields = new Map();
+    const key = near.surface.id;
+    let field = b.fields.get(key);
+    if (!field) { field = b.arena.costsFrom(near.surface); b.fields.set(key, field); }
+    return field;
+  }
 
   function aiTurn(b) {
     const me = living(b, 1).filter(u => !u.acted);
@@ -188,12 +229,16 @@ K.battle = (function () {
       }
     }
     if (!best) {
-      // nobody in reach: walk at the closest enemy
+      // Nobody in reach: close on the nearest foe BY THE ROUTE, not by the
+      // crow. On a map with a chasm across it the two are different answers,
+      // and the crow's answer parks an army on the wrong side of a hole.
+      const field = approachField(b, u, foes);
       let goal = null;
       for (const [, entry] of reach) {
         const s = entry.s;
         if (occupied(b, s, u)) continue;
-        const d = Math.min(...foes.map(f => b.arena.dist(s, f.surface)));
+        const d = field.get(s.id);
+        if (d === undefined) continue;                 // no route from there
         const score = -d * 10 - entry.cost * 0.1 + s.t.avoid * 0.2;
         if (!goal || score > goal.score) goal = { score, s };
       }
