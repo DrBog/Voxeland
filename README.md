@@ -7,7 +7,7 @@ OpenGL ES 3.0 — no game engine. Think blocky urban horror in the spirit of
 Unturned: one large dead city, realism-leaning survival, and the dark makes
 them bold.
 
-## What's in v0.2.2
+## What's in v0.2.3
 
 - **Voxel engine** — chunked streaming world, face-culled meshing on worker
   threads, procedurally painted texture atlas (every material is synthesized;
@@ -107,7 +107,8 @@ items/    Items, Inventory, Recipes, Loot tables
 progression/  Skills (3 trees), Character (CAC data + modifiers)
 audio/    SoundManager (SoundPool sfx + cross-mixed ambient beds)
 save/     JSON save: world edits, looted set, player, clock
-ui/       GameHud (HUD + touch), Panels, MenuViews, SlotGrid, UiKit
+ui/       GameHud (HUD + touch), Panels (shared panel shell), MenuViews,
+          SlotGrid, UiKit
 ```
 
 Everything world-related is a pure function of the seed — the save file

@@ -8,7 +8,6 @@ import android.graphics.RectF
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
-import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -26,31 +25,85 @@ import com.voxeland.game.progression.Skills
  */
 object Panels {
 
+    /**
+     * A scroll view that behaves like WRAP_CONTENT but never grows past a
+     * ceiling, so a panel can be as short as its content and still be bounded
+     * by the screen.
+     */
+    private class BoundedScroll(ctx: Context, private val maxH: Int) : ScrollView(ctx) {
+        override fun onMeasure(widthSpec: Int, heightSpec: Int) {
+            super.onMeasure(widthSpec, MeasureSpec.makeMeasureSpec(maxH, MeasureSpec.AT_MOST))
+        }
+    }
+
+    /** width and content-height budget a panel may occupy on this display */
+    private fun panelBox(ctx: Context, maxWidthDp: Float, maxHeightDp: Float): Pair<Int, Int> {
+        val dm = ctx.resources.displayMetrics
+        val w = minOf(dm.widthPixels - dp(ctx, 28f), dp(ctx, maxWidthDp))
+        val h = minOf(dm.heightPixels - dp(ctx, 20f), dp(ctx, maxHeightDp))
+        return w to (h - dp(ctx, 76f))          // minus header, padding and breathing room
+    }
+
+    /**
+     * Common panel chrome.
+     *
+     * The panel is given an explicit width taken from the display. That is not
+     * cosmetic: the header lays the title out by weight, and a weighted child
+     * of a WRAP_CONTENT parent measures to zero — which is why every panel
+     * except the one with an explicit width used to render a missing title.
+     * The body is bounded vertically so tall content scrolls instead of
+     * spilling off the screen.
+     */
     private fun shell(
         ctx: Context,
         title: String,
         onClose: () -> Unit,
         content: View,
-        panelWidth: Int = FrameLayout.LayoutParams.WRAP_CONTENT,
+        maxWidthDp: Float = 520f,
+        maxHeightDp: Float = 430f,
     ): FrameLayout {
+        val (panelW, bodyH) = panelBox(ctx, maxWidthDp, maxHeightDp)
+
         val root = FrameLayout(ctx)
         root.setBackgroundColor(0xB80C0C0B.toInt())
         root.setOnClickListener { onClose() }
+
         val panel = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(UiKit.PANEL)
-            setPadding(dp(ctx, 18f), dp(ctx, 12f), dp(ctx, 18f), dp(ctx, 12f))
+            setPadding(dp(ctx, 16f), dp(ctx, 10f), dp(ctx, 16f), dp(ctx, 12f))
             isClickable = true
         }
-        val header = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
-        header.addView(UiKit.title(ctx, title, 18f), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        header.addView(UiKit.button(ctx, "X") { onClose() })
-        panel.addView(header)
-        panel.addView(UiKit.vspace(ctx, 16))
-        panel.addView(content)
-        val lp = FrameLayout.LayoutParams(
-            panelWidth, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
-        root.addView(panel, lp)
+
+        val header = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(
+            UiKit.title(ctx, title, 15f).apply {
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                isSingleLine = true
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            },
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        // height follows the label with a floor for the tap target: a pinned
+        // height clips the glyph as soon as font metrics differ
+        header.addView(UiKit.button(ctx, "X", compact = true) { onClose() }.apply {
+            minimumHeight = dp(ctx, 38f)
+            minHeight = dp(ctx, 38f)
+        }, LinearLayout.LayoutParams(dp(ctx, 46f), LinearLayout.LayoutParams.WRAP_CONTENT))
+        panel.addView(header, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        panel.addView(UiKit.vspace(ctx, dp(ctx, 8f)))
+
+        val body = BoundedScroll(ctx, bodyH).apply { isFillViewport = false }
+        body.addView(content, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+        panel.addView(body, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        root.addView(panel, FrameLayout.LayoutParams(
+            panelW, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
         return root
     }
 
@@ -64,10 +117,7 @@ object Panels {
      */
     @SuppressLint("SetTextI18n")
     fun inventory(ctx: Context, engine: GameEngine, onClose: () -> Unit): View {
-        val dm = ctx.resources.displayMetrics
-        val panelW = minOf(dm.widthPixels - dp(ctx, 28f), dp(ctx, 720f))
-        val panelH = minOf(dm.heightPixels - dp(ctx, 20f), dp(ctx, 430f))
-        val bodyH = panelH - dp(ctx, 74f)          // minus header and padding
+        val (_, bodyH) = panelBox(ctx, 720f, 430f)
 
         val body = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
 
@@ -193,7 +243,8 @@ object Panels {
         body.addView(left, LinearLayout.LayoutParams(0, bodyH, 52f))
         body.addView(craftCol, LinearLayout.LayoutParams(0, bodyH, 48f))
 
-        return shell(ctx, "BACKPACK — ${engine.player.character.name}", onClose, body, panelW)
+        return shell(ctx, "BACKPACK — ${engine.player.character.name}", onClose, body,
+            maxWidthDp = 720f, maxHeightDp = 430f)
     }
 
     private fun post(ctx: Context, r: () -> Unit) {
@@ -254,57 +305,68 @@ object Panels {
     @SuppressLint("SetTextI18n")
     fun skills(ctx: Context, engine: GameEngine, onClose: () -> Unit): View {
         val wrap = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
-        val ptsLabel = UiKit.label(ctx, "", 13f, UiKit.TEXT)
-        wrap.addView(ptsLabel)
-        wrap.addView(UiKit.vspace(ctx, 10))
+        val ptsLabel = UiKit.label(ctx, "", 12f, UiKit.TEXT)
+        wrap.addView(ptsLabel, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        wrap.addView(UiKit.vspace(ctx, dp(ctx, 8f)))
+
+        // three weighted columns rather than a fixed 700dp strip, so the trees
+        // always fit whatever width the panel actually got
         val cols = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
 
         fun refresh() {
-            ptsLabel.text = "SKILL POINTS: ${engine.player.skillPoints}   (earn XP by surviving, scavenging, and killing)"
+            ptsLabel.text = "SKILL POINTS: ${engine.player.skillPoints}"
             cols.removeAllViews()
             for (tree in SkillTree.entries) {
                 val colV = LinearLayout(ctx).apply {
                     orientation = LinearLayout.VERTICAL
-                    setPadding(dp(ctx, 6f), 0, dp(ctx, 6f), 0)
+                    setPadding(dp(ctx, 3f), 0, dp(ctx, 3f), 0)
                 }
-                colV.addView(UiKit.label(ctx, tree.title.uppercase(), 13f, UiKit.TEXT))
-                colV.addView(UiKit.vspace(ctx, 6))
-                for (s in Skills.all.filter { it.tree == tree }) {
-                    val owned = engine.player.has(s.id)
-                    val prereqOk = s.prereq == null || engine.player.has(s.prereq)
-                    val afford = engine.player.skillPoints >= s.cost
+                colV.addView(UiKit.label(ctx, tree.title.uppercase(), 11f, UiKit.TEXT).apply {
+                    gravity = Gravity.CENTER
+                }, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+                colV.addView(UiKit.vspace(ctx, dp(ctx, 4f)))
+
+                for (sk in Skills.all.filter { it.tree == tree }) {
+                    val owned = engine.player.has(sk.id)
+                    val prereqOk = sk.prereq == null || engine.player.has(sk.prereq)
+                    val afford = engine.player.skillPoints >= sk.cost
                     val state = when {
-                        owned -> "✔"
-                        !prereqOk -> "LOCKED (needs ${Skills.byId(s.prereq!!)?.name})"
-                        else -> "${s.cost} pt"
+                        owned -> "OWNED"
+                        !prereqOk -> "LOCKED"
+                        else -> "${sk.cost} PT"
                     }
-                    val b = UiKit.button(ctx, "", accent = !owned && prereqOk && afford) {
+                    val b = UiKit.button(ctx, "", accent = !owned && prereqOk && afford, compact = true) {
                         engine.post {
-                            if (engine.player.unlock(s.id)) {
+                            if (engine.player.unlock(sk.id)) {
                                 engine.sound.play("skill_unlock")
                                 post(ctx) { refresh() }
                             }
                         }
                     }
                     b.isAllCaps = false
-                    b.text = "${s.name} [$state]\n${s.desc}"
-                    b.textSize = 11f
+                    b.text = "${sk.name}  [$state]\n${sk.desc}"
+                    b.textSize = 9.5f
+                    b.gravity = Gravity.START or Gravity.CENTER_VERTICAL
                     b.isEnabled = !owned && prereqOk && afford
                     if (owned) b.setBackgroundColor(0xFF2E3A2A.toInt())
-                    val lp = LinearLayout.LayoutParams(dp(ctx, 210f), LinearLayout.LayoutParams.WRAP_CONTENT)
-                    lp.bottomMargin = dp(ctx, 4f)
+                    if (!prereqOk) b.alpha = 0.55f
+                    val lp = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                    lp.bottomMargin = dp(ctx, 5f)
                     colV.addView(b, lp)
                 }
-                cols.addView(colV)
+                cols.addView(colV, LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             }
         }
         refresh()
-        val hs = HorizontalScrollView(ctx)
-        val vs = ScrollView(ctx)
-        vs.addView(cols)
-        hs.addView(vs)
-        wrap.addView(hs, LinearLayout.LayoutParams(dp(ctx, 700f), dp(ctx, 240f)))
-        return shell(ctx, "SURVIVAL TRAINING", onClose, wrap)
+        wrap.addView(cols, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        return shell(ctx, "SURVIVAL TRAINING", onClose, wrap,
+            maxWidthDp = 700f, maxHeightDp = 430f)
     }
 
     // ------------------------------------------------------------ pause / death / loot
@@ -316,10 +378,14 @@ object Panels {
                 "Level ${p.level} · ${p.kills} kills · ${(p.timeSurvived / 60).toInt()} min survived"
         col.addView(UiKit.label(ctx, stats, 13f, UiKit.TEXT))
         col.addView(UiKit.vspace(ctx, 20))
-        col.addView(UiKit.button(ctx, "RESUME", accent = true) { onResume() })
-        col.addView(UiKit.vspace(ctx, 10))
-        col.addView(UiKit.button(ctx, "SAVE & QUIT") { onSaveQuit() })
-        return shell(ctx, "PAUSED", onResume, col)
+        col.addView(UiKit.button(ctx, "RESUME", accent = true) { onResume() },
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT))
+        col.addView(UiKit.vspace(ctx, dp(ctx, 8f)))
+        col.addView(UiKit.button(ctx, "SAVE & QUIT") { onSaveQuit() },
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT))
+        return shell(ctx, "PAUSED", onResume, col, maxWidthDp = 420f, maxHeightDp = 360f)
     }
 
     fun death(ctx: Context, cause: String, stats: String, onMainMenu: () -> Unit): View {
@@ -328,8 +394,10 @@ object Panels {
         col.addView(UiKit.vspace(ctx, 8))
         col.addView(UiKit.label(ctx, stats, 12f, UiKit.TEXT_DIM))
         col.addView(UiKit.vspace(ctx, 20))
-        col.addView(UiKit.button(ctx, "THE CITY REMAINS", accent = true) { onMainMenu() })
-        val v = shell(ctx, "YOU DIED", {}, col)
+        col.addView(UiKit.button(ctx, "THE CITY REMAINS", accent = true) { onMainMenu() },
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT))
+        val v = shell(ctx, "YOU DIED", {}, col, maxWidthDp = 460f, maxHeightDp = 360f)
         v.setBackgroundColor(0xD8180A08.toInt())
         return v
     }

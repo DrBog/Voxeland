@@ -157,14 +157,16 @@ object MenuViews {
                 desc.text = descs?.get(get()) ?: ""
             }
             val arrowW = UiKit.dp(ctx, 46f)
-            val arrowH = UiKit.dp(ctx, 38f)
-            row.addView(UiKit.button(ctx, "<", compact = true) {
-                set((get() + options.size - 1) % options.size); refresh()
-            }, LinearLayout.LayoutParams(arrowW, arrowH))
+            val arrowMin = UiKit.dp(ctx, 38f)
+            fun arrow(label: String, step: Int) =
+                UiKit.button(ctx, label, compact = true) {
+                    set((get() + options.size + step) % options.size); refresh()
+                }.apply { minimumHeight = arrowMin; minHeight = arrowMin }
+            row.addView(arrow("<", -1),
+                LinearLayout.LayoutParams(arrowW, LinearLayout.LayoutParams.WRAP_CONTENT))
             row.addView(value, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            row.addView(UiKit.button(ctx, ">", compact = true) {
-                set((get() + 1) % options.size); refresh()
-            }, LinearLayout.LayoutParams(arrowW, arrowH))
+            row.addView(arrow(">", 1),
+                LinearLayout.LayoutParams(arrowW, LinearLayout.LayoutParams.WRAP_CONTENT))
 
             refresh()
             box.addView(row, LinearLayout.LayoutParams(

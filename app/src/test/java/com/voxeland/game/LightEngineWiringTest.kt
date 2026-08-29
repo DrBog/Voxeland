@@ -23,6 +23,12 @@ class LightEngineWiringTest {
         val ctx = RuntimeEnvironment.getApplication()
         val sound = SoundManager(ctx)
         val (w, p) = GameEngine.newGame(77L, Character("Test", 1, 0, 0, 0))
+        // The torch tests run several simulated minutes with the player stood
+        // still. Zombies spawn on a clock seeded from the wall clock, so an
+        // unlucky run could kill the test subject and stop the simulation
+        // mid-burn. Make them unkillable so these tests measure the torch and
+        // nothing else.
+        p.health = 1_000_000f
         return GameEngine(w, p, Environment(), sound)
     }
 
