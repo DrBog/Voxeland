@@ -130,6 +130,7 @@ K.render = (function () {
     const fogT = clamp((depth - FOG_NEAR) / (FOG_FAR - FOG_NEAR), 0, 1);
     v.items.push({
       z: depth,
+      ground: !!opts.ground, top: b.y1,
       draw: (ctx) => {
         for (const F of FACES) {
           // visible if the face normal points back toward the camera
@@ -211,7 +212,7 @@ K.render = (function () {
       const isDeck = b.kind === 'deck' || b.kind === 'gatepad' || b.kind === 'glass' || b.kind === 'ledgepad';
       const col = rgb(KIND_COL[b.kind] || '#4a5064');
       const tinted = mix(col, rgb(D.accent), isDeck ? 0.06 : 0.12);
-      boxItem(v, g, b, tinted, { edge: isDeck ? D.accent : null });
+      boxItem(v, g, b, tinted, { edge: isDeck ? D.accent : null, ground: isDeck });
       if (isDeck) deckMarks(v, g, b, D);
     }
 
@@ -321,10 +322,10 @@ K.render = (function () {
             const s = toScreen(v, mid);
             const size = clamp(0.42 * s.s, 7, 30);
             ctx.textAlign = 'center';
-            ctx.font = '600 ' + size.toFixed(0) + 'px ui-monospace, Menlo, monospace';
+            ctx.font = '600 ' + size.toFixed(0) + 'px "IBM Plex Mono", ui-monospace, Menlo, monospace';
             ctx.fillStyle = css(mix(c, v.fog, fogT), 0.95 * (1 - fogT * 0.7));
             ctx.fillText(m.gate.name, s.x, s.y);
-            ctx.font = '500 ' + (size * 0.62).toFixed(0) + 'px ui-monospace, Menlo, monospace';
+            ctx.font = '500 ' + (size * 0.62).toFixed(0) + 'px "IBM Plex Mono", ui-monospace, Menlo, monospace';
             ctx.fillStyle = css(mix([230, 235, 246], v.fog, fogT), 0.6 * (1 - fogT * 0.7));
             const req = m.gate.stat === 'all' ? 'ALL ' + m.gate.need : m.gate.stat.toUpperCase() + ' ' + m.gate.need;
             ctx.fillText(m.done ? 'CLEARED' : req, s.x, s.y + size * 0.9);
@@ -498,6 +499,14 @@ K.render = (function () {
       });
     }
 
+    // A deck cannot occlude the body standing on top of it. Sorting whole
+    // slabs by their centre puts the far end of a long deck in front of the
+    // runner and paints the ground over them, so any ground at or below the
+    // feet is forced behind the body regardless of where its middle sits.
+    const feetY = Math.min(g.body.parts.footL.y, g.body.parts.footR.y);
+    for (const it of v.items) {
+      if (it.ground && it.top <= feetY + 0.12) it.z = Math.max(it.z, pd + 0.5);
+    }
     v.items.sort((a, b) => b.z - a.z);
     for (const it of v.items) it.draw(ctx);
 
@@ -510,7 +519,7 @@ K.render = (function () {
       const a = clamp(1.6 - p.t, 0, 1) * clamp(p.t * 5, 0, 1);
       ctx.globalAlpha = a;
       ctx.fillStyle = p.kind === 'gate' ? '#8affc0' : p.kind === 'good' ? D.accent : '#fff';
-      ctx.font = '600 ' + clamp(0.36 * s.s, 10, 26).toFixed(0) + 'px ui-monospace, Menlo, monospace';
+      ctx.font = '600 ' + clamp(0.36 * s.s, 10, 26).toFixed(0) + 'px "IBM Plex Mono", ui-monospace, Menlo, monospace';
       ctx.fillText(p.text, s.x, s.y);
       ctx.globalAlpha = 1;
     }

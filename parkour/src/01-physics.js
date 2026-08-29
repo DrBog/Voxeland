@@ -136,7 +136,10 @@ K.phys = (function () {
     spin(c, b, nx, ny, nz, -err * (wc / w), quiet);
   }
 
-  /* swing the segment a->b toward a target direction (unit vector) */
+  /* Swing the segment a->b toward a target direction (unit vector).
+     The pivot is the segment's centre of mass, so the rotation is a torque
+     rather than a shove. It is still allowed to do work — it is a muscle —
+     and free flight is kept honest by ballistic(), below. */
   function aim(a, b, tx, ty, tz, strength) {
     let ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z;
     const ul = Math.hypot(ux, uy, uz); if (ul < 1e-7) return;
@@ -232,7 +235,13 @@ K.phys = (function () {
         if (!p.touchedLast && vn0 < -1 && -vn0 > p.impact) p.impact = -vn0;
         p.touched = true;
 
+        // Push out of the surface WITHOUT inventing velocity: in Verlet a
+        // bare position correction is read as motion, and at 180 Hz a five
+        // centimetre depenetration reads as nine metres per second — which is
+        // how a runner who clipped a crate ended up eleven metres in the air.
+        // The velocity response is applied separately, just below.
         p.x += nx * m; p.y += ny * m; p.z += nz * m;
+        p.px += nx * m; p.py += ny * m; p.pz += nz * m;
         const vn = vx * nx + vy * ny + vz * nz;
         if (vn < 0) { vx -= nx * vn; vy -= ny * vn; vz -= nz * vn; }
         // coulomb-ish friction: a fixed tangential deceleration, so glass is
@@ -260,6 +269,26 @@ K.phys = (function () {
         p.px = p.x - (p.x - p.px) * k; p.py = p.y - (p.y - p.py) * k; p.pz = p.z - (p.z - p.pz) * k;
       }
     }
+  }
+
+  /* With nothing in contact there are no external forces but gravity, so the
+     centre of mass MUST follow a parabola no matter what the limbs are doing.
+     Muscle work inside a free body can move its parts and its orientation; it
+     cannot move its centre of mass. Enforcing that literally is what stops a
+     ragdoll swimming through the air, which is otherwise very hard to prevent
+     when every muscle is a position correction. */
+  function ballistic(body, dt, v0, extraX, extraZ) {
+    let vx = 0, vy = 0, vz = 0, m = 0;
+    for (const p of body.list) {
+      vx += (p.x - p.px) / dt * p.m; vy += (p.y - p.py) / dt * p.m; vz += (p.z - p.pz) / dt * p.m;
+      m += p.m;
+    }
+    vx /= m; vy /= m; vz /= m;
+    const wantX = v0.x + (extraX || 0) * dt;
+    const wantY = v0.y + GRAVITY * dt;
+    const wantZ = v0.z + (extraZ || 0) * dt;
+    const dx = (wantX - vx) * dt, dy = (wantY - vy) * dt, dz = (wantZ - vz) * dt;
+    for (const p of body.list) { p.px -= dx; p.py -= dy; p.pz -= dz; }
   }
 
   function com(body) {
@@ -300,6 +329,6 @@ K.phys = (function () {
 
   return {
     GRAVITY, Body, add, bone, hinge, integrate, solveBones, solveHinges,
-    torque, aim, bendAngle, drive, collide, com, comVel, ik, vel, addVel, spin
+    torque, aim, bendAngle, drive, collide, ballistic, com, comVel, ik, vel, addVel, spin
   };
 })();

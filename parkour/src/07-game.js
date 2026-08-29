@@ -94,17 +94,24 @@ K.game = (function () {
     g.district = K.world.DISTRICTS[di]; g.districtIndex = di;
 
     // crosswind is a real lateral force on every point, not a filter
+    let wind = 0;
     if (g.district.wind) {
       const w = Math.sin(g.runTime * 0.7) * 0.6 + Math.sin(g.runTime * 2.3) * 0.3 + 0.35;
-      for (const p of b.list) p.ax += w * g.district.wind * 1.5;
+      wind = w * g.district.wind * 1.5;
+      for (const p of b.list) p.ax += wind;
     }
 
     K.ai.think(c, lv, dt);
+    const v0 = P.comVel(b, dt);
+    const airborne = b.contacts === 0;
     P.integrate(b, dt, 1);
     E.step(c, lv, dt);
     const frame = R.frame(b);
     for (let i = 0; i < 5; i++) { P.solveBones(b); P.solveHinges(b, frame); }
     P.collide(b, lv, dt);
+    // in free flight the centre of mass is gravity's business, not the
+    // muscles' — see phys.ballistic
+    if (airborne && b.contacts === 0) P.ballistic(b, dt, v0, wind, 0);
 
     const d = pel.z - g.startZ;
     if (d > g.distance) {

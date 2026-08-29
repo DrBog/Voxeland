@@ -1,6 +1,11 @@
 <title>KINESIS</title>
 <style>
 /* KINESIS */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap');
+
+/* Plex, because the HUD is an instrument panel: the mono carries every
+   number and label with real tabular figures, the sans carries the few
+   sentences of prose, and neither reads like a default. */
 :root {
   --bg: #06080e;
   --ink: #e9edf6;
@@ -10,8 +15,8 @@
   --card: rgba(255,255,255,0.035);
   --amber: #ffb057;
   --green: #8fe3a0;
-  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  --sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body {
@@ -506,7 +511,10 @@ K.phys = (function () {
     spin(c, b, nx, ny, nz, -err * (wc / w), quiet);
   }
 
-  /* swing the segment a->b toward a target direction (unit vector) */
+  /* Swing the segment a->b toward a target direction (unit vector).
+     The pivot is the segment's centre of mass, so the rotation is a torque
+     rather than a shove. It is still allowed to do work — it is a muscle —
+     and free flight is kept honest by ballistic(), below. */
   function aim(a, b, tx, ty, tz, strength) {
     let ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z;
     const ul = Math.hypot(ux, uy, uz); if (ul < 1e-7) return;
@@ -602,7 +610,13 @@ K.phys = (function () {
         if (!p.touchedLast && vn0 < -1 && -vn0 > p.impact) p.impact = -vn0;
         p.touched = true;
 
+        // Push out of the surface WITHOUT inventing velocity: in Verlet a
+        // bare position correction is read as motion, and at 180 Hz a five
+        // centimetre depenetration reads as nine metres per second — which is
+        // how a runner who clipped a crate ended up eleven metres in the air.
+        // The velocity response is applied separately, just below.
         p.x += nx * m; p.y += ny * m; p.z += nz * m;
+        p.px += nx * m; p.py += ny * m; p.pz += nz * m;
         const vn = vx * nx + vy * ny + vz * nz;
         if (vn < 0) { vx -= nx * vn; vy -= ny * vn; vz -= nz * vn; }
         // coulomb-ish friction: a fixed tangential deceleration, so glass is
@@ -630,6 +644,26 @@ K.phys = (function () {
         p.px = p.x - (p.x - p.px) * k; p.py = p.y - (p.y - p.py) * k; p.pz = p.z - (p.z - p.pz) * k;
       }
     }
+  }
+
+  /* With nothing in contact there are no external forces but gravity, so the
+     centre of mass MUST follow a parabola no matter what the limbs are doing.
+     Muscle work inside a free body can move its parts and its orientation; it
+     cannot move its centre of mass. Enforcing that literally is what stops a
+     ragdoll swimming through the air, which is otherwise very hard to prevent
+     when every muscle is a position correction. */
+  function ballistic(body, dt, v0, extraX, extraZ) {
+    let vx = 0, vy = 0, vz = 0, m = 0;
+    for (const p of body.list) {
+      vx += (p.x - p.px) / dt * p.m; vy += (p.y - p.py) / dt * p.m; vz += (p.z - p.pz) / dt * p.m;
+      m += p.m;
+    }
+    vx /= m; vy /= m; vz /= m;
+    const wantX = v0.x + (extraX || 0) * dt;
+    const wantY = v0.y + GRAVITY * dt;
+    const wantZ = v0.z + (extraZ || 0) * dt;
+    const dx = (wantX - vx) * dt, dy = (wantY - vy) * dt, dz = (wantZ - vz) * dt;
+    for (const p of body.list) { p.px -= dx; p.py -= dy; p.pz -= dz; }
   }
 
   function com(body) {
@@ -670,7 +704,7 @@ K.phys = (function () {
 
   return {
     GRAVITY, Body, add, bone, hinge, integrate, solveBones, solveHinges,
-    torque, aim, bendAngle, drive, collide, com, comVel, ik, vel, addVel, spin
+    torque, aim, bendAngle, drive, collide, ballistic, com, comVel, ik, vel, addVel, spin
   };
 })();
 
@@ -797,7 +831,8 @@ K.rag = (function () {
     const rate = ((hip.y - hip.py) - (f.y - f.py)) / dt;
     // feed-forward the body's own weight, then correct: a pure proportional
     // servo sags by exactly however much weight it forgot to carry
-    let a = HOLD * (share === undefined ? 1 : share) + err * 90 - rate * 10;
+    const t = K.tune || { supportGain: 90, supportDamp: 10 };
+    let a = HOLD * (share === undefined ? 1 : share) + err * t.supportGain - rate * t.supportDamp;
     a = U.clamp(a, 0, maxAcc);
     for (const t of b.trunk) P.addVel(t, 0, a * dt, 0, dt);
     P.addVel(f, 0, -a * dt * 0.5, 0, dt);
@@ -857,6 +892,19 @@ K.euphoria = (function () {
   const P = K.phys, R = K.rag, U = K.util;
   const { clamp, lerp, TAU } = U;
 
+  /* Live tuning knobs. Named here so the headless rig can sweep them without
+     editing source, and so the numbers that shape the gait are all in one
+     place instead of buried as literals in the middle of it. */
+  const tune = K.tune = {
+    releaseFlat: 0.72,   // foot this far from the hip (as a fraction of leg) ends stance
+    supportGain: 90,     // hip-height servo, proportional
+    supportDamp: 10,
+    cadBase: 1.05, cadSlope: 0.20,   // slower turnover, longer swing, real stride
+    stride: 0.95,        // fraction of the geometric reach the step aims for
+    trunkGain: 0.34,
+    swingSpeed: 2.2
+  };
+
   const S = {
     RUN: 'RUN', AIR: 'AIRBORNE', VAULT: 'VAULT', GRAB: 'CATCH', ROLL: 'ROLL',
     STAGGER: 'STAGGER', FALL: 'PROTECT', DOWN: 'DOWN', GETUP: 'RISE', OUT: 'WIPEOUT'
@@ -896,6 +944,15 @@ K.euphoria = (function () {
 
   function setState(c, s) {
     if (c.state === s) return;
+    // Leaving a catch by ANY route has to let go of the ledge. The grab code
+    // released its own two exits, but a hard impact or a posture check could
+    // change state from underneath it, leaving the runner tethered to a
+    // rooftop by one hand for the rest of the run.
+    if (c.state === S.GRAB) {
+      c.body.parts.handL.pinned = null;
+      c.body.parts.handR.pinned = null;
+      c.grabPoint = null; c.grabT = 0;
+    }
     c.prevState = c.state; c.state = s; c.stateT = 0; c.anchorSet = false;
   }
 
@@ -914,6 +971,7 @@ K.euphoria = (function () {
       if (L.foot.grounded || L.toe.grounded) { sx += L.foot.x; sz += L.foot.z; contacts++; }
     }
     c.grounded = contacts > 0;
+    c.footContacts = contacts;
     c.groundedAny = b.contacts > 0;
 
     // Where the next foot has to land. Running is a controlled fall, so the
@@ -992,16 +1050,22 @@ K.euphoria = (function () {
     P.aim(b.parts.chest, b.parts.head, tx / l * 0.4, 1, lean * 0.2, strength * 0.7);
   }
 
+  /* Arms run bent, not hanging: the hand target sits well inside the arm's
+     reach so the elbow has to fold, and swings fore-and-aft opposite the
+     legs. A runner with straight arms reads as a mannequin on rails. */
   function armSwing(c, dt, amp, height) {
-    const b = c.body, sp = muscle(c, 4.4);
+    const b = c.body, sp = muscle(c, 5.0);
     const hint = { x: 0, y: 0, z: -1 };            // elbows break backward
+    const reach = R.L.arm * 0.52;
     for (const A of R.arms(b)) {
       const ph = c.phase + (A.side < 0 ? 0 : Math.PI);
       const s = Math.sin(ph);
-      // arms cross slightly in front as they come through, like a runner's
-      R.reachArm(b, A, A.sh.x + A.side * (0.16 - Math.max(0, s) * 0.14),
-        A.sh.y - height + Math.abs(s) * 0.07,
-        A.sh.z + s * amp, sp, dt, hint);
+      const ang = s * amp;                          // shoulder angle, fore/aft
+      R.reachArm(b, A,
+        A.sh.x + A.side * (0.15 - Math.max(0, s) * 0.11),
+        A.sh.y - height - Math.cos(ang) * reach * 0.35,
+        A.sh.z + Math.sin(ang) * reach + 0.06,
+        sp, dt, hint);
     }
   }
 
@@ -1009,10 +1073,18 @@ K.euphoria = (function () {
      into the whole sprung mass, limited by what the muscles have left. */
   function heave(c, floor, targetH, dt, gain) {
     const b = c.body, st = c.stats;
-    const err = (floor + targetH) - b.parts.pelvis.y;
+    // measure against whichever is higher: the deck under the body, or the
+    // feet themselves. At a deck edge the floor under the centre of mass can
+    // be a storey down, and a get-up that aims at that never finishes.
+    const feet = Math.min(b.parts.footL.y, b.parts.footR.y);
+    const base = Math.max(floor, feet - 0.05);
+    const err = (base + targetH) - b.parts.pelvis.y;
     if (err <= 0.01) return 0;
     const cap = (24 + st.legPower * 22 + st.rebound * 18) * (0.35 + c.consciousness * 0.65) * (gain || 1);
-    const a = clamp(err * 70, 0, cap);
+    // damped, or a body that breaks free of whatever pinned it gets fired
+    // off the deck at three times a jump
+    const rise = (b.parts.pelvis.y - b.parts.pelvis.py) / dt;
+    const a = clamp(err * 70 - rise * 16, 0, cap);
     for (const t of b.trunk) P.addVel(t, 0, a * dt, 0, dt);
     return a;
   }
@@ -1037,7 +1109,7 @@ K.euphoria = (function () {
     // cadence follows the speed the runner is TRYING to hold; a gait that
     // only steps as fast as it is already going can never accelerate
     const drive = Math.max(Math.abs(c.speed), opts.speed * 0.8);
-    const cad = clamp(1.45 + drive * 0.34, 1.4, 4.8) * opts.cadence;
+    const cad = clamp(tune.cadBase + drive * tune.cadSlope, 1.4, 4.8) * opts.cadence;
     c.cadence = cad;
     c.phase += TAU * cad * 0.5 * dt;
     if (c.phase >= TAU) c.phase -= TAU;
@@ -1064,17 +1136,26 @@ K.euphoria = (function () {
     const bob = (0.855 - clamp(Math.abs(c.speed) * 0.016, 0, 0.13))
       + Math.sin(sPhase * Math.PI) * 0.05;
     const power = (44 + c.stats.legPower * 26) * (0.4 + c.consciousness * 0.6) * eff;
+    const stanceLen = R.L.leg * bob * opts.crouch;
     let carried = false;
     let down = 0;
     for (const L of all) if (L.foot.grounded || L.toe.grounded) down++;
     for (const L of all) {
       if (!(L.foot.grounded || L.toe.grounded)) continue;
-      // a foot has to be under the body to carry it; a foot up by the hip is
-      // a foot on a wall, and standing on it would be climbing your own leg
-      if (L.foot.y > L.hip.y - 0.30) continue;
+      // A foot level with the hip is a foot on a wall, and pushing off it
+      // would be climbing your own leg. Anything lower than that is under
+      // the body and can carry it — including, crucially, when the body has
+      // already sunk, which is exactly when it needs carrying most.
+      if (L.foot.y > L.hip.y - 0.08) continue;
       carried = true;
       const isStance = L === stanceLeg;
-      const len = R.L.leg * (isStance ? bob : 0.90) * opts.crouch;
+      // ask for a height this leg can actually reach from where the foot is.
+      // As the foot trails, the reachable height falls and the hip rides down
+      // with it — which is what a stride looks like — instead of the servo
+      // shoving at an arithmetic impossibility.
+      const flat = Math.hypot(L.foot.x - L.hip.x, L.foot.z - L.hip.z);
+      const able = Math.sqrt(Math.max(0.04, R.L.leg * R.L.leg - flat * flat)) * 0.97;
+      const len = Math.min(isStance ? stanceLen : R.L.leg * 0.90 * opts.crouch, able);
       R.support(b, L, len, power * (isStance ? 1 : 0.55), dt, 1 / Math.max(1, down));
       if (isStance && sPhase > 0.55) R.legSpring(b, L, R.L.leg * 0.97, 160, power * 0.5, dt);
     }
@@ -1088,13 +1169,21 @@ K.euphoria = (function () {
       }
     }
     if (c.anchorSet && !(stanceLeg.foot.grounded || stanceLeg.toe.grounded)) c.anchorSet = false;
-    // Toe-off: once the support leg runs out of leg, holding the plant any
-    // longer just drags the body backwards. Ending stance on geometry rather
-    // than on a timer is what lets a stronger runner actually run faster.
+    // Stance ends on geometry, not on a timer. Once the planted foot is far
+    // enough away — trailing behind at toe-off, or braced out in front after
+    // a stumble — that standing at hip height over it would need a longer leg
+    // than the body owns, the servo is pushing against arithmetic. Let the
+    // plant go and step. This is why the runner walks out of a stumble
+    // instead of sitting down in it.
     if (c.anchorSet) {
-      const legOut = Math.hypot(stanceLeg.hip.x - stanceLeg.foot.x,
-        stanceLeg.hip.y - stanceLeg.foot.y, stanceLeg.hip.z - stanceLeg.foot.z);
-      if (legOut > R.L.leg * 0.93 && stanceLeg.foot.z < pel.z - 0.05) {
+      const dx = stanceLeg.foot.x - stanceLeg.hip.x;
+      const dz = stanceLeg.foot.z - stanceLeg.hip.z;
+      const flat = Math.hypot(dx, dz);
+      // ...but not more than once every so often. Released every substep, the
+      // phase ping-pongs between legs and neither ever completes a swing:
+      // both feet end up trailing and the body slides along on its heels.
+      if (flat > R.L.leg * tune.releaseFlat && c.releaseCool <= 0) {
+        c.releaseCool = 0.12;
         c.anchorSet = false;
         c.phase = (c.swing === 0 ? Math.PI : 0) + 0.02;
         c.swing = 1 - c.swing;
@@ -1113,38 +1202,86 @@ K.euphoria = (function () {
       R.reachLeg(b, stanceLeg, stanceLeg.hip.x, fy, pel.z - 0.06, sp, dt, hint);
     }
 
-    // ---- swing: put the foot where the body needs it, in both axes.
-    // Steering IS foot placement: plant inside the turn and the body goes.
-    // How far ahead a foot can actually be planted is geometry, not wish:
-    // a leg of length L with the hip at height h reaches sqrt(L^2 - h^2)
-    // forward, plus whatever the flight phase adds at speed. Ask for more
-    // and the runner over-strides into the splits, which is exactly what a
-    // real runner does when they try to out-run their own legs.
-    // measured against the hip height the gait is TRYING to hold, not the
-    // one it currently has, or a sinking body talks itself into the splits
+    // ---- swing: an actual running cycle, not a foot skimming the deck.
+    // The leg is posed by two joint angles through the swing — thigh sweeps
+    // back-to-front while the knee folds the heel up under the hip and then
+    // snaps the shin out to meet the ground — and only the last quarter of
+    // the swing blends onto the balance controller's landing point. Pose
+    // gives the motion its shape; foot placement decides where it ends.
+    const swingHip = swingLeg.hip;
+    const gait4 = c.gaitAmp = clamp(0.55 + Math.abs(c.speed) * 0.085, 0.5, 1.15) * opts.stride;
+    // keyframes: [thigh angle from vertical (+forward), knee fold (+heel back)]
+    const KEYS = [
+      [-0.62, 0.75],   // toe-off, heel lifting
+      [-0.10, 1.95],   // recovery, heel high under the hip
+      [0.52, 1.55],    // knee drives through, shin still folded
+      [0.70, 0.60],    // shin swings out
+      [0.40, 0.14]     // plant, leg long
+    ];
+    const kf = clamp(sPhase, 0, 0.9999) * (KEYS.length - 1);
+    const ki = Math.floor(kf), kt = kf - ki;
+    const ease = kt * kt * (3 - 2 * kt);
+    const th = lerp(KEYS[ki][0], KEYS[ki + 1][0], ease) * gait4;
+    const tk = lerp(KEYS[ki][1], KEYS[ki + 1][1], ease) * (0.55 + gait4 * 0.55);
+    const thigh = R.L.thigh, shin = R.L.shin;
+    const kneeT = {
+      x: swingHip.x + swingLeg.side * 0.015,
+      y: swingHip.y - Math.cos(th) * thigh,
+      z: swingHip.z + Math.sin(th) * thigh
+    };
+    const sa = th - tk;
+    const footPose = {
+      x: kneeT.x, y: kneeT.y - Math.cos(sa) * shin, z: kneeT.z + Math.sin(sa) * shin
+    };
+
+    // where the balance controller wants this foot to come down
     const hipH = R.L.leg * 0.855 * opts.crouch;
-    const maxAhead = Math.sqrt(Math.max(0.04, R.L.leg * R.L.leg - hipH * hipH)) * 0.92
-      + Math.abs(c.speed) * 0.045;
+    const maxAhead = Math.sqrt(Math.max(0.04, R.L.leg * R.L.leg - hipH * hipH)) * tune.stride
+      + Math.abs(c.speed) * 0.05;
     const bias = (0.02 + Math.abs(c.speed) * 0.014) * opts.stride;
     const landZ = clamp(c.captureZ + bias, pel.z - 0.32, pel.z + maxAhead);
     const steer = clamp((c.laneX - c.com.x) * 0.55 - c.drift * 0.12, -0.34, 0.34)
       * (0.55 + c.stats.balance * 0.5) * opts.steer;
     const landX = clamp(c.captureX - steer + swingLeg.side * 0.11,
       c.com.x - 0.5, c.com.x + 0.5);
-    const g = level.groundAt(landX, landZ, pel.y + 0.6);
+    // Never step into a hole. If there is no deck under the chosen landing
+    // point, walk the target back to the last solid ground — a short step
+    // onto the lip, which is what a person does, instead of posting a leg
+    // into the gap and sitting down on the edge of it.
+    let stepZ = landZ;
+    let g = level.groundAt(landX, stepZ, pel.y + 0.6);
+    if (!g) {
+      for (let back = 0.12; back <= 1.3; back += 0.12) {
+        const gg = level.groundAt(landX, landZ - back, pel.y + 0.6);
+        if (gg) { stepZ = landZ - back; g = gg; break; }
+      }
+    }
+    if (!g) {
+      const under = level.groundAt(swingHip.x, pel.z - 0.05, pel.y + 0.6);
+      if (under) { g = under; stepZ = pel.z - 0.05; }
+    }
     const groundY = g ? g.y : pel.y - R.L.leg - 0.8;
-    const lift = (0.14 + Math.abs(c.speed) * 0.022) * opts.lift
-      * Math.sin(Math.pow(clamp(sPhase, 0, 1), 0.55) * Math.PI);
-    const t = clamp(sPhase * 1.3, 0, 1);
-    const tx = lerp(c.swingFrom.x, landX, t);
-    const tz = lerp(c.swingFrom.z, landZ, t);
-    const ty = groundY + R.L.plant + lift;
-    R.reachLeg(b, swingLeg, tx, ty, tz, sp * eff, dt, hint);
-    // toe target sits exactly one foot-bone from the ankle, or the bone and
-    // the muscle fight each other forever
-    const fl = R.L.foot, fn = Math.hypot(0.3, 1);
-    P.drive(swingLeg.toe, swingLeg.foot.x, swingLeg.foot.y - fl * 0.3 / fn, swingLeg.foot.z + fl / fn,
-      sp * 0.8, dt, sp * 16);
+    const landY = Math.max(groundY + R.L.plant, footPose.y - 0.5);
+
+    // blend pose -> placement over the last third of the swing
+    const w = clamp((sPhase - 0.62) / 0.34, 0, 1);
+    const blend = w * w * (3 - 2 * w);
+    const footT = {
+      x: lerp(footPose.x, landX, blend),
+      y: lerp(footPose.y, landY, blend * 0.9),
+      z: lerp(footPose.z, stepZ, blend)
+    };
+
+    P.drive(swingLeg.knee, kneeT.x, kneeT.y, kneeT.z, sp * tune.swingSpeed * eff, dt, sp * 26);
+    P.drive(swingLeg.foot, footT.x, footT.y, footT.z, sp * (tune.swingSpeed + 0.2) * eff, dt, sp * 30);
+    // the toe leads through the swing and drops for the plant
+    const fl = R.L.foot;
+    const toeAng = lerp(-0.35, 0.30, blend);
+    P.drive(swingLeg.toe,
+      swingLeg.foot.x,
+      swingLeg.foot.y - Math.sin(toeAng + 0.35) * fl,
+      swingLeg.foot.z + Math.cos(toeAng + 0.35) * fl,
+      sp * 1.2, dt, sp * 18);
 
     // ---- drive, only while something is planted
     if (c.grounded) {
@@ -1169,23 +1306,39 @@ K.euphoria = (function () {
 
   function behaveRun(c, level, dt) {
     const st = c.stats;
+    // Posture first. A body running with its hips down cannot get them back
+    // up at speed — the capture point is always further ahead than the legs
+    // can re-stack — so it takes the speed off and shortens up until it is
+    // standing again. Which is what a person does after a stumble.
+    const b0 = c.body.parts;
+    const hipUp = b0.pelvis.y - Math.min(b0.footL.y, b0.footR.y);
+    const low = clamp((R.L.leg * 0.80 - hipUp) / 0.28, 0, 1);
+    c.lowPosture = low;
     // lean into the acceleration, like anyone does
     const accel = clamp((c.targetSpeed - c.speed) * 0.05, -0.06, 0.16);
     const lean = clamp(0.13 + Math.abs(c.speed) * 0.026 + accel, 0, 0.60);
     const side = clamp((c.laneX - c.com.x) * 0.22, -0.28, 0.28);
     gait(c, level, dt, {
-      speed: c.targetSpeed, cadence: 1, stride: 1, lift: 1,
+      speed: c.targetSpeed * (1 - 0.62 * low),
+      cadence: 1 + low * 0.55,
+      stride: 1 - low * 0.35,
+      lift: 1,
       steer: 1 + (c.edgeFear || 0) * 1.4,
       crouch: c.intent.duck ? 0.66 : 1
     });
-    trunk(c, lean, side, clamp(0.34 * (0.6 + st.balance) * c.consciousness, 0, 0.85));
-    armSwing(c, dt, 0.42, 0.32);
+    trunk(c, lean, side, clamp(tune.trunkGain * (0.6 + st.balance) * c.consciousness, 0, 0.85));
+    armSwing(c, dt, 0.95, 0.20);
 
     // A body dragging itself along the deck is not running, whatever the
     // state machine believes. But a single low frame is a landing, not a
     // collapse, so the reading has to persist before it counts.
     c.grace = Math.max(0, (c.grace || 0) - dt);
-    if (c.stance < 0.52 && c.groundedAny && !c.grace) c.lowT = (c.lowT || 0) + dt;
+    const onFeet = c.footContacts > 0;
+    const overFeet = c.body.parts.pelvis.y
+      - Math.min(c.body.parts.footL.y, c.body.parts.footR.y);
+    if (Math.min(c.stance, overFeet) < 0.50 && c.groundedAny && !(c.grace && onFeet)) {
+      c.lowT = (c.lowT || 0) + dt;
+    }
     else c.lowT = 0;
     if (c.lowT > 0.16) {
       c.lowT = 0;
@@ -1264,9 +1417,13 @@ K.euphoria = (function () {
       }
     }
 
-    // steer in the air, a little
-    const wantX = clamp((c.laneX - c.com.x) * 1.4, -2.2, 2.2);
-    P.addVel(b.parts.pelvis, clamp(wantX - c.drift, -1, 1) * 1.6 * dt, 0, 0, dt);
+    // Steer in the air, a little — but only while there is still a route
+    // underneath. Falling off the city with the lane controller still running
+    // sails the body sideways for fifty metres on the way down.
+    if (c.floor !== null && (b.parts.pelvis.y - c.floor) < 6) {
+      const wantX = clamp((c.laneX - c.com.x) * 1.4, -2.2, 2.2);
+      P.addVel(b.parts.pelvis, clamp(wantX - c.drift, -1, 1) * 1.6 * dt, 0, 0, dt);
+    }
 
     if (hit.t < 0.26) {
       const tx = hit.x + clamp(c.comVel.x * 0.10, -0.3, 0.3);
@@ -1285,11 +1442,19 @@ K.euphoria = (function () {
         }
       }
     } else {
-      tuckLegs(c, dt, 0.55 + Math.sin(c.airT * 6) * 0.2);
+      // Flight posture: knees up and forward, but the feet stay UNDER the
+      // hips and drop as the ground comes up. Curling them any higher is how
+      // a runner arrives on its backside, which was happening every jump.
+      const fall = clamp(-c.comVel.y / 6, 0, 1);
+      const drop = lerp(0.42, 0.66, fall);
+      for (const L of R.legs(b)) {
+        R.reachLeg(b, L, L.hip.x + L.side * 0.02, L.hip.y - drop,
+          L.hip.z + lerp(0.26, 0.08, fall), sp * 1.2, dt, hintK);
+      }
       const A = R.arms(b);
-      R.reachArm(b, A[0], A[0].sh.x - 0.24, A[0].sh.y - 0.14, A[0].sh.z + 0.20, sp, dt, hintA);
-      R.reachArm(b, A[1], A[1].sh.x + 0.24, A[1].sh.y - 0.06, A[1].sh.z + 0.26, sp, dt, hintA);
-      trunk(c, 0.26, 0, 0.28 * (0.4 + st.balance));
+      R.reachArm(b, A[0], A[0].sh.x - 0.28, A[0].sh.y - 0.16, A[0].sh.z + 0.18, sp, dt, hintA);
+      R.reachArm(b, A[1], A[1].sh.x + 0.28, A[1].sh.y - 0.08, A[1].sh.z + 0.24, sp, dt, hintA);
+      trunk(c, 0.24, 0, 0.34 * (0.4 + st.balance));
     }
     if (c.groundedAny && c.airT > 0.4 && hit.t >= 0.26) { setState(c, S.RUN); c.airT = 0; }
     // wedged, snagged, or resting on something the feet never found: a body
@@ -1331,7 +1496,7 @@ K.euphoria = (function () {
     }
     if (c.grabT > pullTime) {
       R2.pinned = null; L2.pinned = null;
-      P.addVel(b.parts.pelvis, 0, 1.4, 1.8 + st.grip * 1.6, 1 / 60);
+      P.addVel(b.parts.pelvis, 0, 1.4, 1.8 + st.grip * 1.6, c.dt || 1 / 180);
       c.grabPoint = null; c.grabT = 0;
       setState(c, S.RUN);
       c.targetSpeed *= 0.6;
@@ -1385,7 +1550,7 @@ K.euphoria = (function () {
     if (hd.y < ch.y + 0.05 && c.comVel.y < -1.5) {
       R.reachArm(b, A[0], hd.x - 0.12, hd.y + 0.12, hd.z + 0.06, sp * 2.4, dt, hintA);
       R.reachArm(b, A[1], hit.x + 0.20, hit.y + 0.16, hit.z, sp * 2.2, dt, hintA);
-      P.torque(b.parts.pelvis, ch, hd, 0.55, 0.3);
+      P.torque(b.parts.pelvis, ch, hd, 0.55, 0.3, true);
       c.protect = 'head';
     } else {
       const bx = hit.x + clamp(c.comVel.x * 0.08, -0.25, 0.25);
@@ -1451,8 +1616,11 @@ K.euphoria = (function () {
       c.phase += TAU * 0.7 * dt;
     }
     // stand all the way up before running again: rising into a crouch and
-    // calling it running is how the runner ends up in a fall/rise loop
-    const up = c.tilt < 0.5 && (pel.y - floor) > 0.78;
+    // calling it running is how the runner ends up in a fall/rise loop.
+    // Height is measured over the feet, not over whatever happens to be
+    // under the centre of mass — at a deck edge those are different storeys.
+    const feet = Math.min(b.parts.footL.y, b.parts.footR.y);
+    const up = c.tilt < 0.5 && (pel.y - Math.max(floor, feet - 0.05)) > 0.68;
     if (up && c.stateT > 0.25) {
       setState(c, S.RUN);
       c.targetSpeed = 1.6;
@@ -1471,6 +1639,10 @@ K.euphoria = (function () {
      coming mid-stride. */
   function requestJump(c, power) {
     if (c.state !== S.RUN && c.state !== S.STAGGER) return false;
+    // one take-off per jump. Three physics substeps a frame, a buffered
+    // intent and two code paths that can both ask meant the impulse was
+    // landing two or three times and throwing the runner six metres up.
+    if (c.jumpCool > 0) return false;
     // anything in contact can be pushed off. Requiring a foot specifically
     // strands the runner on the lip of a gap with its toes over the drop,
     // asking to jump forever and never being allowed to.
@@ -1484,12 +1656,18 @@ K.euphoria = (function () {
     // much past that turns every gap into a two-second flight and a crash.
     const v = (2.7 + st.legPower * 1.5) * clamp(power, 0.4, 1.25) * (0.5 + c.consciousness * 0.5);
     const eff = clamp(1 - (c.injury.L + c.injury.R) * 0.6, 0.3, 1);
-    const dt = 1 / 60;
+    // addVel writes velocity through the previous position, so it MUST use
+    // the same step the solver reads velocity with. Using 1/60 against a
+    // 1/180 solver made every jump three times as strong as the number said
+    // — which is why take-offs were reaching twelve metres per second and
+    // every landing was a crash.
+    const dt = c.dt || 1 / 180;
     // the whole body leaves the deck, not just the bits with names: a jump
     // is an impulse through the centre of mass
     for (const p of b.list) P.addVel(p, 0, v * eff, v * 0.22 * eff, dt);
     for (const L of R.legs(b)) P.addVel(L.foot, 0, -v * 0.25, 0, dt);
     c.flags.jumps = (c.flags.jumps || 0) + 1;
+    c.jumpCool = 0.45;
     fx(c, 'dust', b.parts.footL.x, b.parts.footL.y, b.parts.footL.z, 0.8);
     setState(c, S.AIR); c.airT = 0.19;
     return true;
@@ -1503,6 +1681,13 @@ K.euphoria = (function () {
 
   function step(c, level, dt) {
     c.stateT += dt;
+    c.dt = dt;                     // the true substep, for impulses
+    c.jumpCool = Math.max(0, (c.jumpCool || 0) - dt);
+    c.releaseCool = Math.max(0, (c.releaseCool || 0) - dt);
+    if (c.state !== S.GRAB && (c.body.parts.handL.pinned || c.body.parts.handR.pinned)) {
+      c.body.parts.handL.pinned = null;
+      c.body.parts.handR.pinned = null;
+    }
     sense(c, level, dt);
     if (c.jumpBuffer) {
       c.jumpBuffer.t += dt;
@@ -1728,8 +1913,16 @@ K.world = (function () {
       // gets harder because you get faster, not in spite of it — an idle
       // runner that meets an unjumpable hole just farms the same 40 metres
       // forever, and that is not a game, it is a wall.
-      const jumpCap = 0.9 + statLevel('legPower') * 0.075 + statLevel('flow') * 0.03;
-      const gap = z < 34 ? 0
+      // Early gaps stay small for everybody. A fast runner meets them sooner
+      // and mistimes more, so scaling the hole with the legs alone punished
+      // exactly the players who had been training.
+      const opening = clamp(z / 700, 0.35, 1);
+      const jumpCap = (0.9 + statLevel('legPower') * 0.075 + statLevel('flow') * 0.03) * opening;
+      // Not every block ends in a hole. Early districts are mostly continuous
+      // deck with the occasional cut, so there is something to watch between
+      // the jumps; the city gets more broken the further out it goes.
+      const holeOdds = 0.30 + clamp(z / 2600, 0, 1) * 0.55;
+      const gap = (z < 34 || rnd() > holeOdds) ? 0
         : Math.min(jumpCap, (0.7 + rnd() * (1.0 + diff * 1.7)) * D.gap * (0.45 + warm * 0.55));
       const len = lerp(16, 8, clamp(diff * 0.6 + rnd() * 0.4, 0, 1)) + rnd() * 6;
       let top = lv.lastTop + (rnd() - 0.45) * 2.4;
@@ -2331,17 +2524,24 @@ K.game = (function () {
     g.district = K.world.DISTRICTS[di]; g.districtIndex = di;
 
     // crosswind is a real lateral force on every point, not a filter
+    let wind = 0;
     if (g.district.wind) {
       const w = Math.sin(g.runTime * 0.7) * 0.6 + Math.sin(g.runTime * 2.3) * 0.3 + 0.35;
-      for (const p of b.list) p.ax += w * g.district.wind * 1.5;
+      wind = w * g.district.wind * 1.5;
+      for (const p of b.list) p.ax += wind;
     }
 
     K.ai.think(c, lv, dt);
+    const v0 = P.comVel(b, dt);
+    const airborne = b.contacts === 0;
     P.integrate(b, dt, 1);
     E.step(c, lv, dt);
     const frame = R.frame(b);
     for (let i = 0; i < 5; i++) { P.solveBones(b); P.solveHinges(b, frame); }
     P.collide(b, lv, dt);
+    // in free flight the centre of mass is gravity's business, not the
+    // muscles' — see phys.ballistic
+    if (airborne && b.contacts === 0) P.ballistic(b, dt, v0, wind, 0);
 
     const d = pel.z - g.startZ;
     if (d > g.distance) {
@@ -2631,6 +2831,7 @@ K.render = (function () {
     const fogT = clamp((depth - FOG_NEAR) / (FOG_FAR - FOG_NEAR), 0, 1);
     v.items.push({
       z: depth,
+      ground: !!opts.ground, top: b.y1,
       draw: (ctx) => {
         for (const F of FACES) {
           // visible if the face normal points back toward the camera
@@ -2712,7 +2913,7 @@ K.render = (function () {
       const isDeck = b.kind === 'deck' || b.kind === 'gatepad' || b.kind === 'glass' || b.kind === 'ledgepad';
       const col = rgb(KIND_COL[b.kind] || '#4a5064');
       const tinted = mix(col, rgb(D.accent), isDeck ? 0.06 : 0.12);
-      boxItem(v, g, b, tinted, { edge: isDeck ? D.accent : null });
+      boxItem(v, g, b, tinted, { edge: isDeck ? D.accent : null, ground: isDeck });
       if (isDeck) deckMarks(v, g, b, D);
     }
 
@@ -2822,10 +3023,10 @@ K.render = (function () {
             const s = toScreen(v, mid);
             const size = clamp(0.42 * s.s, 7, 30);
             ctx.textAlign = 'center';
-            ctx.font = '600 ' + size.toFixed(0) + 'px ui-monospace, Menlo, monospace';
+            ctx.font = '600 ' + size.toFixed(0) + 'px "IBM Plex Mono", ui-monospace, Menlo, monospace';
             ctx.fillStyle = css(mix(c, v.fog, fogT), 0.95 * (1 - fogT * 0.7));
             ctx.fillText(m.gate.name, s.x, s.y);
-            ctx.font = '500 ' + (size * 0.62).toFixed(0) + 'px ui-monospace, Menlo, monospace';
+            ctx.font = '500 ' + (size * 0.62).toFixed(0) + 'px "IBM Plex Mono", ui-monospace, Menlo, monospace';
             ctx.fillStyle = css(mix([230, 235, 246], v.fog, fogT), 0.6 * (1 - fogT * 0.7));
             const req = m.gate.stat === 'all' ? 'ALL ' + m.gate.need : m.gate.stat.toUpperCase() + ' ' + m.gate.need;
             ctx.fillText(m.done ? 'CLEARED' : req, s.x, s.y + size * 0.9);
@@ -2999,6 +3200,14 @@ K.render = (function () {
       });
     }
 
+    // A deck cannot occlude the body standing on top of it. Sorting whole
+    // slabs by their centre puts the far end of a long deck in front of the
+    // runner and paints the ground over them, so any ground at or below the
+    // feet is forced behind the body regardless of where its middle sits.
+    const feetY = Math.min(g.body.parts.footL.y, g.body.parts.footR.y);
+    for (const it of v.items) {
+      if (it.ground && it.top <= feetY + 0.12) it.z = Math.max(it.z, pd + 0.5);
+    }
     v.items.sort((a, b) => b.z - a.z);
     for (const it of v.items) it.draw(ctx);
 
@@ -3011,7 +3220,7 @@ K.render = (function () {
       const a = clamp(1.6 - p.t, 0, 1) * clamp(p.t * 5, 0, 1);
       ctx.globalAlpha = a;
       ctx.fillStyle = p.kind === 'gate' ? '#8affc0' : p.kind === 'good' ? D.accent : '#fff';
-      ctx.font = '600 ' + clamp(0.36 * s.s, 10, 26).toFixed(0) + 'px ui-monospace, Menlo, monospace';
+      ctx.font = '600 ' + clamp(0.36 * s.s, 10, 26).toFixed(0) + 'px "IBM Plex Mono", ui-monospace, Menlo, monospace';
       ctx.fillText(p.text, s.x, s.y);
       ctx.globalAlpha = 1;
     }

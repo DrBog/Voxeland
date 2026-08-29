@@ -195,8 +195,16 @@ K.world = (function () {
       // gets harder because you get faster, not in spite of it — an idle
       // runner that meets an unjumpable hole just farms the same 40 metres
       // forever, and that is not a game, it is a wall.
-      const jumpCap = 0.9 + statLevel('legPower') * 0.075 + statLevel('flow') * 0.03;
-      const gap = z < 34 ? 0
+      // Early gaps stay small for everybody. A fast runner meets them sooner
+      // and mistimes more, so scaling the hole with the legs alone punished
+      // exactly the players who had been training.
+      const opening = clamp(z / 700, 0.35, 1);
+      const jumpCap = (0.9 + statLevel('legPower') * 0.075 + statLevel('flow') * 0.03) * opening;
+      // Not every block ends in a hole. Early districts are mostly continuous
+      // deck with the occasional cut, so there is something to watch between
+      // the jumps; the city gets more broken the further out it goes.
+      const holeOdds = 0.30 + clamp(z / 2600, 0, 1) * 0.55;
+      const gap = (z < 34 || rnd() > holeOdds) ? 0
         : Math.min(jumpCap, (0.7 + rnd() * (1.0 + diff * 1.7)) * D.gap * (0.45 + warm * 0.55));
       const len = lerp(16, 8, clamp(diff * 0.6 + rnd() * 0.4, 0, 1)) + rnd() * 6;
       let top = lv.lastTop + (rnd() - 0.45) * 2.4;

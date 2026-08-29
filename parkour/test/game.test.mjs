@@ -90,17 +90,25 @@ test('the body stays a body: no exploding, no sinking through the deck', () => {
     'the skeleton has come apart');
 });
 
-test('a trained runner covers ground and spends most of it running', () => {
+test('a trained runner covers ground, on its feet', () => {
   const K = load(7);
-  const { g, seen, frames } = simulate(K, { seconds: 40, levels: {
-    legPower: 8, flow: 6, balance: 8, reflex: 8, grip: 6, conditioning: 6, rebound: 5
-  } });
-  const running = (seen.RUN || 0) / frames;
-  assert.ok(g.state.totalDistance + g.distance > 60,
+  const s = K.prog.fresh();
+  Object.assign(s.levels, { legPower: 8, flow: 6, balance: 8, reflex: 8, grip: 6, conditioning: 6, rebound: 5 });
+  const g = K.game.create(s);
+  let up = 0, running = 0;
+  for (let i = 0; i < 40 * 60; i++) {
+    K.game.update(g, 1 / 60);
+    if (g.ctrl.state !== 'RUN') continue;
+    const P = g.body.parts, f = Math.min(P.footL.y, P.footR.y);
+    if (P.pelvis.y - f > 0.60 && g.ctrl.tilt < 0.55) up++;
+    running++;
+  }
+  assert.ok(g.state.totalDistance + g.distance > 40,
     'covered only ' + (g.state.totalDistance + g.distance).toFixed(0) + ' m in 40 s');
-  // the rest is flight phase, catches, rolls and getting back up — all of
-  // which are the point — but a runner that is mostly on the deck is broken
-  assert.ok(running > 0.35, 'only ' + (running * 100).toFixed(0) + '% of the time on its feet');
+  // while it believes it is running it should be standing up, not ploughing
+  // along on its back — the failure this test exists to catch
+  assert.ok(up / running > 0.6,
+    'upright for only ' + (100 * up / running).toFixed(0) + '% of running frames');
 });
 
 test('momentum only ever accrues from ground actually covered', () => {
@@ -113,4 +121,53 @@ test('momentum only ever accrues from ground actually covered', () => {
     assert.ok(state.lifetime <= (state.totalDistance + g.distance) * maxRate + 1,
       'momentum outran the metres that earned it');
   }
+});
+
+test('the legs actually cycle: a foot comes through in front of the hips', () => {
+  const K = load(3);
+  const { g } = simulate(K, { seconds: 30, levels: {
+    legPower: 8, flow: 6, balance: 8, reflex: 8, grip: 6, conditioning: 6, rebound: 5
+  } });
+  // simulate() only returns the end state, so re-run watching the stride
+  const K2 = load(3);
+  const s = K2.prog.fresh();
+  Object.assign(s.levels, { legPower: 8, flow: 6, balance: 8, reflex: 8, grip: 6, conditioning: 6, rebound: 5 });
+  const g2 = K2.game.create(s);
+  let ahead = 0, frames = 0, maxAhead = -9;
+  for (let i = 0; i < 30 * 60; i++) {
+    K2.game.update(g2, 1 / 60);
+    if (g2.ctrl.state !== 'RUN') continue;
+    const P = g2.body.parts;
+    const a = Math.max(P.footL.z - P.pelvis.z, P.footR.z - P.pelvis.z);
+    maxAhead = Math.max(maxAhead, a);
+    if (a > 0.10) ahead++;
+    frames++;
+  }
+  assert.ok(maxAhead > 0.25, 'stride never reaches in front of the hips (max ' + maxAhead.toFixed(2) + ' m)');
+  assert.ok(ahead / frames > 0.10,
+    'a foot leads the hips only ' + (100 * ahead / frames).toFixed(0) + '% of running frames — that is a drag, not a gait');
+  assert.ok(g.state.totalDistance + g.distance > 30);
+});
+
+test('the runner cannot launch itself: free flight stays ballistic', () => {
+  const K = load(3);
+  const s = K.prog.fresh();
+  Object.assign(s.levels, { legPower: 8, flow: 6, balance: 8, reflex: 8, grip: 6, conditioning: 6, rebound: 5 });
+  const g = K.game.create(s);
+  // lift the whole body well clear of everything and let it fly
+  for (const p of g.body.list) { p.y += 6; p.py += 6; }
+  const P = K.phys;
+  const h = 1 / 180;
+  let v = P.comVel(g.body, h).y;
+  let worst = 0;
+  for (let i = 0; i < 60; i++) {
+    const v0 = P.comVel(g.body, h).y;
+    K.game.update(g, h);
+    if (g.body.contacts !== 0) break;
+    const v1 = P.comVel(g.body, h).y;
+    // gravity may only subtract; the muscles may not add
+    worst = Math.max(worst, v1 - (v0 - 11.2 * h));
+  }
+  assert.ok(worst < 0.25,
+    'centre of mass gained ' + worst.toFixed(2) + ' m/s upward in free flight — the muscles are swimming');
 });

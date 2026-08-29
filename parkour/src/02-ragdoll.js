@@ -120,7 +120,8 @@ K.rag = (function () {
     const rate = ((hip.y - hip.py) - (f.y - f.py)) / dt;
     // feed-forward the body's own weight, then correct: a pure proportional
     // servo sags by exactly however much weight it forgot to carry
-    let a = HOLD * (share === undefined ? 1 : share) + err * 90 - rate * 10;
+    const t = K.tune || { supportGain: 90, supportDamp: 10 };
+    let a = HOLD * (share === undefined ? 1 : share) + err * t.supportGain - rate * t.supportDamp;
     a = U.clamp(a, 0, maxAcc);
     for (const t of b.trunk) P.addVel(t, 0, a * dt, 0, dt);
     P.addVel(f, 0, -a * dt * 0.5, 0, dt);
