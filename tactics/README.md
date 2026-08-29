@@ -21,6 +21,14 @@ muscles lose the argument and the body is the solver's — it staggers, it goes
 down, it gets back up, or it goes over the side of the bridge and the arena
 keeps it. Nothing in that sequence is an animation.
 
+A unit walks in its own frame — a heading it turns toward, a forward and a
+sideways derived from that heading — and while a foot is on the ground it is
+pinned to the world and the hips are carried over it. Both of those are load
+bearing: build a stance on world axes and a unit walking east faces the camera
+and slides; let a muscle try to hold the plant instead of pinning it and the
+leg bone drags the foot along at four fifths of walking pace, which is a body
+being pushed, not a body walking.
+
 The arena is genuinely multi-level, because a tile is a *column* of walkable
 surfaces rather than a height: a bridge crosses over a courtyard and units
 stand on either. Movement is Dijkstra over surfaces with climb and drop limits

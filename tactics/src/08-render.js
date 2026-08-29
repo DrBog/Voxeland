@@ -368,19 +368,31 @@ K.render = (function () {
     ['pelvis', 'chest', 0.124], ['chest', 'head', 0.067]
   ];
 
-  function weaponHand(a) {
-    const p = a.body.parts;
-    return a.face > 0 ? p.handR : p.handL;
-  }
+  // the weapon lives in the right hand, whichever way the body is turned
+  function weaponHand(a) { return a.body.parts.handR; }
 
   function drawWeapon(v, ctx, a, fogT, col) {
     const u = a.unit, kind = u.weapon.kind;
     const h = weaponHand(a), p = a.body.parts;
-    const el = a.face > 0 ? p.elbowR : p.elbowL;
-    let dx = h.x - el.x, dy = h.y - el.y + 0.16, dz = h.z - el.z;
+    const el = p.elbowR;
+    /* A weapon is carried the way its shape is carried, and only points where
+       the arm points when the arm is actually swinging it: a blade hangs from
+       the fist, a polearm stands up out of it, a bow lies along the forearm.
+       Aiming everything down the forearm is what made a walking swordsman look
+       like a man prodding the floor with a stick. */
+    const sw = a.swing || 0;
+    const fwd = a.dir || { x: 0, z: 1 };
+    let ax = h.x - el.x, ay = h.y - el.y, az = h.z - el.z;
+    const al = Math.hypot(ax, ay, az) || 1;
+    ax /= al; ay /= al; az /= al;
+    let cx, cy, cz;
+    if (kind === 'lance') { cx = fwd.x * 0.18; cy = 1; cz = fwd.z * 0.18; }
+    else if (kind === 'bow') { cx = ax; cy = ay; cz = az; }
+    else { cx = -fwd.x * 0.30; cy = -1; cz = -fwd.z * 0.30; }   // blade hangs
+    let dx = lerp(cx, ax, sw), dy = lerp(cy, ay, sw), dz = lerp(cz, az, sw);
     const d = Math.hypot(dx, dy, dz) || 1;
     dx /= d; dy /= d; dz /= d;
-    const len = kind === 'lance' ? 1.15 : kind === 'axe' ? 0.60 : kind === 'sword' ? 0.58 : 0.50;
+    const len = kind === 'lance' ? 1.25 : kind === 'axe' ? 0.62 : kind === 'sword' ? 0.60 : 0.50;
     const a0 = screenOf(v, h.x - dx * 0.10, h.y - dy * 0.10, h.z - dz * 0.10);
     const a1 = screenOf(v, h.x + dx * len, h.y + dy * len, h.z + dz * len);
     if (!a0 || !a1) return;

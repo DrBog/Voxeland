@@ -162,20 +162,34 @@ K.phys = (function () {
   function solveHinges(body, frame) {
     for (const h of body.hinges) {
       const a = h.a, b = h.b, c = h.c;
-      // 1. hold the joint on its plane
-      const ax = h.axis === 'lat' ? frame.rx : 0;
-      const ay = h.axis === 'lat' ? frame.ry : 1;
-      const az = h.axis === 'lat' ? frame.rz : 0;
-      const mx = (a.x + c.x) / 2, my = (a.y + c.y) / 2, mz = (a.z + c.z) / 2;
-      const dx = b.x - mx, dy = b.y - my, dz = b.z - mz;
-      const comp = dx * ax + dy * ay + dz * az;
-      const k = 0.35;
-      b.x -= ax * comp * k; b.y -= ay * comp * k; b.z -= az * comp * k;
-      b.px -= ax * comp * k; b.py -= ay * comp * k; b.pz -= az * comp * k;
+      // 1. hold the joint on its plane. A pinned point is world geometry and
+      // no constraint may move it — the ankle hinge has the FOOT as its middle
+      // joint, so without this guard a planted foot creeps out from under the
+      // body a millimetre a frame, which at walking pace is a skate.
+      if (!b.pinned) {
+        const ax = h.axis === 'lat' ? frame.rx : 0;
+        const ay = h.axis === 'lat' ? frame.ry : 1;
+        const az = h.axis === 'lat' ? frame.rz : 0;
+        const mx = (a.x + c.x) / 2, my = (a.y + c.y) / 2, mz = (a.z + c.z) / 2;
+        const dx = b.x - mx, dy = b.y - my, dz = b.z - mz;
+        const comp = dx * ax + dy * ay + dz * az;
+        const k = 0.35;
+        b.x -= ax * comp * k; b.y -= ay * comp * k; b.z -= az * comp * k;
+        b.px -= ax * comp * k; b.py -= ay * comp * k; b.pz -= az * comp * k;
+      }
       // 2. clamp the fold, quietly
       const cur = bendAngle(a, b, c);
       if (cur < h.min) torque(a, b, c, h.min, 0.6, true);
       else if (cur > h.max) torque(a, b, c, h.max, 0.6, true);
+    }
+  }
+
+  /* put every pinned point back exactly where it was pinned: cheap insurance
+     that no solver pass has quietly dragged the floor out from under a foot */
+  function holdPins(body) {
+    for (const p of body.list) {
+      if (!p.pinned) continue;
+      p.x = p.px = p.pinned.x; p.y = p.py = p.pinned.y; p.z = p.pz = p.pinned.z;
     }
   }
 
@@ -329,6 +343,6 @@ K.phys = (function () {
 
   return {
     GRAVITY, Body, add, bone, hinge, integrate, solveBones, solveHinges,
-    torque, aim, bendAngle, drive, collide, ballistic, com, comVel, ik, vel, addVel, spin
+    torque, aim, bendAngle, drive, collide, ballistic, com, comVel, ik, vel, addVel, spin, holdPins
   };
 })();
