@@ -228,6 +228,22 @@ html, body {
   background: rgba(127,216,255,0.14); color: var(--mine); border: 1px solid rgba(127,216,255,0.5);
 }
 
+/* The proving yard's own controls. Kept out of the campaign entirely: this
+   button and this pill exist to exercise the game, not to play it. */
+#btnYard {
+  display: block; width: 100%; margin-top: 10px; padding: 11px;
+  background: transparent; color: #9aa6bd; border: 1px solid #2e3854;
+  border-radius: 10px; font: inherit; font-size: 12px; letter-spacing: 0.14em;
+  cursor: pointer;
+}
+#btnYard:active { background: #161d2e; color: #d6deee; }
+#zonePill {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  top: calc(96px + var(--safe-t)); z-index: 4;
+  font-size: 10px; letter-spacing: 0.10em; cursor: pointer; white-space: nowrap;
+}
+#zonePill[hidden] { display: none; }
+
 </style>
 <div id="app">
   <canvas id="view"></canvas>
@@ -242,6 +258,7 @@ html, body {
   </div>
 
   <div id="banner"><b></b><span></span></div>
+  <button class="pill" id="zonePill" hidden></button>
   <div id="hint">tap one of yours</div>
 
   <!-- the bottom bar: one strip that always says who is selected and what can
@@ -313,6 +330,7 @@ html, body {
             fallen do not come back, and the last field has somebody in charge of it.</li>
       </ul>
       <button id="btnStart">TAKE THE FIELD</button>
+      <button id="btnYard" class="ghostbtn">THE PROVING YARD</button>
     </div>
   </div>
 </div>
@@ -2481,9 +2499,13 @@ K.battle = (function () {
     const boss = b.units.find(u => u.boss);
     b.banner = {
       title: boss ? 'THE LAST FIELD' : 'PLAYER PHASE',
-      sub: boss ? boss.name + ' holds ' + arena.title + ' · ' + us + ' against ' + them
-        : wave > 1 ? 'wave ' + wave + ' of ' + K.camp.RUN + ' · ' + arena.title + ' · ' + us + ' against ' + them
-          : 'four against five, and they hold the high ground',
+      // the first wave's line used to be written out in full, four against
+      // five, which stopped being true the moment anything but the first wave
+      // of a fresh run loaded it — the yard is five a side and it still said four
+      sub: plan && plan.yard ? (zone ? zone.name.toLowerCase() : 'the yard') + ' · ' + arena.title + ' · every trade, both sides'
+        : boss ? boss.name + ' holds ' + arena.title + ' · ' + us + ' against ' + them
+          : wave > 1 ? 'wave ' + wave + ' of ' + K.camp.RUN + ' · ' + arena.title + ' · ' + us + ' against ' + them
+            : us + ' against ' + them + ', and they hold the high ground',
       t: 0
     };
     return b;
@@ -4201,6 +4223,13 @@ K.ui = (function () {
   const $ = (id) => document.getElementById(id);
   let el = {}, H = {};
 
+  /* the yard's label, and the only thing that ever shows it */
+  function zonePill(text) {
+    const p = document.getElementById('zonePill');
+    if (!p) return;
+    if (text) { p.textContent = text; p.hidden = false; } else { p.hidden = true; }
+  }
+
   function init(handlers) {
     H = handlers;
     el = {
@@ -4219,6 +4248,9 @@ K.ui = (function () {
       spoils: $('spoils'), spoilList: $('spoilList')
     };
     $('btnStart').onclick = () => { el.intro.classList.add('hidden'); H.start && H.start(); };
+    // the yard is a separate door into the same game: no run, no campaign
+    $('btnYard').onclick = () => { el.intro.classList.add('hidden'); H.yard && H.yard(); };
+    $('zonePill').onclick = () => { H.cycle && H.cycle(); };
     $('btnAgain').onclick = () => {
       // a field's spoils are not something to walk past by accident
       if (!el.spoils.classList.contains('hidden') && !el.spoilList.querySelector('.picked')) {
@@ -4423,7 +4455,7 @@ K.ui = (function () {
     }
   }
 
-  return { init, sync, band };
+  return { init, sync, band, zonePill };
 })();
 
 /* ---- 11-main.js ---- */
@@ -4822,10 +4854,67 @@ K.ui = (function () {
     K.ui.sync(g);
   }
 
+
+  /* --------------------------------------------------------- the proving yard
+
+     Zone one is a test region, and a test region that is only a label is not
+     one. This is a real board with no campaign attached: one of every trade on
+     each side so all five stances, weapons and reaches are on screen at once,
+     and a pill that walks the zone list and then each zone's layouts. Nothing
+     here writes to the save.
+
+     It is the fastest way to answer the two questions that keep coming back —
+     does a body look like a body, and does this place look like a place — for
+     every combination, without playing eight waves to reach wave eight. */
+
+  const CLASSES = ['Blade', 'Halberd', 'Reaver', 'Archer', 'Ember'];
+
+  function yardBattle(zone, layout) {
+    const roster = (side) => CLASSES.map((cls, i) => ({
+      cls, name: (side ? ['GRIST', 'MAUL', 'SPINE', 'NEEDLE', 'CINDER']
+        : ['ORD', 'VESS', 'KITE', 'SOLM', 'HOLLOW'])[i], level: 6
+    }));
+    g.battle = B.create(20260829, {
+      wave: 1, zone, layout, yard: true,
+      player: roster(0), enemy: roster(1)
+    });
+    g.yard = { zone: zone.id, layout: g.battle.arena.layout };
+    g.summary = null;
+    g.zone = g.battle.zone;
+    g.cam = R.Camera(g.battle.arena);
+    g.hover = null; g.pathPreview = null; g.cardUnit = null; g.pair = null; g.threat = [];
+    g.manual = false; g.look = null; g.zoomT = 0.85; g.zoomAuto = true;
+    measure();
+    const c = restPoint();
+    g.cam.tx = g.cam.fx = c.x; g.cam.ty = g.cam.fy = c.y; g.cam.tz = g.cam.fz = c.z;
+    R.camUpdate(g.cam, 1);
+    K.ui.zonePill(zone.name + '  ·  ' + g.battle.arena.layout);
+  }
+
+  // walk every layout of a zone, then move to the next zone
+  function cycleYard() {
+    if (!g.yard) return;
+    const zs = K.zones.LIST;
+    const zi = zs.findIndex(z => z.id === g.yard.zone);
+    const z = zs[zi < 0 ? 0 : zi];
+    const li = z.layouts.indexOf(g.yard.layout);
+    if (li >= 0 && li < z.layouts.length - 1) yardBattle(z, z.layouts[li + 1]);
+    else {
+      const nz = zs[(zi + 1) % zs.length];
+      yardBattle(nz, nz.layouts[0]);
+    }
+  }
+
   /* ------------------------------------------------------------------ boot */
 
   K.ui.init({
-    start: () => { g.running = true; measure(); },
+    start: () => { g.yard = null; K.ui.zonePill(null); g.running = true; measure(); },
+    yard: () => {
+      const z = K.zones.LIST[0];
+      yardBattle(z, z.layouts[0]);
+      g.running = true;
+    },
+    cycle: () => cycleYard(),
     again: () => {
       if (g.offers && g.taken !== null) K.camp.take(g.run, g.offers[g.taken]);
       g.offers = null; g.taken = null;

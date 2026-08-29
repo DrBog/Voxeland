@@ -349,3 +349,57 @@ test('a weapon a unit was given is the weapon it fights with', () => {
   assert.equal(snap.weapon, 'silver_sword');
   assert.equal(K.camp.restore(snap, 0).weapon.name, 'Silver Sword');
 });
+
+/* ------------------------------------------------------------------ zones */
+
+test('every zone names layouts that exist, and covers the whole run', () => {
+  const K = load();
+  const names = Object.keys(K.grid.LAYOUTS);
+  const covered = new Set();
+  for (const z of K.zones.LIST) {
+    assert.ok(z.layouts.length > 0, z.id + ' has no layouts');
+    for (const l of z.layouts) assert.ok(names.includes(l), z.id + ' names a layout that does not exist: ' + l);
+    // a zone with no fog gap greys out the near half of its own board
+    assert.ok(z.far - z.near >= 30, z.id + ' fog range is too tight to read depth');
+    assert.ok(z.near >= 15, z.id + ' fog starts inside the board');
+    for (let w = z.waves[0]; w <= z.waves[1]; w++) covered.add(w);
+  }
+  for (let w = 1; w <= K.camp.RUN; w++) {
+    assert.ok(covered.has(w), 'wave ' + w + ' happens nowhere');
+    assert.ok(K.zones.forWave(w), 'wave ' + w + ' resolves to no zone');
+  }
+});
+
+test('a battle built for a zone only ever uses that zone\'s ground', () => {
+  const K = load();
+  for (const z of K.zones.LIST) {
+    for (const seed of [1, 7, 991, 20260829]) {
+      const b = K.battle.create(seed, { wave: z.waves[0], zone: z });
+      assert.equal(b.zone.id, z.id);
+      assert.ok(z.layouts.includes(b.arena.layout),
+        z.id + ' seed ' + seed + ' built a ' + b.arena.layout + ', which does not belong there');
+      assert.ok(!anyNaN(K, b), z.id + ' seed ' + seed + ' produced a broken body');
+    }
+  }
+});
+
+test('the proving yard fields every trade on both sides and still plays', () => {
+  const K = load();
+  const CLASSES = ['Blade', 'Halberd', 'Reaver', 'Archer', 'Ember'];
+  const roster = () => CLASSES.map((cls, i) => ({ cls, name: 'U' + i, level: 6 }));
+  const b = K.battle.create(20260829, {
+    wave: 1, zone: K.zones.LIST[0], layout: 'courtyard', yard: true,
+    player: roster(), enemy: roster()
+  });
+  for (const side of [0, 1]) {
+    const seen = new Set(K.battle.living(b, side).map(u => u.cls));
+    assert.equal(seen.size, CLASSES.length, 'side ' + side + ' is missing a trade');
+  }
+  assert.match(b.banner.sub, /every trade, both sides/);
+  for (let i = 0; i < 120 * 4; i++) K.battle.step(b, 1 / 120);
+  assert.ok(!anyNaN(K, b), 'the yard broke a body: ' + anyNaN(K, b));
+  for (const [, a] of b.actors) {
+    const hip = a.body.parts.pelvis.y - a.unit.surface.y;
+    assert.ok(hip > 0.55, a.unit.name + ' (' + a.unit.cls + ') is not standing, hips at ' + hip.toFixed(2));
+  }
+});

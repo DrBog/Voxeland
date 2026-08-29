@@ -10,6 +10,13 @@ K.ui = (function () {
   const $ = (id) => document.getElementById(id);
   let el = {}, H = {};
 
+  /* the yard's label, and the only thing that ever shows it */
+  function zonePill(text) {
+    const p = document.getElementById('zonePill');
+    if (!p) return;
+    if (text) { p.textContent = text; p.hidden = false; } else { p.hidden = true; }
+  }
+
   function init(handlers) {
     H = handlers;
     el = {
@@ -28,6 +35,9 @@ K.ui = (function () {
       spoils: $('spoils'), spoilList: $('spoilList')
     };
     $('btnStart').onclick = () => { el.intro.classList.add('hidden'); H.start && H.start(); };
+    // the yard is a separate door into the same game: no run, no campaign
+    $('btnYard').onclick = () => { el.intro.classList.add('hidden'); H.yard && H.yard(); };
+    $('zonePill').onclick = () => { H.cycle && H.cycle(); };
     $('btnAgain').onclick = () => {
       // a field's spoils are not something to walk past by accident
       if (!el.spoils.classList.contains('hidden') && !el.spoilList.querySelector('.picked')) {
@@ -232,5 +242,5 @@ K.ui = (function () {
     }
   }
 
-  return { init, sync, band };
+  return { init, sync, band, zonePill };
 })();

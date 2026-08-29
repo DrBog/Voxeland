@@ -393,10 +393,67 @@
     K.ui.sync(g);
   }
 
+
+  /* --------------------------------------------------------- the proving yard
+
+     Zone one is a test region, and a test region that is only a label is not
+     one. This is a real board with no campaign attached: one of every trade on
+     each side so all five stances, weapons and reaches are on screen at once,
+     and a pill that walks the zone list and then each zone's layouts. Nothing
+     here writes to the save.
+
+     It is the fastest way to answer the two questions that keep coming back —
+     does a body look like a body, and does this place look like a place — for
+     every combination, without playing eight waves to reach wave eight. */
+
+  const CLASSES = ['Blade', 'Halberd', 'Reaver', 'Archer', 'Ember'];
+
+  function yardBattle(zone, layout) {
+    const roster = (side) => CLASSES.map((cls, i) => ({
+      cls, name: (side ? ['GRIST', 'MAUL', 'SPINE', 'NEEDLE', 'CINDER']
+        : ['ORD', 'VESS', 'KITE', 'SOLM', 'HOLLOW'])[i], level: 6
+    }));
+    g.battle = B.create(20260829, {
+      wave: 1, zone, layout, yard: true,
+      player: roster(0), enemy: roster(1)
+    });
+    g.yard = { zone: zone.id, layout: g.battle.arena.layout };
+    g.summary = null;
+    g.zone = g.battle.zone;
+    g.cam = R.Camera(g.battle.arena);
+    g.hover = null; g.pathPreview = null; g.cardUnit = null; g.pair = null; g.threat = [];
+    g.manual = false; g.look = null; g.zoomT = 0.85; g.zoomAuto = true;
+    measure();
+    const c = restPoint();
+    g.cam.tx = g.cam.fx = c.x; g.cam.ty = g.cam.fy = c.y; g.cam.tz = g.cam.fz = c.z;
+    R.camUpdate(g.cam, 1);
+    K.ui.zonePill(zone.name + '  ·  ' + g.battle.arena.layout);
+  }
+
+  // walk every layout of a zone, then move to the next zone
+  function cycleYard() {
+    if (!g.yard) return;
+    const zs = K.zones.LIST;
+    const zi = zs.findIndex(z => z.id === g.yard.zone);
+    const z = zs[zi < 0 ? 0 : zi];
+    const li = z.layouts.indexOf(g.yard.layout);
+    if (li >= 0 && li < z.layouts.length - 1) yardBattle(z, z.layouts[li + 1]);
+    else {
+      const nz = zs[(zi + 1) % zs.length];
+      yardBattle(nz, nz.layouts[0]);
+    }
+  }
+
   /* ------------------------------------------------------------------ boot */
 
   K.ui.init({
-    start: () => { g.running = true; measure(); },
+    start: () => { g.yard = null; K.ui.zonePill(null); g.running = true; measure(); },
+    yard: () => {
+      const z = K.zones.LIST[0];
+      yardBattle(z, z.layouts[0]);
+      g.running = true;
+    },
+    cycle: () => cycleYard(),
     again: () => {
       if (g.offers && g.taken !== null) K.camp.take(g.run, g.offers[g.taken]);
       g.offers = null; g.taken = null;

@@ -88,9 +88,13 @@ K.battle = (function () {
     const boss = b.units.find(u => u.boss);
     b.banner = {
       title: boss ? 'THE LAST FIELD' : 'PLAYER PHASE',
-      sub: boss ? boss.name + ' holds ' + arena.title + ' · ' + us + ' against ' + them
-        : wave > 1 ? 'wave ' + wave + ' of ' + K.camp.RUN + ' · ' + arena.title + ' · ' + us + ' against ' + them
-          : 'four against five, and they hold the high ground',
+      // the first wave's line used to be written out in full, four against
+      // five, which stopped being true the moment anything but the first wave
+      // of a fresh run loaded it — the yard is five a side and it still said four
+      sub: plan && plan.yard ? (zone ? zone.name.toLowerCase() : 'the yard') + ' · ' + arena.title + ' · every trade, both sides'
+        : boss ? boss.name + ' holds ' + arena.title + ' · ' + us + ' against ' + them
+          : wave > 1 ? 'wave ' + wave + ' of ' + K.camp.RUN + ' · ' + arena.title + ' · ' + us + ' against ' + them
+            : us + ' against ' + them + ', and they hold the high ground',
       t: 0
     };
     return b;
