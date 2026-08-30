@@ -42,6 +42,18 @@ K.rag = (function () {
     P.bone(b, 'chest', 'head', 1);
     P.bone(b, 'pelvis', 'head', 0.30);
     P.bone(b, 'hipL', 'hipR', 1); P.bone(b, 'shL', 'shR', 1);
+    /* Cross-braces, and they carry load.
+
+       Every other bone in the torso — shoulders to chest, shoulders to pelvis,
+       hips to chest — keeps its length while the shoulder line ROTATES about
+       the spine. Nothing resisted twist at all, so the arms, which are driven
+       to targets that are not symmetrical, simply wound the chest up: measured
+       on a swordsman standing still, 55 degrees of shoulder twist off the hips,
+       and hands swinging through forty centimetres.
+
+       Two diagonals resist rotation while leaving the torso free to bend
+       forward, which is why a bookshelf has a diagonal on its back. */
+    P.bone(b, 'shL', 'hipR', 0.9); P.bone(b, 'shR', 'hipL', 0.9);
     for (const t of ['L', 'R']) {
       P.bone(b, 'hip' + t, 'pelvis', 1);
       P.bone(b, 'hip' + t, 'chest', 0.65);
@@ -58,6 +70,25 @@ K.rag = (function () {
       P.hinge(b, 'sh' + t, 'elbow' + t, 'hand' + t, 'lat', 0.04, 2.60);
     }
     b.L = L;
+    /* The limb lengths this body ACTUALLY has.
+
+       L is the declared anatomy and the joints as placed had drifted off it:
+       L says the upper arm is 0.29 and the forearm 0.27, the joints give 0.341
+       and 0.260 — a seventeen per cent error. The IK was solving for a limb
+       the body does not have, computing an elbow for a 0.29 bone that the bone
+       solver then stretched to 0.341, every frame, for ever. Straight-armed
+       poses hid it because both answers agree on 'straight out'; a bent arm
+       has room to show it. Measure once, here, and let everything solve for
+       the body that exists. */
+    const seg = (p, q) => {
+      const A = b.parts[p], B = b.parts[q];
+      return Math.hypot(A.x - B.x, A.y - B.y, A.z - B.z);
+    };
+    b.seg = {
+      thigh: seg('hipL', 'kneeL'), shin: seg('kneeL', 'footL'),
+      upperArm: seg('shL', 'elbowL'), foreArm: seg('elbowL', 'handL')
+    };
+    b.reach = { leg: b.seg.thigh + b.seg.shin, arm: b.seg.upperArm + b.seg.foreArm };
     // the sprung mass: what a planted leg is actually holding up
     b.trunk = ['pelvis', 'hipL', 'hipR', 'chest', 'shL', 'shR', 'head'].map(n => b.parts[n]);
     return b;
@@ -93,14 +124,14 @@ K.rag = (function () {
 
   function reachLeg(b, leg, tx, ty, tz, speed, dt, hint) {
     const h = leg.hip;
-    const s = P.ik(h.x, h.y, h.z, tx, ty, tz, L.thigh, L.shin, hint.x, hint.y, hint.z);
+    const s = P.ik(h.x, h.y, h.z, tx, ty, tz, b.seg.thigh, b.seg.shin, hint.x, hint.y, hint.z);
     P.drive(leg.knee, s.jx, s.jy, s.jz, speed * 1.1, dt, speed * 12);
     return P.drive(leg.foot, s.ex, s.ey, s.ez, speed, dt, speed * 26);
   }
 
   function reachArm(b, arm, tx, ty, tz, speed, dt, hint) {
     const s0 = arm.sh;
-    const s = P.ik(s0.x, s0.y, s0.z, tx, ty, tz, L.upperArm, L.foreArm, hint.x, hint.y, hint.z);
+    const s = P.ik(s0.x, s0.y, s0.z, tx, ty, tz, b.seg.upperArm, b.seg.foreArm, hint.x, hint.y, hint.z);
     P.drive(arm.elbow, s.jx, s.jy, s.jz, speed * 1.1, dt, speed * 26);
     return P.drive(arm.hand, s.ex, s.ey, s.ez, speed, dt, speed * 34);
   }
@@ -159,7 +190,7 @@ K.rag = (function () {
 
   function poseLeg(b, leg, fx, fy, fz, speed, dt, hint) {
     const h = leg.hip;
-    const s = P.ik(h.x, h.y, h.z, fx, fy, fz, L.thigh, L.shin, hint.x, hint.y, hint.z);
+    const s = P.ik(h.x, h.y, h.z, fx, fy, fz, b.seg.thigh, b.seg.shin, hint.x, hint.y, hint.z);
     P.drive(leg.knee, s.jx, s.jy, s.jz, speed, dt, speed * 22);
   }
 

@@ -23,16 +23,35 @@ K.actor = (function () {
      is up or down. Five classes that all stood identically were five identical
      grey figures. Distances are metres from the shoulder — out to the side,
      forward, and below. */
+  /* Footing, and it is narrower than it wants to be.
+
+     A stance's foot width and lead used to run 0.15-0.25 and 0.03-0.13, which
+     read well and did not stand up. The two legs each run a height servo, and
+     the servos both correct the shared trunk — so the further apart the feet
+     are in BOTH axes, the more different the two legs' geometry, and the
+     harder the two servos pull against each other. Measured, that shook the
+     hip yoke through six centimetres and a knee hanging under it through
+     thirteen, on units standing still. Neither number alone did it: swapping
+     width or lead on its own changed nothing, swapping both together took the
+     knee from 10.4 cm to 0.5.
+
+     Sweeping the two toward the one stance that was measurably quiet, the
+     whole roster comes good at about 85% of the way, and the response is
+     lumpy rather than smooth on the way — it is a resonance, not a gradient —
+     so these sit well inside the calm region rather than on its edge. The
+     ordering survives: a reaver still stands widest and a mage narrowest. The
+     magnitude does not, and at twenty-odd pixels a unit it was never the part
+     of a stance you could see. The weapon and the arms carry that. */
   const STANCES = {
-    Blade:   { feet: 0.19, lead: 0.10, hip: 0.00, lean: 0.10, hand: 1,
+    Blade:   { feet: 0.160, lead: 0.053, hip: 0.00, lean: 0.10, hand: 1,
                main: { out: 0.30, fwd: 0.24, drop: 0.32 }, off: { out: 0.30, fwd: 0.04, drop: 0.40 } },
-    Halberd: { feet: 0.22, lead: 0.03, hip: 0.00, lean: 0.03, hand: 1,
+    Halberd: { feet: 0.165, lead: 0.043, hip: 0.00, lean: 0.03, hand: 1,
                main: { out: 0.19, fwd: 0.28, drop: 0.16 }, off: { out: 0.13, fwd: 0.31, drop: 0.36 } },
-    Reaver:  { feet: 0.25, lead: 0.05, hip: -0.03, lean: 0.15, hand: 1,
+    Reaver:  { feet: 0.169, lead: 0.046, hip: -0.03, lean: 0.15, hand: 1,
                main: { out: 0.17, fwd: 0.30, drop: 0.40 }, off: { out: 0.07, fwd: 0.33, drop: 0.44 } },
-    Archer:  { feet: 0.16, lead: 0.13, hip: 0.00, lean: 0.05, hand: -1,
+    Archer:  { feet: 0.156, lead: 0.047, hip: 0.00, lean: 0.05, hand: -1,
                main: { out: 0.34, fwd: 0.30, drop: 0.20 }, off: { out: 0.11, fwd: 0.05, drop: 0.28 } },
-    Ember:   { feet: 0.15, lead: 0.04, hip: 0.01, lean: 0.02, hand: 1,
+    Ember:   { feet: 0.154, lead: 0.044, hip: 0.01, lean: 0.02, hand: 1,
                main: { out: 0.15, fwd: 0.33, drop: 0.12 }, off: { out: 0.27, fwd: 0.00, drop: 0.42 } }
   };
   const stanceOf = (a) => STANCES[a.unit.cls] || STANCES.Blade;
@@ -216,14 +235,49 @@ K.actor = (function () {
     const bz = a.pos.z + sz * shift * 0.022 + fz * push;
     // hips over the feet, chest up, a little weight forward
     P.drive(p.pelvis, bx, gy + HIP + st.hip + air * 0.012, bz, sp * 0.8, dt, 40 * a.strength);
+
+    /* Hold the shoulders square to the way the body is facing.
+
+       Nothing did, and the arms hang off them: a shoulder line free to rotate
+       is a pair of arms free to swing, and they swung through forty
+       centimetres. The braces above stop the torso winding up; this stops it
+       wandering off the heading in the first place. The HIPS deliberately get
+       no such treatment — driving a three-kilo joint hard against stiff bones
+       just gives it something to chatter against, which measured four times
+       worse than leaving it alone. */
+    const hold = (part, sgn, half, k) => P.drive(part,
+      bx + sx * sgn * half, part.y, bz + sz * sgn * half, sp, dt, k * a.strength);
+    hold(p.shL, -1, R.L.shW, 22); hold(p.shR, 1, R.L.shW, 22);
     /* If the body has strayed from the stance it is supposed to be holding —
        a leg folded the wrong way, an arm through the chest, a knee above a hip
        — put it back. The muscles hold a pose well and recover one badly, and a
        unit standing on its own tile under its own control has no business in a
        shape the solver cannot read its way out of. Blended, so it reads as
        picking yourself up rather than as a pop. */
+    /* It fires when the pose is BROKEN, and only then.
+
+       strayed() reports the worst distance between a core joint and where it
+       sits on a freshly built body. That baseline is not the stance: every
+       trade stands with its feet wider than the build and its hips lower, so a
+       perfectly healthy body reads about a third of a metre from neutral all
+       day long. Measured on a swordsman standing still, the signal never left
+       0.338-0.345 — and the trigger was 0.34, sitting inside its own noise.
+       It fired on two frames in every three.
+
+       settle() writes joint positions directly, so what that amounted to was a
+       controller reaching in several times a second and dragging the limbs
+       back toward a pose nobody had asked for: the feet in toward 0.12 while
+       the stance pushed them out to 0.19, the arms in to the sides while the
+       stance held them out. Those are the wobbly feet and the wobbly arms.
+
+       So: a threshold clear of the healthy band, and hysteresis, because a
+       bang-bang controller living on the edge of its own signal is what went
+       wrong here in the first place. A body that has really been thrown reads
+       far past 0.85. */
     const stray = a.swing > 0 ? 0 : R.strayed(b, a.pos.x, gy + HIP, a.pos.z, fx, fz);
-    if (stray > 0.34) {
+    if (stray > 0.85) a.mending = true;
+    else if (stray < 0.50) a.mending = false;
+    if (a.mending) {
       a.mend = (a.mend || 0) + dt;
       R.settle(b, a.pos.x, gy + HIP, a.pos.z, fx, fz, clamp(dt * (a.mend > 0.8 ? 9 : 3.5), 0, 1));
     } else a.mend = 0;
@@ -548,6 +602,6 @@ K.actor = (function () {
     }
   }
 
-  return { create, step, walkPath, strikeAt, takeHit, faceToward, wake, turn, unplant,
+  return { create, step, walkPath, strikeAt, takeHit, faceToward, wake, turn, unplant, STANCES,
            HIP, STANCE, SPEED, CAD, STRIDE };
 })();
